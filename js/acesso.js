@@ -294,7 +294,7 @@
   }
 
   $('#btn-auditoria').addEventListener('click', renderAuditoria);
-  document.querySelector('.aba[data-aba=usuarios]').addEventListener('click', () => {
+  document.querySelector('.modulo[data-modulo=usuarios]').addEventListener('click', () => {
     if (usuario && usuario.perfil === 'admin') renderUsuarios();
   });
 

@@ -1,5 +1,5 @@
 /*
- * Servidor HTTP do Gerador de Escala (sem dependências externas).
+ * Servidor HTTP do Gestão de Pessoal RH (sem dependências externas).
  *
  *   npm start                     -> http://localhost:3000
  *
@@ -259,7 +259,7 @@ if (require.main === module) {
   });
   servidor.listen(porta, host, () => {
     const endereco = host === '0.0.0.0' ? 'localhost' : host;
-    console.log(`Gerador de Escala rodando em http://${endereco}:${porta}`);
+    console.log(`Gestão de Pessoal RH rodando em http://${endereco}:${porta}`);
     console.log(`Banco de dados: ${arquivo}`);
   });
   const encerrar = () => servidor.close(() => { db.close(); process.exit(0); });

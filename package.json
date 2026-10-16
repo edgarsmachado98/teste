@@ -1,7 +1,7 @@
 {
-  "name": "gerador-escala-clt",
-  "version": "2.0.0",
-  "description": "Gerador de escala de trabalho conforme a legislação trabalhista brasileira",
+  "name": "gestao-pessoal-rh",
+  "version": "3.0.0",
+  "description": "Gestão de Pessoal RH: rotinas do departamento pessoal conforme a legislação trabalhista brasileira",
   "private": true,
   "engines": {
     "node": ">=22.13"

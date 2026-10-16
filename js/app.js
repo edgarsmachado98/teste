@@ -1,4 +1,4 @@
-/* Interface do gerador de escala. Os dados ficam no servidor (API em /api). */
+/* Interface do Gestão de Pessoal RH. Os dados ficam no servidor (API em /api). */
 (function () {
   'use strict';
 
@@ -118,13 +118,67 @@
 
   const nomeSetor = (id) => (estado.setores.find((s) => s.id === id) || {}).nome || '—';
 
-  // ------------------------------------------------------------------ abas
+  // ------------------------------------------------------- módulos e abas
+  // Cada painel pertence a um módulo (data-modulo). Módulos com mais de um
+  // painel mostram abas internas; o sistema lembra a última aba de cada um.
 
-  document.querySelectorAll('.aba').forEach((b) => b.addEventListener('click', () => mostrarAba(b.dataset.aba)));
+  const ultimaAba = {};
+  const abasDoModulo = (mod) => [...document.querySelectorAll(`.aba[data-modulo="${mod}"]`)];
+
+  function mostrarModulo(mod) {
+    const abas = abasDoModulo(mod);
+    mostrarAba(abas.length ? ultimaAba[mod] || abas[0].dataset.aba : mod);
+  }
 
   function mostrarAba(nome) {
-    document.querySelectorAll('.aba').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === nome));
-    document.querySelectorAll('.painel').forEach((p) => p.classList.toggle('ativo', p.id === 'aba-' + nome));
+    const painel = document.getElementById('aba-' + nome);
+    if (!painel) return;
+    const mod = painel.dataset.modulo;
+    ultimaAba[mod] = nome;
+    document.querySelectorAll('.modulo').forEach((b) => b.classList.toggle('ativo', b.dataset.modulo === mod));
+    const abas = abasDoModulo(mod);
+    document.querySelectorAll('.aba').forEach((b) => {
+      b.hidden = b.dataset.modulo !== mod;
+      b.classList.toggle('ativa', b.dataset.aba === nome);
+    });
+    $('.abas').hidden = abas.length < 2;
+    document.querySelectorAll('.painel').forEach((p) => p.classList.toggle('ativo', p === painel));
+    if (mod === 'inicio') renderInicio();
+  }
+
+  document.querySelectorAll('.modulo').forEach((b) => b.addEventListener('click', () => mostrarModulo(b.dataset.modulo)));
+  document.querySelectorAll('.aba').forEach((b) => b.addEventListener('click', () => mostrarAba(b.dataset.aba)));
+  document.querySelectorAll('[data-ir]').forEach((b) => b.addEventListener('click', () => mostrarModulo(b.dataset.ir)));
+
+  // ----------------------------------------------------------------- início
+
+  function renderInicio() {
+    if (!usuario) return;
+    const h = new Date().getHours();
+    const cumprimento = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    $('#saudacao').textContent = `${cumprimento}, ${usuario.nome.split(' ')[0]}`;
+
+    const mulheres = estado.colaboradores.filter((c) => c.sexo === 'F').length;
+    const total = estado.colaboradores.length;
+    let escalaValor = 'Nenhuma';
+    let escalaDetalhe = podeEditar() ? 'Gere a primeira em Escalas de trabalho' : 'Ainda não há escala gerada';
+    let escalaClasse = '';
+    if (estado.escala) {
+      const e = estado.escala;
+      escalaValor = `${dataBR(e.inicio).slice(0, 5)} a ${dataBR(e.fim)}`;
+      const erros = M.validarEscala(configMotor(), e).filter((o) => o.nivel === 'erro').length;
+      escalaDetalhe = erros ? `${erros} violação(ões) da legislação` : 'Sem violações da legislação';
+      escalaClasse = erros ? 'ruim' : 'bom';
+    }
+    const tile = (rotulo, valor, detalhe, classe = '') => `<div class="tile">
+        <span class="tile-rotulo">${rotulo}</span>
+        <span class="tile-valor">${esc(valor)}</span>
+        <span class="tile-detalhe ${classe}">${esc(detalhe)}</span></div>`;
+    $('#resumo-inicio').innerHTML =
+      tile('Colaboradores', String(total), total ? `${mulheres} mulheres, ${total - mulheres} homens` : 'Nenhum cadastrado') +
+      tile('Setores', String(estado.setores.length), estado.setores.map((x) => x.nome).slice(0, 3).join(', ') +
+        (estado.setores.length > 3 ? '…' : '') || 'Nenhum cadastrado') +
+      tile('Escala atual', escalaValor, escalaDetalhe, escalaClasse);
   }
 
   // --------------------------------------------------------------- setores
@@ -520,7 +574,7 @@
   $('#btn-exportar-json').addEventListener('click', async () => {
     try {
       const b = await api.get('/api/backup');
-      baixar(`escala-backup-${b.exportadoEm.slice(0, 10)}.json`, JSON.stringify(b, null, 2), 'application/json');
+      baixar(`gestao-rh-backup-${b.exportadoEm.slice(0, 10)}.json`, JSON.stringify(b, null, 2), 'application/json');
     } catch (e) {
       avisar(e.message);
     }
@@ -556,6 +610,7 @@
   // ------------------------------------------------------------- render
 
   function render() {
+    renderInicio();
     renderSetores();
     renderColaboradores();
     renderRegras();
@@ -573,7 +628,7 @@
       document.body.classList.toggle('perfil-admin', u.perfil === 'admin');
       await recarregar();
       periodoPadrao();
-      mostrarAba(estado.escala || !podeEditar() ? 'escala' : 'setores');
+      mostrarAba('inicio');
     },
     encerrar() {
       usuario = null;
@@ -581,6 +636,6 @@
       render();
       document.body.classList.remove('perfil-consulta', 'perfil-admin');
     },
-    mostrarAba, avisar, confirmar, abrirDialogo, esc,
+    mostrarAba, mostrarModulo, avisar, confirmar, abrirDialogo, esc,
   };
 })();

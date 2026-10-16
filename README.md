@@ -1,11 +1,21 @@
-# Gerador de Escala de Trabalho (CLT)
+# Gestão de Pessoal RH
 
-Sistema web para montar escalas de trabalho respeitando a legislação trabalhista brasileira.
-Cadastre **setores** e **colaboradores** (nome, matrícula, sexo, setor, jornada e horário de entrada),
-gere a escala do período e confira o relatório de conformidade legal.
+Um só lugar para as rotinas do departamento pessoal. Cadastre colaboradores e setores, monte escalas
+de trabalho que respeitam a CLT, acompanhe o custo de cada funcionário com encargos e provisões, e
+administre os contratos de representantes comerciais do início ao distrato.
 
-O sistema tem um **servidor com banco de dados** (SQLite): várias pessoas acessam pelo navegador,
-cada uma com seu login, e todas veem os mesmos dados.
+O sistema roda em um **servidor com banco de dados** (SQLite): várias pessoas acessam pelo navegador,
+cada uma com seu login e perfil, e todas as alterações ficam registradas no histórico.
+
+## Módulos
+
+| Módulo | Situação | O que faz |
+|--------|----------|-----------|
+| Cadastros | Disponível | Colaboradores (nome, matrícula, sexo, setor, jornada e horário) e setores. Base de todos os módulos |
+| Escalas de trabalho | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
+| Custos de pessoal | Em breve | Custo por funcionário com INSS, FGTS e provisões de férias e 13º salário |
+| Contratos de representantes | Em breve | Contratos de representação comercial (Lei 4.886/1965) |
+| Distratos | Em breve | Encerramento dos contratos de representação com indenização e aviso prévio |
 
 ## Instalação e execução
 
@@ -61,24 +71,26 @@ Segurança:
 - O sistema exige sempre ao menos um administrador ativo.
 - **Histórico de alterações**: quem fez o quê e quando (logins, cadastros, geração e ajustes de escala).
 
-## Como usar
+## Escalas de trabalho
 
-1. **Setores** — nome, mínimo de pessoas por dia, dias de funcionamento e se funciona em feriados.
-2. **Colaboradores** — nome, matrícula (única), sexo, setor, jornada e horário de entrada.
+### Como usar
+
+1. **Cadastros › Setores** — nome, mínimo de pessoas por dia, dias de funcionamento e se funciona em feriados.
+2. **Cadastros › Colaboradores** — nome, matrícula (única), sexo, setor, jornada e horário de entrada.
    Também é possível importar um CSV:
    ```
    nome;matricula;sexo;setor;jornada;entrada
    Maria Silva;1001;F;Vendas;6x1;08:00
    José Santos;1002;M;Portaria;12x36;19:00
    ```
-3. **Regras e feriados** — escolha a regra de folga dominical masculina (comércio ou demais
+3. **Escalas de trabalho › Regras e feriados** — escolha a regra de folga dominical masculina (comércio ou demais
    atividades) e cadastre feriados estaduais/municipais. Feriados nacionais são automáticos.
-4. **Escala** — escolha o período (até 3 meses) e clique em *Gerar escala*. Clique em qualquer
+4. **Escalas de trabalho › Escala** — escolha o período (até 3 meses) e clique em *Gerar escala*. Clique em qualquer
    célula para trocar trabalho ↔ folga; a validação é refeita na hora. Exporte em CSV (Excel) ou imprima.
 
 Clique em **Carregar exemplo** para ver o sistema funcionando com dados fictícios (substitui os dados atuais).
 
-## Jornadas disponíveis
+### Jornadas disponíveis
 
 | Código   | Jornada                                   | Intervalo        |
 |----------|-------------------------------------------|------------------|
@@ -88,7 +100,7 @@ Clique em **Carregar exemplo** para ver o sistema funcionando com dados fictíci
 | `6x1-6h` | 6h/dia, 6 dias (36h)                      | 15 min           |
 | `12x36`  | 12h de trabalho por 36h de descanso       | indenizado       |
 
-## Regras legais verificadas
+### Regras legais verificadas
 
 | Regra | Base legal |
 |-------|------------|
@@ -130,7 +142,7 @@ index.html           interface
 css/estilo.css       estilos (inclui layout de impressão em A4 paisagem)
 js/motor.js          geração, feriados e validação legal (usado no navegador e no servidor)
 js/api.js            cliente da API
-js/app.js            telas de setores, colaboradores, regras e escala
+js/app.js            tela inicial, navegação entre módulos, cadastros e escalas
 js/acesso.js         login, primeiro acesso, usuários e histórico
 server/server.js     servidor HTTP, rotas da API, sessão e segurança
 server/servico.js    regras de negócio e permissões

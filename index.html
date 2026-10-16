@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gerador de Escala CLT</title>
+  <title>Gestão de Pessoal RH</title>
   <link rel="stylesheet" href="css/estilo.css">
 </head>
 <body>
@@ -11,8 +11,8 @@
   <div id="tela-acesso" class="acesso" hidden>
     <div class="acesso-caixa">
       <div class="acesso-marca">
-        <h1>Gerador de Escala de Trabalho</h1>
-        <p>Escalas 6x1, 5x2 e 12x36 conforme a CLT</p>
+        <h1>Gestão de Pessoal RH</h1>
+        <p>Rotinas do departamento pessoal em conformidade com a legislação trabalhista</p>
       </div>
 
       <form id="form-login" class="formulario" hidden>
@@ -42,8 +42,8 @@
   <div id="app" hidden>
   <header class="topo">
     <div>
-      <h1>Gerador de Escala de Trabalho</h1>
-      <p class="sub">Escalas 6x1, 5x2 e 12x36 conforme a CLT e a Constituição Federal</p>
+      <h1>Gestão de Pessoal RH</h1>
+      <p class="sub">Rotinas do departamento pessoal em conformidade com a legislação trabalhista</p>
     </div>
     <div class="acoes-topo">
       <button type="button" id="btn-exemplo" class="sec so-edicao">Carregar exemplo</button>
@@ -58,17 +58,111 @@
     </div>
   </header>
 
-  <nav class="abas" role="tablist">
-    <button type="button" class="aba ativa" data-aba="setores">1. Setores</button>
-    <button type="button" class="aba" data-aba="colaboradores">2. Colaboradores</button>
-    <button type="button" class="aba" data-aba="regras">3. Regras e feriados</button>
-    <button type="button" class="aba" data-aba="escala">4. Escala</button>
-    <button type="button" class="aba so-admin" data-aba="usuarios">Usuários</button>
+  <nav class="modulos" aria-label="Módulos do sistema">
+    <button type="button" class="modulo ativo" data-modulo="inicio">Início</button>
+    <button type="button" class="modulo" data-modulo="cadastros">Cadastros</button>
+    <button type="button" class="modulo" data-modulo="escalas">Escalas de trabalho</button>
+    <button type="button" class="modulo" data-modulo="custos">Custos de pessoal <span class="chip breve">em breve</span></button>
+    <button type="button" class="modulo" data-modulo="contratos">Contratos de representantes <span class="chip breve">em breve</span></button>
+    <button type="button" class="modulo" data-modulo="distratos">Distratos <span class="chip breve">em breve</span></button>
+    <button type="button" class="modulo so-admin" data-modulo="usuarios">Usuários</button>
+  </nav>
+
+  <nav class="abas" aria-label="Seções do módulo">
+    <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Colaboradores</button>
+    <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores</button>
+    <button type="button" class="aba" data-modulo="escalas" data-aba="escala">Escala</button>
+    <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Regras e feriados</button>
   </nav>
 
   <main>
+    <!-- INÍCIO -->
+    <section id="aba-inicio" class="painel ativo" data-modulo="inicio">
+      <div class="boas-vindas">
+        <p class="saudacao" id="saudacao">Bem-vindo</p>
+        <h2>Gestão de Pessoal RH</h2>
+        <p class="lead">Um só lugar para as rotinas do departamento pessoal. Cadastre colaboradores e setores,
+          monte escalas de trabalho que respeitam a CLT, acompanhe o custo de cada funcionário com encargos
+          e provisões, e administre os contratos de representantes comerciais do início ao distrato.</p>
+        <p class="lead suave">Cada pessoa acessa de acordo com o seu perfil, e todas as alterações ficam
+          registradas no histórico.</p>
+      </div>
+
+      <div class="resumo" id="resumo-inicio"></div>
+
+      <h3 class="titulo-secao">Módulos</h3>
+      <div class="cards-modulos">
+        <button type="button" class="card-modulo" data-ir="cadastros">
+          <span class="card-topo"><b>Cadastros</b><span class="chip bom">Disponível</span></span>
+          <span>Colaboradores (nome, matrícula, sexo, setor, jornada e horário) e setores da empresa.
+            Base usada por todos os módulos.</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="escalas">
+          <span class="card-topo"><b>Escalas de trabalho</b><span class="chip bom">Disponível</span></span>
+          <span>Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação de jornada,
+            descanso semanal e interjornada.</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="custos">
+          <span class="card-topo"><b>Custos de pessoal</b><span class="chip breve">Em breve</span></span>
+          <span>Custo por funcionário com INSS, FGTS e provisões de férias e 13º salário.</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="contratos">
+          <span class="card-topo"><b>Contratos de representantes</b><span class="chip breve">Em breve</span></span>
+          <span>Cadastro e acompanhamento dos contratos de representação comercial (Lei 4.886/1965).</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="distratos">
+          <span class="card-topo"><b>Distratos</b><span class="chip breve">Em breve</span></span>
+          <span>Encerramento de contratos de representação com cálculo de indenização e aviso prévio.</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- MÓDULOS EM DESENVOLVIMENTO -->
+    <section id="aba-custos" class="painel" data-modulo="custos">
+      <div class="cartao em-breve">
+        <span class="chip breve">Em desenvolvimento</span>
+        <h2>Custos de pessoal</h2>
+        <p>Vai calcular quanto cada funcionário custa para a empresa, mês a mês, a partir do cadastro de colaboradores:</p>
+        <ul>
+          <li>Salário e adicionais (noturno, horas extras, feriados trabalhados vindos da escala).</li>
+          <li>INSS patronal, RAT/SAT e terceiros, conforme o regime tributário da empresa.</li>
+          <li>FGTS de 8% sobre a remuneração.</li>
+          <li>Provisão mensal de férias com o adicional de 1/3 e de 13º salário, com os encargos sobre as provisões.</li>
+          <li>Totais por setor e por período.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="aba-contratos" class="painel" data-modulo="contratos">
+      <div class="cartao em-breve">
+        <span class="chip breve">Em desenvolvimento</span>
+        <h2>Contratos de representantes comerciais</h2>
+        <p>Vai reunir os contratos de representação comercial autônoma regidos pela Lei 4.886/1965:</p>
+        <ul>
+          <li>Dados do representante (pessoa física ou jurídica) e registro no Core.</li>
+          <li>Zona de atuação, exclusividade, produtos e percentual de comissão.</li>
+          <li>Prazo determinado ou indeterminado e vigência.</li>
+          <li>Histórico das comissões pagas, base dos cálculos de distrato.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="aba-distratos" class="painel" data-modulo="distratos">
+      <div class="cartao em-breve">
+        <span class="chip breve">Em desenvolvimento</span>
+        <h2>Distratos de contratos de representação</h2>
+        <p>Vai calcular e registrar o encerramento de contratos de representação comercial:</p>
+        <ul>
+          <li>Indenização de no mínimo 1/12 do total das comissões recebidas durante a representação, na rescisão sem justo motivo (Lei 4.886/1965, art. 27, “j”).</li>
+          <li>Aviso prévio de 30 dias ou pagamento de 1/3 das comissões dos últimos 3 meses (art. 34).</li>
+          <li>Motivos de rescisão com e sem justa causa (arts. 35 e 36).</li>
+          <li>Termo de distrato para conferência e assinatura.</li>
+        </ul>
+      </div>
+    </section>
+
     <!-- SETORES -->
-    <section id="aba-setores" class="painel ativo">
+    <section id="aba-setores" class="painel" data-modulo="cadastros">
       <form id="form-setor" class="cartao formulario so-edicao">
         <h2 id="titulo-form-setor">Novo setor</h2>
         <input type="hidden" name="id">
@@ -94,7 +188,7 @@
     </section>
 
     <!-- COLABORADORES -->
-    <section id="aba-colaboradores" class="painel">
+    <section id="aba-colaboradores" class="painel" data-modulo="cadastros">
       <form id="form-colab" class="cartao formulario so-edicao">
         <h2 id="titulo-form-colab">Novo colaborador</h2>
         <input type="hidden" name="id">
@@ -132,7 +226,7 @@
     </section>
 
     <!-- REGRAS -->
-    <section id="aba-regras" class="painel">
+    <section id="aba-regras" class="painel" data-modulo="escalas">
       <form id="form-regras" class="cartao formulario">
         <h2>Regras legais aplicadas</h2>
         <label>Folga dominical — homens
@@ -174,7 +268,7 @@
     </section>
 
     <!-- ESCALA -->
-    <section id="aba-escala" class="painel">
+    <section id="aba-escala" class="painel" data-modulo="escalas">
       <div class="cartao">
         <form id="form-gerar" class="linha-form">
           <label>Início<input type="date" name="inicio" required></label>
@@ -202,7 +296,7 @@
     </section>
 
     <!-- USUÁRIOS -->
-    <section id="aba-usuarios" class="painel">
+    <section id="aba-usuarios" class="painel" data-modulo="usuarios">
       <form id="form-usuario" class="cartao formulario">
         <h2 id="titulo-form-usuario">Novo usuário</h2>
         <input type="hidden" name="id">
