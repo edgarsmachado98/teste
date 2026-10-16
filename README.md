@@ -4,32 +4,62 @@ Sistema web para montar escalas de trabalho respeitando a legislação trabalhis
 Cadastre **setores** e **colaboradores** (nome, matrícula, sexo, setor, jornada e horário de entrada),
 gere a escala do período e confira o relatório de conformidade legal.
 
-Não precisa de servidor nem instalação: basta abrir `index.html` no navegador.
-Os dados ficam salvos no próprio navegador (localStorage) e podem ser exportados/importados em JSON.
+O sistema tem um **servidor com banco de dados** (SQLite): várias pessoas acessam pelo navegador,
+cada uma com seu login, e todas veem os mesmos dados.
+
+## Instalação e execução
+
+Requisito: [Node.js](https://nodejs.org) **22.13 ou mais recente**. Não há dependências para instalar.
+
+```
+npm start
+```
+
+Acesse **http://localhost:3000**. No primeiro acesso o sistema pede para criar o usuário administrador.
+
+### Configuração (variáveis de ambiente)
+
+| Variável | Padrão | Para que serve |
+|----------|--------|----------------|
+| `PORT` | `3000` | Porta do servidor |
+| `HOST` | `127.0.0.1` | Use `0.0.0.0` para liberar o acesso a outros computadores da rede |
+| `DB_PATH` | `./dados/escala.db` | Arquivo do banco de dados |
+| `COOKIE_SECURE` | — | `1` para exigir HTTPS no cookie de sessão |
+| `TRUST_PROXY` | — | `1` quando estiver atrás de um proxy reverso (nginx, Caddy etc.) |
+
+Exemplo para a rede da empresa:
+
+```
+HOST=0.0.0.0 PORT=8080 npm start
+```
+
+Para uso pela internet, coloque o servidor atrás de um proxy com HTTPS (por exemplo Caddy ou nginx)
+e use `COOKIE_SECURE=1 TRUST_PROXY=1`.
+
+### Backup
+
+Todos os dados ficam no arquivo `dados/escala.db`. Faça cópia desse arquivo periodicamente
+(com o servidor parado, ou usando `sqlite3 dados/escala.db ".backup copia.db"`).
+O administrador também pode exportar e restaurar um backup em JSON pela própria tela.
 
 ## Acesso e usuários
 
-No primeiro acesso o sistema pede para criar o **usuário administrador**. Depois disso,
-todos entram com login e senha. O administrador cadastra os demais usuários na aba **Usuários**.
-
 | Perfil | Pode fazer |
 |--------|-----------|
-| Administrador | Tudo, inclusive cadastrar, editar, desativar, desbloquear e excluir usuários |
+| Administrador | Tudo: usuários, histórico de alterações, backup/restauração e apagar dados |
 | Operador | Cadastrar setores e colaboradores, ajustar regras e gerar/editar escalas |
 | Consulta | Apenas visualizar as escalas |
 
-- Senhas com no mínimo 8 caracteres, contendo letras e números.
-- As senhas não são guardadas: o sistema armazena apenas um hash PBKDF2-SHA-256 com sal individual.
-- 5 tentativas de login erradas bloqueiam o usuário por 5 minutos (o administrador pode desbloquear).
-- A sessão dura 8 horas e termina ao fechar a aba ou clicar em **Sair**.
-- Cada usuário pode trocar a própria senha em **Alterar senha**; o administrador pode redefinir a de qualquer um.
-- O sistema exige ao menos um administrador ativo.
+Segurança:
 
-> **Importante:** como o sistema roda inteiramente no navegador, usuários e dados ficam salvos
-> apenas no navegador em uso. O login organiza quem pode fazer o quê, mas não substitui a
-> segurança de um servidor: alguém com acesso técnico ao computador consegue ler ou alterar
-> os dados salvos. Para uso por várias pessoas em computadores diferentes, ou com dados
-> sensíveis, o próximo passo é um backend com banco de dados.
+- Senhas com no mínimo 8 caracteres, com letras e números, guardadas apenas como hash **scrypt** com sal individual.
+- Sessão em cookie `HttpOnly` e `SameSite=Strict`, válida por 8 horas; o token é guardado no banco somente como hash.
+- 5 senhas erradas bloqueiam o usuário por 5 minutos (o administrador pode desbloquear);
+  além disso, cada endereço IP tem limite de 20 tentativas de login a cada 15 minutos.
+- Desativar um usuário ou redefinir sua senha encerra imediatamente as sessões abertas dele.
+- Todas as permissões são verificadas no servidor; proteção contra CSRF e cabeçalhos de segurança (CSP, X-Frame-Options).
+- O sistema exige sempre ao menos um administrador ativo.
+- **Histórico de alterações**: quem fez o quê e quando (logins, cadastros, geração e ajustes de escala).
 
 ## Como usar
 
@@ -46,7 +76,7 @@ todos entram com login e senha. O administrador cadastra os demais usuários na 
 4. **Escala** — escolha o período (até 3 meses) e clique em *Gerar escala*. Clique em qualquer
    célula para trocar trabalho ↔ folga; a validação é refeita na hora. Exporte em CSV (Excel) ou imprima.
 
-Clique em **Carregar exemplo** para ver o sistema funcionando com dados fictícios.
+Clique em **Carregar exemplo** para ver o sistema funcionando com dados fictícios (substitui os dados atuais).
 
 ## Jornadas disponíveis
 
@@ -96,13 +126,17 @@ podem ser tratados como feriado opcionalmente.
 ## Estrutura
 
 ```
-index.html        interface
-css/estilo.css    estilos (inclui layout de impressão em A4 paisagem)
-js/motor.js       geração, feriados e validação legal (sem dependências; roda no Node também)
-js/app.js         telas, cadastro, importação/exportação
-js/auth.js        usuários: cadastro, senhas (PBKDF2) e bloqueio por tentativas
-js/acesso.js      tela de login, primeiro acesso, sessão e aba Usuários
-tests/            testes automatizados (node --test)
+index.html           interface
+css/estilo.css       estilos (inclui layout de impressão em A4 paisagem)
+js/motor.js          geração, feriados e validação legal (usado no navegador e no servidor)
+js/api.js            cliente da API
+js/app.js            telas de setores, colaboradores, regras e escala
+js/acesso.js         login, primeiro acesso, usuários e histórico
+server/server.js     servidor HTTP, rotas da API, sessão e segurança
+server/servico.js    regras de negócio e permissões
+server/db.js         banco de dados SQLite (esquema)
+server/senhas.js     hash de senhas (scrypt)
+tests/               testes automatizados
 ```
 
 ## Testes

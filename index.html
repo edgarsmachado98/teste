@@ -36,7 +36,6 @@
         <button type="submit">Criar administrador e entrar</button>
       </form>
 
-      <p class="acesso-nota">Os usuários e os dados ficam salvos somente neste navegador.</p>
     </div>
   </div>
 
@@ -48,9 +47,9 @@
     </div>
     <div class="acoes-topo">
       <button type="button" id="btn-exemplo" class="sec so-edicao">Carregar exemplo</button>
-      <button type="button" id="btn-exportar-json" class="sec">Backup (JSON)</button>
-      <label class="botao sec so-edicao">Restaurar backup<input type="file" id="arq-json" accept=".json" hidden></label>
-      <button type="button" id="btn-limpar" class="perigo so-edicao">Limpar tudo</button>
+      <button type="button" id="btn-exportar-json" class="sec so-admin">Backup (JSON)</button>
+      <label class="botao sec so-admin">Restaurar backup<input type="file" id="arq-json" accept=".json" hidden></label>
+      <button type="button" id="btn-limpar" class="perigo so-admin">Limpar tudo</button>
     </div>
     <div class="usuario-topo">
       <span><b id="usuario-nome"></b> <span class="chip" id="usuario-perfil"></span></span>
@@ -185,6 +184,7 @@
           <button type="button" id="btn-csv" class="sec">Exportar CSV</button>
           <button type="button" id="btn-imprimir" class="sec">Imprimir</button>
         </form>
+        <p class="dica" id="info-escala"></p>
         <p class="dica so-edicao">Clique em uma célula para alternar entre trabalho e folga; a validação legal é refeita automaticamente.</p>
         <div class="legenda">
           <span><i class="cel T"></i> Trabalho (horário)</span>
@@ -230,6 +230,18 @@
         </table>
         <ul class="regras-lista" id="perfis-lista"></ul>
       </div>
+      <div class="cartao historico">
+        <div class="cab-cartao">
+          <h2>Histórico de alterações</h2>
+          <button type="button" id="btn-auditoria" class="sec mini">Atualizar</button>
+        </div>
+        <div class="rolagem-vertical">
+          <table class="tabela">
+            <thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr></thead>
+            <tbody id="lista-auditoria"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </main>
   </div>
@@ -253,7 +265,7 @@
   </dialog>
 
   <script src="js/motor.js"></script>
-  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
   <script src="js/app.js"></script>
   <script src="js/acesso.js"></script>
 </body>

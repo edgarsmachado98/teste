@@ -1,10 +1,14 @@
 {
   "name": "gerador-escala-clt",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Gerador de escala de trabalho conforme a legislação trabalhista brasileira",
   "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "start": "node --disable-warning=ExperimentalWarning server/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.js"
   },
   "license": "MIT"
 }
