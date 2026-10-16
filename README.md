@@ -122,6 +122,17 @@ Feriados nacionais calculados automaticamente: Confraternização Universal, Sex
 Proclamação da República, Consciência Negra (Lei 14.759/2023) e Natal. Carnaval e Corpus Christi
 podem ser tratados como feriado opcionalmente.
 
+### Preferências da empresa
+
+Em **Escalas de trabalho › Regras e feriados** há duas opções (desligadas por padrão):
+
+- **Folga não coincidir com feriado** — nos setores que funcionam em feriados, a folga semanal é marcada
+  em outro dia. Folgas exigidas por lei (como o domingo do rodízio) têm prioridade e podem cair num feriado.
+- **Folgas seguidas** — limita os dias seguidos sem trabalho (2, 3 ou 4), somando folgas, feriados e
+  fechamentos do setor. Sequências causadas apenas por fechamento do setor não são alteradas.
+
+Quando alguma preferência não puder ser cumprida, a escala mostra um alerta (não é violação legal).
+
 ### Como o gerador distribui as folgas
 
 - O rodízio de domingos é montado primeiro, equilibrando quantas pessoas folgam em cada domingo.

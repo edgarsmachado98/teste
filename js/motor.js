@@ -154,6 +154,9 @@
     interjornadaMinutos: 660,     // art. 66 CLT (11h)
     maxMinutosSemana: 2640,       // art. 7º, XIII, CF (44h)
     maxMinutosDia: 600,           // art. 59 CLT (8h + 2h extras)
+    // opções da empresa (não são exigências legais)
+    evitarFolgaFeriado: false,    // não colocar folga semanal em feriado (setor aberto no feriado)
+    maxFolgasSeguidas: 0,         // máximo de dias seguidos sem trabalho (0 = sem limite)
   };
 
   function regrasDe(cfg) {
@@ -237,7 +240,7 @@
       celulas[c.id] = new Array(n);
       return {
         c, j: JORNADAS[c.jornada] || JORNADAS['6x1'], periodo: Math.max(1, Number(periodo) || 1), fase: 0,
-        ultimaFolga: -1, folgasSemana: 0, domingosSeguidos: 0,
+        ultimaFolga: -1, folgasSemana: 0, domingosSeguidos: 0, folgasSeguidas: 0,
       };
     });
 
@@ -270,18 +273,36 @@
       return Infinity;
     };
 
+    // opção: folga semanal não coincide com feriado em que o setor funciona
+    const evitarFeriado = !!regras.evitarFolgaFeriado;
+    const feriadoAberto = (j) => evitarFeriado && aberto[j] && !!dias[j].feriado;
+    // opção: limite de dias seguidos sem trabalho
+    const maxSeguidas = Number(regras.maxFolgasSeguidas) || 0;
+    // dias seguidos de folga já garantidos a partir de j (fechamentos e domingos planejados)
+    const folgasGarantidasDesde = (e, j) => {
+      let n = 0;
+      while (j <= ultimo && (!aberto[j] || domingoPlanejado(e, j))) { n++; j++; }
+      return n;
+    };
+    const excedeSeguidas = (e, i) =>
+      maxSeguidas > 0 && e.folgasSeguidas + 1 + folgasGarantidasDesde(e, i + 1) > maxSeguidas;
+
     let fimSemana = -1;
-    let semanaTruncada = false;
+    let diasNaSemana = 7;
+    // período começando no meio da semana: ninguém tem folga anterior conhecida e
+    // todos atingiriam o limite de dias seguidos no mesmo dia (logo após a semana)
+    let primeiraIncompleta = false;
 
     for (let i = 0; i < n; i++) {
       const dia = dias[i];
       if (i === 0 || dia.dow === 1) {
         const ate = i + ((7 - dia.dow) % 7);
         fimSemana = Math.min(ate, ultimo);
-        // semana incompleta no início ou no fim do período: a cota semanal não é
-        // exigida (os dias fora do período são desconhecidos); vale o limite de
-        // dias consecutivos, que já garante o DSR
-        semanaTruncada = ate > ultimo || dia.dow !== 1;
+        // semana incompleta no início ou no fim do período: a cota de folgas é
+        // proporcional (desconta os dias fora do período), para não passar das
+        // 44h semanais nem exigir folga que já pode ter ocorrido fora do período
+        diasNaSemana = fimSemana - i + 1;
+        primeiraIncompleta = i === 0 && diasNaSemana < 7;
         est.forEach((e) => { e.folgasSemana = 0; });
       }
 
@@ -290,6 +311,7 @@
           celulas[e.c.id][i] = celulaFolga(dia, setor);
           if (regular[i]) e.folgasSemana++;
           e.ultimaFolga = i;
+          e.folgasSeguidas++;
           if (dia.dow === 0) e.domingosSeguidos = 0;
         }
         continue;
@@ -297,7 +319,7 @@
 
       // dias úteis (não-domingo) abertos restantes na semana, incluindo hoje
       let diasUteisRestantes = 0;
-      for (let j = i; j <= fimSemana; j++) if (aberto[j] && dias[j].dow !== 0) diasUteisRestantes++;
+      for (let j = i; j <= fimSemana; j++) if (aberto[j] && dias[j].dow !== 0 && !feriadoAberto(j)) diasUteisRestantes++;
       let fechadosFuturos = 0;
       for (let j = i + 1; j <= fimSemana; j++) if (regular[j]) fechadosFuturos++;
 
@@ -306,37 +328,42 @@
       let necessidadeTotal = 0;
 
       for (const e of est) {
-        const consecutivos = i - e.ultimaFolga - 1;
-        const prazo = e.ultimaFolga + regras.maxDiasConsecutivos + 1;
+        // último dia em que a folga pode acontecer sem passar de 6 dias seguidos de
+        // trabalho; com a opção de feriados, antecipa se esse dia for feriado
+        let prazo = e.ultimaFolga + regras.maxDiasConsecutivos + 1;
+        while (prazo > i && feriadoAberto(prazo)) prazo--;
         const domFim = dias[fimSemana].dow === 0 ? fimSemana : -1;
         const reservado = domFim > i && domingoPlanejado(e, domFim);
-        const cota = semanaTruncada ? 0 : e.j.folgasSemana;
+        const cota = Math.max(0, e.j.folgasSemana - (7 - diasNaSemana));
         const faltam = cota - e.folgasSemana - (reservado ? 1 : 0) - fechadosFuturos;
         const proxima = proximaFolgaGarantida(e, i);
-        const prazoNaSemana = prazo <= fimSemana && prazo < proxima;
+        const prazoNaSemana = (prazo <= fimSemana || (primeiraIncompleta && prazo === fimSemana + 1)) && prazo < proxima;
         const necessidade = Math.max(faltam, prazoNaSemana ? 1 : 0);
 
+        // dias seguintes (até o limite) em que a folga ainda pode ser marcada
         const limite = prazoNaSemana ? Math.min(prazo, fimSemana) : fimSemana;
-        let disponiveis = 0;
-        for (let j = i; j <= limite; j++) {
-          if (aberto[j] && !(reservado && j === domFim)) disponiveis++;
+        let futuros = 0;
+        for (let j = i + 1; j <= limite; j++) {
+          if (aberto[j] && !(reservado && j === domFim) && !feriadoAberto(j)) futuros++;
         }
 
         const obrig =
           domingoPlanejado(e, i) ||
-          consecutivos >= regras.maxDiasConsecutivos ||
+          i >= prazo ||
           (dia.dow === 0 && e.domingosSeguidos >= e.periodo - 1) ||
-          (necessidade > 0 && necessidade >= disponiveis);
+          (necessidade > 0 && necessidade > futuros);
 
         if (necessidade > 0) necessidadeTotal += necessidade;
         if (obrig) obrigatorios.push(e);
-        else if (necessidade > 0 && dia.dow !== 0) candidatos.push({ e, prazo, disponiveis });
+        else if (necessidade > 0 && dia.dow !== 0 && !feriadoAberto(i) && !excedeSeguidas(e, i)) {
+          candidatos.push({ e, prazo, disponiveis: futuros });
+        }
       }
 
       // distribui as folgas opcionais de modo uniforme ao longo da semana,
       // sem deixar o setor abaixo do mínimo de pessoas
       let extras = 0;
-      if (dia.dow !== 0 && diasUteisRestantes > 0) {
+      if (dia.dow !== 0 && diasUteisRestantes > 0 && !feriadoAberto(i)) {
         const alvo = Math.ceil(necessidadeTotal / diasUteisRestantes);
         const trabalhando = est.length - obrigatorios.length + cicloTrabalhando[i];
         const folgaPossivel = Math.max(0, trabalhando - (Number(setor.minimoPorDia) || 0));
@@ -350,9 +377,11 @@
           celulas[e.c.id][i] = { tipo: 'F' };
           e.folgasSemana++;
           e.ultimaFolga = i;
+          e.folgasSeguidas++;
           if (dia.dow === 0) e.domingosSeguidos = 0;
         } else {
           celulas[e.c.id][i] = turnoTrabalho(e.c);
+          e.folgasSeguidas = 0;
           if (dia.dow === 0) e.domingosSeguidos++;
         }
       }
@@ -461,6 +490,42 @@
               base: mulher ? 'CLT art. 386' : (periodo <= 3 ? 'Lei 10.101/2000, art. 6º, par. único' : 'Portaria MTP 671/2021'),
             });
           }
+        }
+      }
+
+      // opção da empresa: folga semanal não coincide com feriado
+      if (regras.evitarFolgaFeriado && !j.ciclo && setor) {
+        cel.forEach((t, i) => {
+          if (t.tipo === 'F' && dias[i].feriado && setorAberto(setor, dias[i])) {
+            add({
+              nivel: 'alerta', colaboradorId: c.id, data: dias[i].data, regra: 'Folga em feriado',
+              mensagem: `Folga coincidiu com o feriado ${dias[i].feriado.nome}.`,
+              base: 'Regra da empresa',
+            });
+          }
+        });
+      }
+
+      // opção da empresa: limite de dias seguidos de folga
+      const maxSeguidas = Number(regras.maxFolgasSeguidas) || 0;
+      if (maxSeguidas > 0) {
+        let seq = 0;
+        let escolhida = false; // a sequência tem ao menos uma folga em dia de funcionamento
+        for (let i = 0; i <= cel.length; i++) {
+          if (i < cel.length && cel[i].tipo !== 'T') {
+            seq++;
+            if (!setor || setorAberto(setor, dias[i])) escolhida = true;
+            continue;
+          }
+          if (seq > maxSeguidas && escolhida) {
+            add({
+              nivel: 'alerta', colaboradorId: c.id, data: dias[i - seq].data, regra: 'Folgas seguidas',
+              mensagem: `${seq} dias seguidos sem trabalho a partir de ${dias[i - seq].data.split('-').reverse().join('/')} (limite ${maxSeguidas}).`,
+              base: 'Regra da empresa',
+            });
+          }
+          seq = 0;
+          escolhida = false;
         }
       }
 

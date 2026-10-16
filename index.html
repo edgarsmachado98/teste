@@ -247,7 +247,7 @@
     <!-- REGRAS -->
     <section id="aba-regras" class="painel" data-modulo="escalas">
       <form id="form-regras" class="cartao formulario">
-        <h2>Regras legais aplicadas</h2>
+        <h2>Regras da escala</h2>
         <label>Folga dominical — homens
           <select name="domingoHomensSemanas">
             <option value="3">A cada 3 semanas (comércio — Lei 10.101/2000, art. 6º)</option>
@@ -260,6 +260,7 @@
           </select>
         </label>
         <label class="check"><input type="checkbox" name="incluirFacultativos"> Tratar Carnaval e Corpus Christi como feriado</label>
+
         <ul class="regras-lista">
           <li><b>Jornada:</b> até 8h diárias e 44h semanais (CF art. 7º, XIII; CLT art. 58); horas extras até 2h/dia (art. 59).</li>
           <li><b>Repouso semanal:</b> 24h consecutivas, no máximo 6 dias seguidos de trabalho (CF art. 7º, XV; CLT art. 67; OJ 410 SDI-1 TST).</li>
@@ -270,6 +271,22 @@
           <li><b>Feriados:</b> trabalho em feriado pago em dobro ou compensado com folga (Lei 605/1949, art. 9º).</li>
           <li><b>Trabalho noturno:</b> 22h às 5h, hora de 52min30s e adicional mínimo de 20% (CLT art. 73).</li>
         </ul>
+
+        <h3>Preferências da empresa para compor a escala</h3>
+        <label class="check"><input type="checkbox" name="evitarFolgaFeriado" id="regra-evitar-feriado">
+          Folga não coincidir com feriado</label>
+        <p class="dica">Nos setores que funcionam em feriados, a folga semanal é marcada em outro dia. Folgas
+          obrigatórias por lei (como o domingo do rodízio) têm prioridade e podem cair num feriado.</p>
+        <label>Folgas seguidas
+          <select name="maxFolgasSeguidas" id="regra-max-folgas">
+            <option value="0">Sem limite</option>
+            <option value="2">No máximo 2 dias</option>
+            <option value="3">No máximo 3 dias</option>
+            <option value="4">No máximo 4 dias</option>
+          </select>
+        </label>
+        <p class="dica">Conta folgas, feriados e dias em que o setor fecha. Sequências causadas só por
+          fechamento do setor não são alteradas.</p>
       </form>
       <div class="cartao">
         <h2>Feriados estaduais / municipais</h2>

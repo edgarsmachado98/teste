@@ -385,6 +385,8 @@
     await executar(() => api.put('/api/regras', {
       domingoHomensSemanas: Number(formRegras.elements.domingoHomensSemanas.value),
       incluirFacultativos: formRegras.elements.incluirFacultativos.checked,
+      evitarFolgaFeriado: formRegras.elements.evitarFolgaFeriado.checked,
+      maxFolgasSeguidas: Number(formRegras.elements.maxFolgasSeguidas.value),
     }));
   });
 
@@ -410,6 +412,8 @@
     });
     formRegras.elements.domingoHomensSemanas.value = String(estado.regras.domingoHomensSemanas || 3);
     formRegras.elements.incluirFacultativos.checked = !!estado.incluirFacultativos;
+    formRegras.elements.evitarFolgaFeriado.checked = !!estado.regras.evitarFolgaFeriado;
+    formRegras.elements.maxFolgasSeguidas.value = String(estado.regras.maxFolgasSeguidas || 0);
     const ano = new Date().getFullYear();
     const nacionais = M.feriadosNacionais(ano, estado.incluirFacultativos)
       .concat(M.feriadosNacionais(ano + 1, estado.incluirFacultativos));

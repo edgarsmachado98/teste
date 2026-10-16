@@ -273,7 +273,12 @@ function criarServico(db, opcoes = {}) {
     const linhas = q('SELECT chave, valor FROM configuracoes').all();
     const c = Object.fromEntries(linhas.map((l) => [l.chave, JSON.parse(l.valor)]));
     return {
-      regras: { domingoHomensSemanas: c.domingoHomensSemanas || 3, domingoMulheresSemanas: 2 },
+      regras: {
+        domingoHomensSemanas: c.domingoHomensSemanas || 3,
+        domingoMulheresSemanas: 2,
+        evitarFolgaFeriado: !!c.evitarFolgaFeriado,
+        maxFolgasSeguidas: c.maxFolgasSeguidas || 0,
+      },
       incluirFacultativos: !!c.incluirFacultativos,
     };
   }
@@ -435,9 +440,17 @@ function criarServico(db, opcoes = {}) {
       st.run('domingoHomensSemanas', JSON.stringify(v));
     }
     if (d.incluirFacultativos != null) st.run('incluirFacultativos', JSON.stringify(!!d.incluirFacultativos));
+    if (d.evitarFolgaFeriado != null) st.run('evitarFolgaFeriado', JSON.stringify(!!d.evitarFolgaFeriado));
+    if (d.maxFolgasSeguidas != null) {
+      const v = Number(d.maxFolgasSeguidas);
+      if (!Number.isInteger(v) || v < 0 || v > 7) falhar(400, 'Limite de folgas seguidas inválido (0 a 7 dias).');
+      st.run('maxFolgasSeguidas', JSON.stringify(v));
+    }
     const c = config();
     auditar(ator, 'regras.alterar', `domingo dos homens a cada ${c.regras.domingoHomensSemanas} semanas; ` +
-      `Carnaval/Corpus Christi como feriado: ${c.incluirFacultativos ? 'sim' : 'não'}`);
+      `Carnaval/Corpus Christi como feriado: ${c.incluirFacultativos ? 'sim' : 'não'}; ` +
+      `folga em feriado: ${c.regras.evitarFolgaFeriado ? 'evitar' : 'permitida'}; ` +
+      `folgas seguidas: ${c.regras.maxFolgasSeguidas ? 'até ' + c.regras.maxFolgasSeguidas + ' dias' : 'sem limite'}`);
     return c;
   }
 
@@ -584,6 +597,11 @@ function criarServico(db, opcoes = {}) {
         st.run('domingoHomensSemanas', JSON.stringify(Number(b.regras.domingoHomensSemanas)));
       }
       st.run('incluirFacultativos', JSON.stringify(!!b.incluirFacultativos));
+      if (b.regras) {
+        st.run('evitarFolgaFeriado', JSON.stringify(!!b.regras.evitarFolgaFeriado));
+        const max = Number(b.regras.maxFolgasSeguidas);
+        if (Number.isInteger(max) && max >= 0 && max <= 7) st.run('maxFolgasSeguidas', JSON.stringify(max));
+      }
       const e = b.escala;
       if (e && e.inicio && e.fim && Array.isArray(e.dias) && e.celulas && typeof e.celulas === 'object') {
         const celulas = {};
