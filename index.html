@@ -39,11 +39,52 @@
     </div>
   </div>
 
-  <div id="app" hidden>
+  <div id="app" class="layout" hidden>
+  <aside class="lateral" id="menu-lateral" aria-label="Menu principal">
+    <div class="marca">
+      <span class="marca-sigla" aria-hidden="true">RH</span>
+      <span><b>Gestão de Pessoal RH</b><small>Departamento pessoal</small></span>
+    </div>
+    <nav class="modulos" aria-label="Módulos do sistema">
+      <button type="button" class="modulo ativo" data-modulo="inicio"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span class="rotulo">Início</span></button>
+      <button type="button" class="modulo" data-modulo="cadastros"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg><span class="rotulo">Cadastros</span></button>
+      <div class="subitens" data-modulo="cadastros">
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Colaboradores</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores</button>
+      </div>
+      <button type="button" class="modulo" data-modulo="escalas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/></svg><span class="rotulo">Escalas de trabalho</span></button>
+      <div class="subitens" data-modulo="escalas">
+        <button type="button" class="aba" data-modulo="escalas" data-aba="escala">Escala</button>
+        <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Regras e feriados</button>
+      </div>
+      <p class="grupo-menu">Em desenvolvimento</p>
+      <button type="button" class="modulo" data-modulo="custos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="rotulo">Custos de pessoal</span> <span class="chip breve">em breve</span></button>
+      <button type="button" class="modulo" data-modulo="contratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="rotulo">Contratos de representantes</span> <span class="chip breve">em breve</span></button>
+      <button type="button" class="modulo" data-modulo="distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="rotulo">Distratos</span> <span class="chip breve">em breve</span></button>
+      <p class="grupo-menu so-admin">Administração</p>
+      <button type="button" class="modulo so-admin" data-modulo="usuarios"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg><span class="rotulo">Usuários</span></button>
+    </nav>
+    <div class="lateral-rodape">
+      <div class="usuario-lateral">
+        <b id="usuario-nome"></b>
+        <span class="chip" id="usuario-perfil"></span>
+      </div>
+      <div class="linha-botoes">
+        <button type="button" id="btn-minha-senha" class="sec mini">Alterar senha</button>
+        <button type="button" id="btn-sair" class="sec mini">Sair</button>
+      </div>
+    </div>
+  </aside>
+  <div class="fundo-menu" id="fundo-menu" hidden></div>
+
+  <div class="conteudo">
   <header class="topo">
-    <div>
-      <h1>Gestão de Pessoal RH</h1>
-      <p class="sub">Rotinas do departamento pessoal em conformidade com a legislação trabalhista</p>
+    <div class="topo-titulo">
+      <button type="button" class="btn-menu sec" id="btn-menu" aria-controls="menu-lateral" aria-expanded="false">Menu</button>
+      <div>
+        <p class="sub" id="caminho-pagina">Gestão de Pessoal RH</p>
+        <h1 id="titulo-pagina">Início</h1>
+      </div>
     </div>
     <div class="acoes-topo">
       <button type="button" id="btn-exemplo" class="sec so-edicao">Carregar exemplo</button>
@@ -51,29 +92,7 @@
       <label class="botao sec so-admin">Restaurar backup<input type="file" id="arq-json" accept=".json" hidden></label>
       <button type="button" id="btn-limpar" class="perigo so-admin">Limpar tudo</button>
     </div>
-    <div class="usuario-topo">
-      <span><b id="usuario-nome"></b> <span class="chip" id="usuario-perfil"></span></span>
-      <button type="button" id="btn-minha-senha" class="sec mini">Alterar senha</button>
-      <button type="button" id="btn-sair" class="sec mini">Sair</button>
-    </div>
   </header>
-
-  <nav class="modulos" aria-label="Módulos do sistema">
-    <button type="button" class="modulo ativo" data-modulo="inicio">Início</button>
-    <button type="button" class="modulo" data-modulo="cadastros">Cadastros</button>
-    <button type="button" class="modulo" data-modulo="escalas">Escalas de trabalho</button>
-    <button type="button" class="modulo" data-modulo="custos">Custos de pessoal <span class="chip breve">em breve</span></button>
-    <button type="button" class="modulo" data-modulo="contratos">Contratos de representantes <span class="chip breve">em breve</span></button>
-    <button type="button" class="modulo" data-modulo="distratos">Distratos <span class="chip breve">em breve</span></button>
-    <button type="button" class="modulo so-admin" data-modulo="usuarios">Usuários</button>
-  </nav>
-
-  <nav class="abas" aria-label="Seções do módulo">
-    <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Colaboradores</button>
-    <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores</button>
-    <button type="button" class="aba" data-modulo="escalas" data-aba="escala">Escala</button>
-    <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Regras e feriados</button>
-  </nav>
 
   <main>
     <!-- INÍCIO -->
@@ -338,6 +357,7 @@
       </div>
     </section>
   </main>
+  </div>
   </div>
 
   <dialog id="dialogo">

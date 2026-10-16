@@ -137,14 +137,31 @@
     ultimaAba[mod] = nome;
     document.querySelectorAll('.modulo').forEach((b) => b.classList.toggle('ativo', b.dataset.modulo === mod));
     const abas = abasDoModulo(mod);
+    document.querySelectorAll('.subitens').forEach((d) => { d.hidden = d.dataset.modulo !== mod; });
     document.querySelectorAll('.aba').forEach((b) => {
       b.hidden = b.dataset.modulo !== mod;
       b.classList.toggle('ativa', b.dataset.aba === nome);
     });
-    $('.abas').hidden = abas.length < 2;
     document.querySelectorAll('.painel').forEach((p) => p.classList.toggle('ativo', p === painel));
+    // título da página: módulo e, quando houver, a seção dentro dele
+    const nomeModulo = $(`.modulo[data-modulo="${mod}"] .rotulo`).textContent;
+    const aba = abas.find((b) => b.dataset.aba === nome);
+    $('#titulo-pagina').textContent = aba ? aba.textContent : nomeModulo;
+    $('#caminho-pagina').textContent = aba ? nomeModulo : 'Gestão de Pessoal RH';
+    document.title = mod === 'inicio' ? 'Gestão de Pessoal RH' : `${$('#titulo-pagina').textContent} · Gestão de Pessoal RH`;
+    abrirMenu(false);
     if (mod === 'inicio') renderInicio();
   }
+
+  // menu lateral vira gaveta em telas estreitas
+  function abrirMenu(abrir) {
+    document.body.classList.toggle('menu-aberto', abrir);
+    $('#fundo-menu').hidden = !abrir;
+    $('#btn-menu').setAttribute('aria-expanded', String(abrir));
+  }
+  $('#btn-menu').addEventListener('click', () => abrirMenu(!document.body.classList.contains('menu-aberto')));
+  $('#fundo-menu').addEventListener('click', () => abrirMenu(false));
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') abrirMenu(false); });
 
   document.querySelectorAll('.modulo').forEach((b) => b.addEventListener('click', () => mostrarModulo(b.dataset.modulo)));
   document.querySelectorAll('.aba').forEach((b) => b.addEventListener('click', () => mostrarAba(b.dataset.aba)));
