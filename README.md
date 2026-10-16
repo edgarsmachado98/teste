@@ -25,6 +25,9 @@ Requisito: [Node.js](https://nodejs.org) **22.13 ou mais recente**. Não há dep
 npm start
 ```
 
+No Windows, também é possível dar dois cliques em **`iniciar.bat`**: ele confere o Node.js, inicia o
+servidor e abre o navegador.
+
 Acesse **http://localhost:3000**. No primeiro acesso o sistema pede para criar o usuário administrador.
 
 ### Configuração (variáveis de ambiente)
