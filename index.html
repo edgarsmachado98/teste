@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gerador de Escala de Trabalho — CLT</title>
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+  <header class="topo">
+    <div>
+      <h1>Gerador de Escala de Trabalho</h1>
+      <p class="sub">Escalas 6x1, 5x2 e 12x36 conforme a CLT e a Constituição Federal</p>
+    </div>
+    <div class="acoes-topo">
+      <button type="button" id="btn-exemplo" class="sec">Carregar exemplo</button>
+      <button type="button" id="btn-exportar-json" class="sec">Backup (JSON)</button>
+      <label class="botao sec">Restaurar backup<input type="file" id="arq-json" accept=".json" hidden></label>
+      <button type="button" id="btn-limpar" class="perigo">Limpar tudo</button>
+    </div>
+  </header>
+
+  <nav class="abas" role="tablist">
+    <button type="button" class="aba ativa" data-aba="setores">1. Setores</button>
+    <button type="button" class="aba" data-aba="colaboradores">2. Colaboradores</button>
+    <button type="button" class="aba" data-aba="regras">3. Regras e feriados</button>
+    <button type="button" class="aba" data-aba="escala">4. Escala</button>
+  </nav>
+
+  <main>
+    <!-- SETORES -->
+    <section id="aba-setores" class="painel ativo">
+      <form id="form-setor" class="cartao formulario">
+        <h2 id="titulo-form-setor">Novo setor</h2>
+        <input type="hidden" name="id">
+        <label>Nome do setor<input name="nome" required maxlength="60" placeholder="Ex.: Vendas"></label>
+        <label>Mínimo de pessoas por dia<input name="minimoPorDia" type="number" min="0" value="1"></label>
+        <fieldset>
+          <legend>Dias de funcionamento</legend>
+          <div class="dias-semana" id="dias-funcionamento"></div>
+        </fieldset>
+        <label class="check"><input type="checkbox" name="funcionaFeriados"> Funciona em feriados</label>
+        <div class="linha-botoes">
+          <button type="submit">Salvar setor</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+      </form>
+      <div class="cartao">
+        <h2>Setores cadastrados</h2>
+        <table class="tabela">
+          <thead><tr><th>Setor</th><th>Mínimo/dia</th><th>Funcionamento</th><th>Feriados</th><th>Colaboradores</th><th></th></tr></thead>
+          <tbody id="lista-setores"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- COLABORADORES -->
+    <section id="aba-colaboradores" class="painel">
+      <form id="form-colab" class="cartao formulario">
+        <h2 id="titulo-form-colab">Novo colaborador</h2>
+        <input type="hidden" name="id">
+        <label>Nome completo<input name="nome" required maxlength="100"></label>
+        <label>Matrícula<input name="matricula" required maxlength="20"></label>
+        <label>Sexo
+          <select name="sexo" required>
+            <option value="F">Feminino</option>
+            <option value="M">Masculino</option>
+          </select>
+        </label>
+        <label>Setor<select name="setorId" required id="sel-setor-colab"></select></label>
+        <label>Jornada<select name="jornada" required id="sel-jornada"></select></label>
+        <label>Horário de entrada<input name="entrada" type="time" value="08:00" required></label>
+        <p class="dica" id="dica-jornada"></p>
+        <div class="linha-botoes">
+          <button type="submit">Salvar colaborador</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+      </form>
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Colaboradores</h2>
+          <div class="linha-botoes">
+            <select id="filtro-setor-colab" aria-label="Filtrar por setor"></select>
+            <label class="botao sec">Importar CSV<input type="file" id="arq-csv" accept=".csv,.txt" hidden></label>
+          </div>
+        </div>
+        <p class="dica">CSV com cabeçalho: <code>nome;matricula;sexo;setor;jornada;entrada</code> (sexo F/M; jornada 6x1, 5x2, 5x2-40, 6x1-6h ou 12x36). Setores inexistentes são criados.</p>
+        <table class="tabela">
+          <thead><tr><th>Matrícula</th><th>Nome</th><th>Sexo</th><th>Setor</th><th>Jornada</th><th>Horário</th><th></th></tr></thead>
+          <tbody id="lista-colabs"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- REGRAS -->
+    <section id="aba-regras" class="painel">
+      <form id="form-regras" class="cartao formulario">
+        <h2>Regras legais aplicadas</h2>
+        <label>Folga dominical — homens
+          <select name="domingoHomensSemanas">
+            <option value="3">A cada 3 semanas (comércio — Lei 10.101/2000, art. 6º)</option>
+            <option value="7">A cada 7 semanas (demais atividades — Portaria MTP 671/2021)</option>
+          </select>
+        </label>
+        <label>Folga dominical — mulheres
+          <select name="domingoMulheresSemanas" disabled>
+            <option value="2">A cada 2 semanas (revezamento quinzenal — CLT art. 386)</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="incluirFacultativos"> Tratar Carnaval e Corpus Christi como feriado</label>
+        <ul class="regras-lista">
+          <li><b>Jornada:</b> até 8h diárias e 44h semanais (CF art. 7º, XIII; CLT art. 58); horas extras até 2h/dia (art. 59).</li>
+          <li><b>Repouso semanal:</b> 24h consecutivas, no máximo 6 dias seguidos de trabalho (CF art. 7º, XV; CLT art. 67; OJ 410 SDI-1 TST).</li>
+          <li><b>Interjornada:</b> mínimo de 11h entre duas jornadas (CLT art. 66).</li>
+          <li><b>Intervalo intrajornada:</b> 1h a 2h acima de 6h; 15 min entre 4h e 6h (CLT art. 71).</li>
+          <li><b>Mulheres:</b> escala de revezamento quinzenal favorecendo o repouso dominical (CLT art. 386).</li>
+          <li><b>12x36:</b> mediante acordo individual escrito ou norma coletiva (CLT art. 59-A).</li>
+          <li><b>Feriados:</b> trabalho em feriado pago em dobro ou compensado com folga (Lei 605/1949, art. 9º).</li>
+          <li><b>Trabalho noturno:</b> 22h às 5h, hora de 52min30s e adicional mínimo de 20% (CLT art. 73).</li>
+        </ul>
+      </form>
+      <div class="cartao">
+        <h2>Feriados estaduais / municipais</h2>
+        <form id="form-feriado" class="linha-form">
+          <input type="date" name="data" required aria-label="Data">
+          <input name="nome" required placeholder="Ex.: Aniversário da cidade" aria-label="Nome do feriado">
+          <button type="submit">Adicionar</button>
+        </form>
+        <table class="tabela">
+          <thead><tr><th>Data</th><th>Feriado</th><th>Tipo</th><th></th></tr></thead>
+          <tbody id="lista-feriados"></tbody>
+        </table>
+        <p class="dica">Feriados nacionais são calculados automaticamente para o período da escala (acima, os do ano atual e do próximo).</p>
+      </div>
+    </section>
+
+    <!-- ESCALA -->
+    <section id="aba-escala" class="painel">
+      <div class="cartao">
+        <form id="form-gerar" class="linha-form">
+          <label>Início<input type="date" name="inicio" required></label>
+          <label>Fim<input type="date" name="fim" required></label>
+          <label>Setor<select name="setor" id="filtro-setor-escala"></select></label>
+          <button type="submit">Gerar escala</button>
+          <button type="button" id="btn-csv" class="sec">Exportar CSV</button>
+          <button type="button" id="btn-imprimir" class="sec">Imprimir</button>
+        </form>
+        <p class="dica">Clique em uma célula para alternar entre trabalho e folga; a validação legal é refeita automaticamente.</p>
+        <div class="legenda">
+          <span><i class="cel T"></i> Trabalho (horário)</span>
+          <span><i class="cel F"></i> Folga / DSR</span>
+          <span><i class="cel FER"></i> Feriado (setor fechado)</span>
+          <span><i class="cel dom"></i> Domingo</span>
+          <span><i class="cel fer"></i> Feriado</span>
+        </div>
+      </div>
+      <div id="area-escala"></div>
+      <div class="cartao" id="area-validacao" hidden>
+        <h2>Conformidade legal</h2>
+        <div id="validacao"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/motor.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
