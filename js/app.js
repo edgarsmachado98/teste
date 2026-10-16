@@ -14,6 +14,33 @@
 
   let estado = carregar();
 
+  // Diálogos na própria página (alert/confirm nativos são bloqueados em alguns ambientes)
+  const dialogo = $('#dialogo');
+  function abrirDialogo(msg, { cancelar = false, texto = null } = {}) {
+    $('#dialogo-msg').textContent = msg;
+    const area = $('#dialogo-texto');
+    area.hidden = texto == null;
+    $('#dialogo-copiar').hidden = texto == null;
+    if (texto != null) area.value = texto;
+    $('#dialogo-cancelar').hidden = !cancelar;
+    return new Promise((resolve) => {
+      dialogo.onclose = () => resolve(dialogo.returnValue === 'ok');
+      dialogo.returnValue = '';
+      dialogo.showModal();
+    });
+  }
+  const avisar = (msg) => { abrirDialogo(msg); };
+  const confirmar = (msg) => abrirDialogo(msg, { cancelar: true });
+  $('#dialogo-copiar').addEventListener('click', async () => {
+    const area = $('#dialogo-texto');
+    try { await navigator.clipboard.writeText(area.value); $('#dialogo-copiar').textContent = 'Copiado'; }
+    catch (e) { area.focus(); area.select(); }
+    setTimeout(() => { $('#dialogo-copiar').textContent = 'Copiar'; }, 1500);
+  });
+  // Dentro de um frame (visualizador) downloads e impressão não funcionam
+  const emFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  if (emFrame) $('#btn-imprimir').hidden = true;
+
   function estadoVazio() {
     return {
       setores: [], colaboradores: [], feriadosExtras: [],
@@ -64,7 +91,7 @@
     ev.preventDefault();
     const f = formSetor.elements;
     const dias = [0, 1, 2, 3, 4, 5, 6].map((i) => formSetor.querySelector(`input[name=dia][value="${i}"]`).checked);
-    if (!dias.some(Boolean)) return alert('Selecione ao menos um dia de funcionamento.');
+    if (!dias.some(Boolean)) return avisar('Selecione ao menos um dia de funcionamento.');
     const dados = {
       id: f.id.value || novoId(), nome: f.nome.value.trim(),
       minimoPorDia: Math.max(0, Number(f.minimoPorDia.value) || 0),
@@ -82,7 +109,7 @@
     formSetor.querySelectorAll('input[name=dia]').forEach((c) => { c.checked = SEG_A_SAB[c.value]; });
   }));
 
-  $('#lista-setores').addEventListener('click', (ev) => {
+  $('#lista-setores').addEventListener('click', async (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
     const s = estado.setores.find((x) => x.id === b.dataset.id);
@@ -95,8 +122,8 @@
       f.nome.focus();
     } else if (b.dataset.acao === 'excluir') {
       const qtd = estado.colaboradores.filter((c) => c.setorId === s.id).length;
-      if (qtd) return alert(`O setor possui ${qtd} colaborador(es). Remova-os ou altere o setor antes.`);
-      if (!confirm(`Excluir o setor "${s.nome}"?`)) return;
+      if (qtd) return avisar(`O setor possui ${qtd} colaborador(es). Remova-os ou altere o setor antes.`);
+      if (!(await confirmar(`Excluir o setor "${s.nome}"?`))) return;
       estado.setores = estado.setores.filter((x) => x.id !== s.id);
       salvarERender();
     }
@@ -150,13 +177,13 @@
   formColab.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const f = formColab.elements;
-    if (!estado.setores.length) return alert('Cadastre um setor primeiro.');
+    if (!estado.setores.length) return avisar('Cadastre um setor primeiro.');
     const dados = {
       id: f.id.value || novoId(), nome: f.nome.value.trim(), matricula: f.matricula.value.trim(),
       sexo: f.sexo.value, setorId: f.setorId.value, jornada: f.jornada.value, entrada: f.entrada.value,
     };
     if (estado.colaboradores.some((c) => c.matricula === dados.matricula && c.id !== dados.id)) {
-      return alert(`A matrícula ${dados.matricula} já está cadastrada.`);
+      return avisar(`A matrícula ${dados.matricula} já está cadastrada.`);
     }
     const i = estado.colaboradores.findIndex((c) => c.id === dados.id);
     if (i >= 0) estado.colaboradores[i] = dados; else estado.colaboradores.push(dados);
@@ -170,7 +197,7 @@
     atualizarDicaJornada();
   }));
 
-  $('#lista-colabs').addEventListener('click', (ev) => {
+  $('#lista-colabs').addEventListener('click', async (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
     const c = estado.colaboradores.find((x) => x.id === b.dataset.id);
@@ -181,7 +208,7 @@
       atualizarDicaJornada();
       f.nome.focus();
     } else if (b.dataset.acao === 'excluir') {
-      if (!confirm(`Excluir ${c.nome} (matrícula ${c.matricula})?`)) return;
+      if (!(await confirmar(`Excluir ${c.nome} (matrícula ${c.matricula})?`))) return;
       estado.colaboradores = estado.colaboradores.filter((x) => x.id !== c.id);
       salvarERender();
     }
@@ -214,12 +241,12 @@
     if (!arq) return;
     const texto = (await arq.text()).replace(/^﻿/, '');
     const linhas = texto.split(/\r?\n/).filter((l) => l.trim());
-    if (linhas.length < 2) return alert('Arquivo vazio.');
+    if (linhas.length < 2) return avisar('Arquivo vazio.');
     const sep = linhas[0].includes(';') ? ';' : ',';
     const cab = linhas[0].split(sep).map((h) => h.trim().toLowerCase());
     const col = (nome) => cab.indexOf(nome);
     if (['nome', 'matricula', 'sexo', 'setor'].some((n) => col(n) < 0)) {
-      return alert('Cabeçalho deve conter: nome;matricula;sexo;setor;jornada;entrada');
+      return avisar('Cabeçalho deve conter: nome;matricula;sexo;setor;jornada;entrada');
     }
     let ok = 0;
     const erros = [];
@@ -245,7 +272,7 @@
       ok++;
     });
     salvarERender();
-    alert(`${ok} colaborador(es) importado(s).` + (erros.length ? `\nIgnorados: ${erros.join(', ')}` : ''));
+    avisar(`${ok} colaborador(es) importado(s).` + (erros.length ? `\nIgnorados: ${erros.join(', ')}` : ''));
   });
 
   // ---------------------------------------------------------------- regras
@@ -300,14 +327,14 @@
     formGerar.elements.fim.value = M.formatarData(fim);
   })();
 
-  formGerar.addEventListener('submit', (ev) => {
+  formGerar.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const inicio = formGerar.elements.inicio.value;
     const fim = formGerar.elements.fim.value;
-    if (!inicio || !fim || inicio > fim) return alert('Período inválido.');
-    if ((M.parseData(fim) - M.parseData(inicio)) / 86400000 > 92) return alert('Gere no máximo 3 meses por vez.');
-    if (!estado.colaboradores.length) return alert('Cadastre colaboradores primeiro.');
-    if (estado.escala && !confirm('Gerar uma nova escala substitui a atual (incluindo ajustes manuais). Continuar?')) return;
+    if (!inicio || !fim || inicio > fim) return avisar('Período inválido.');
+    if ((M.parseData(fim) - M.parseData(inicio)) / 86400000 > 92) return avisar('Gere no máximo 3 meses por vez.');
+    if (!estado.colaboradores.length) return avisar('Cadastre colaboradores primeiro.');
+    if (estado.escala && !(await confirmar('Gerar uma nova escala substitui a atual (incluindo ajustes manuais). Continuar?'))) return;
     const cfg = Object.assign(configMotor(), { inicio, fim });
     estado.escala = M.gerarEscala(cfg);
     estado.periodo = { inicio, fim };
@@ -423,7 +450,7 @@
 
   $('#btn-csv').addEventListener('click', () => {
     const e = estado.escala;
-    if (!e) return alert('Gere uma escala primeiro.');
+    if (!e) return avisar('Gere uma escala primeiro.');
     const filtro = $('#filtro-setor-escala').value;
     const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
     const linhas = [['Setor', 'Matrícula', 'Nome', 'Sexo', 'Jornada', ...e.dias.map((d) => `${dataBR(d.data)} ${M.NOMES_DIAS[d.dow]}`),
@@ -443,6 +470,10 @@
   // ---------------------------------------------------- backup / exemplo
 
   function baixar(nome, conteudo, tipo) {
+    if (emFrame) {
+      abrirDialogo(`Copie o conteúdo abaixo e salve como ${nome}.`, { texto: conteudo.replace(/^\uFEFF/, '') });
+      return;
+    }
     const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
     const a = Object.assign(document.createElement('a'), { href: url, download: nome });
     document.body.appendChild(a);
@@ -464,18 +495,18 @@
       estado = Object.assign(estadoVazio(), dados);
       salvarERender();
     } catch (e) {
-      alert('Arquivo de backup inválido.');
+      avisar('Arquivo de backup inválido.');
     }
   });
 
-  $('#btn-limpar').addEventListener('click', () => {
-    if (!confirm('Apagar todos os setores, colaboradores e escalas?')) return;
+  $('#btn-limpar').addEventListener('click', async () => {
+    if (!(await confirmar('Apagar todos os setores, colaboradores e escalas?'))) return;
     estado = estadoVazio();
     salvarERender();
   });
 
-  $('#btn-exemplo').addEventListener('click', () => {
-    if ((estado.setores.length || estado.colaboradores.length) && !confirm('Substituir os dados atuais pelo exemplo?')) return;
+  $('#btn-exemplo').addEventListener('click', async () => {
+    if ((estado.setores.length || estado.colaboradores.length) && !(await confirmar('Substituir os dados atuais pelo exemplo?'))) return;
     const todos = [true, true, true, true, true, true, true];
     estado = estadoVazio();
     estado.setores = [
@@ -511,4 +542,10 @@
   formSetor.dispatchEvent(new Event('reset'));
   atualizarDicaJornada();
   salvarERender();
+
+  // primeira visita: abre com dados de exemplo e a escala já gerada
+  if (!estado.setores.length && !estado.colaboradores.length) {
+    $('#btn-exemplo').click();
+    setTimeout(() => { formGerar.requestSubmit(); mostrarAba('escala'); });
+  }
 })();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gerador de Escala de Trabalho — CLT</title>
+  <title>Gerador de Escala CLT</title>
   <link rel="stylesheet" href="css/estilo.css">
 </head>
 <body>
@@ -161,6 +161,18 @@
       </div>
     </section>
   </main>
+
+  <dialog id="dialogo">
+    <form method="dialog" class="formulario">
+      <p id="dialogo-msg"></p>
+      <textarea id="dialogo-texto" rows="10" readonly hidden></textarea>
+      <div class="linha-botoes">
+        <button type="submit" value="ok">OK</button>
+        <button type="button" id="dialogo-copiar" class="sec" hidden>Copiar</button>
+        <button type="submit" value="cancelar" id="dialogo-cancelar" class="sec" hidden>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="js/motor.js"></script>
   <script src="js/app.js"></script>
