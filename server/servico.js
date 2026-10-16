@@ -6,6 +6,7 @@
 
 const crypto = require('node:crypto');
 const M = require('../js/motor.js');
+const CT = require('../js/contrato-modelo.js');
 const senhas = require('./senhas.js');
 
 const PERFIS = {
@@ -564,11 +565,95 @@ function criarServico(db, opcoes = {}) {
     auditar(ator, 'dados.limpar', null);
   }
 
+  // ------------------------------------------- contratos de representante
+
+  const SITUACOES = ['ativo', 'encerrado'];
+
+  /** Mantém só os campos conhecidos do modelo e valida o que foi preenchido. */
+  function normalizarContrato(d) {
+    const out = {};
+    for (const c of CT.CAMPOS) {
+      if (c.tipo === 'check') { out[c.id] = d[c.id] !== false; continue; }
+      let v = d[c.id] == null ? '' : String(d[c.id]).trim();
+      if (c.max && v.length > c.max) falhar(400, `${c.rotulo}: no máximo ${c.max} caracteres.`);
+      if (c.tipo === 'cpf') v = v ? CT.formatarCPF(v) : '';
+      if (c.tipo === 'cnpj') v = v ? CT.formatarCNPJ(v) : '';
+      if (c.tipo === 'cep') v = v ? CT.formatarCEP(v) : '';
+      if (c.tipo === 'uf') v = v.toUpperCase();
+      if (c.tipo === 'sexo' && v && !['F', 'M'].includes(v)) falhar(400, 'Sexo deve ser F ou M.');
+      if (c.tipo === 'data' && v) dataValida(v, c.rotulo);
+      out[c.id] = v;
+    }
+    const docs = Array.isArray(d.documentos) ? d.documentos.filter((x) => CT.DOCUMENTOS.some((y) => y.id === x)) : [];
+    out.documentos = docs.length ? [...new Set(docs)] : CT.DOCUMENTOS.map((x) => x.id);
+    out.situacao = SITUACOES.includes(d.situacao) ? d.situacao : 'ativo';
+    // para salvar basta identificar o representante; o restante pode ser completado depois
+    if (!out.razao) falhar(400, 'Informe a razão social do representante.');
+    if (!out.cnpj) falhar(400, 'Informe o CNPJ do representante.');
+    for (const p of CT.pendencias(out)) {
+      if (/inválid|dígitos/.test(p.mensagem)) falhar(400, p.mensagem);
+    }
+    return out;
+  }
+
+  const contratoDeLinha = (l) => ({
+    id: l.id, ...JSON.parse(l.dados), situacao: l.situacao,
+    criadoPor: l.criado_por, criadoEm: l.criado_em, atualizadoEm: l.atualizado_em,
+  });
+
+  function listarContratos(ator) {
+    exigir(ator, 'consulta');
+    return q('SELECT * FROM contratos_representante ORDER BY razao_social COLLATE NOCASE').all().map((l) => {
+      const c = contratoDeLinha(l);
+      return { ...c, pendencias: CT.pendencias(c).length };
+    });
+  }
+
+  function salvarContrato(ator, d) {
+    exigir(ator, 'operador');
+    const c = normalizarContrato(d);
+    const repetido = q("SELECT id FROM contratos_representante WHERE cnpj = ? AND situacao = 'ativo'").get(c.cnpj);
+    if (repetido && repetido.id !== d.id && c.situacao === 'ativo') {
+      falhar(409, `Já existe um contrato ativo para o CNPJ ${c.cnpj}.`);
+    }
+    const { situacao, ...dadosJson } = c;
+    let id = d.id;
+    if (id) {
+      const r = q('UPDATE contratos_representante SET razao_social = ?, cnpj = ?, situacao = ?, dados = ?, atualizado_em = ? WHERE id = ?')
+        .run(c.razao, c.cnpj, situacao, JSON.stringify(dadosJson), iso(), id);
+      if (!r.changes) falhar(404, 'Contrato não encontrado.');
+      auditar(ator, 'contrato.alterar', `${c.razao} (${c.cnpj})${situacao === 'encerrado' ? ', encerrado' : ''}`);
+    } else {
+      id = novoId();
+      q(`INSERT INTO contratos_representante (id, razao_social, cnpj, situacao, dados, criado_por, criado_em, atualizado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, c.razao, c.cnpj, situacao, JSON.stringify(dadosJson), ator.login, iso(), iso());
+      auditar(ator, 'contrato.criar', `${c.razao} (${c.cnpj})`);
+    }
+    const salvo = contratoDeLinha(q('SELECT * FROM contratos_representante WHERE id = ?').get(id));
+    return { ...salvo, pendencias: CT.pendencias(salvo).length };
+  }
+
+  function removerContrato(ator, id) {
+    exigir(ator, 'operador');
+    const l = q('SELECT * FROM contratos_representante WHERE id = ?').get(id) || falhar(404, 'Contrato não encontrado.');
+    q('DELETE FROM contratos_representante WHERE id = ?').run(id);
+    auditar(ator, 'contrato.excluir', `${l.razao_social} (${l.cnpj})`);
+  }
+
+  /** Registra no histórico que o documento foi gerado (PDF ou Word). */
+  function registrarDocumento(ator, id, formato) {
+    exigir(ator, 'consulta');
+    const l = q('SELECT * FROM contratos_representante WHERE id = ?').get(id) || falhar(404, 'Contrato não encontrado.');
+    if (!['pdf', 'docx'].includes(formato)) falhar(400, 'Formato inválido.');
+    auditar(ator, 'contrato.documento', `${l.razao_social}: ${formato === 'pdf' ? 'PDF' : 'Word'}`);
+  }
+
   function backup(ator) {
     exigir(ator, 'admin');
     const d = dados(ator);
+    const contratos = q('SELECT * FROM contratos_representante').all().map(contratoDeLinha);
     auditar(ator, 'dados.backup', null);
-    return { versao: 1, exportadoEm: iso(), ...d };
+    return { versao: 2, exportadoEm: iso(), ...d, contratos };
   }
 
   function restaurar(ator, b) {
@@ -611,7 +696,20 @@ function criarServico(db, opcoes = {}) {
         gravarEscala(ator, { inicio: dataValida(e.inicio, 'Data'), fim: dataValida(e.fim, 'Data'), dias: e.dias, celulas }, true);
       }
     });
-    auditar(ator, 'dados.restaurar', `${b.setores.length} setor(es), ${b.colaboradores.length} colaborador(es)`);
+    if (Array.isArray(b.contratos)) {
+      db.transacao(() => {
+        q('DELETE FROM contratos_representante').run();
+        for (const ct of b.contratos) {
+          const c = normalizarContrato(ct);
+          const { situacao, ...dadosJson } = c;
+          q(`INSERT INTO contratos_representante (id, razao_social, cnpj, situacao, dados, criado_por, criado_em, atualizado_em)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(novoId(), c.razao, c.cnpj, situacao, JSON.stringify(dadosJson),
+            ct.criadoPor || ator.login, ct.criadoEm || iso(), iso());
+        }
+      });
+    }
+    auditar(ator, 'dados.restaurar', `${b.setores.length} setor(es), ${b.colaboradores.length} colaborador(es)` +
+      (Array.isArray(b.contratos) ? `, ${b.contratos.length} contrato(s)` : ''));
   }
 
   return {
@@ -620,6 +718,7 @@ function criarServico(db, opcoes = {}) {
     dados, salvarSetor, removerSetor, salvarColaborador, removerColaborador, importarColaboradores,
     salvarConfig, salvarFeriado, removerFeriado, gerarEscala, alterarCelula,
     carregarExemplo, limparDados, backup, restaurar,
+    listarContratos, salvarContrato, removerContrato, registrarDocumento,
   };
 }
 

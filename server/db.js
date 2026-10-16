@@ -73,7 +73,19 @@ CREATE TABLE IF NOT EXISTS auditoria (
   detalhe       TEXT
 );
 
+CREATE TABLE IF NOT EXISTS contratos_representante (
+  id            TEXT PRIMARY KEY,
+  razao_social  TEXT NOT NULL,
+  cnpj          TEXT NOT NULL,
+  situacao      TEXT NOT NULL DEFAULT 'ativo' CHECK (situacao IN ('ativo', 'encerrado')),
+  dados         TEXT NOT NULL,
+  criado_por    TEXT,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_contratos_cnpj ON contratos_representante(cnpj);
 CREATE INDEX IF NOT EXISTS idx_colaboradores_setor ON colaboradores(setor_id);
 `;
 

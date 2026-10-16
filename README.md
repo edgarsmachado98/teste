@@ -14,7 +14,7 @@ cada uma com seu login e perfil, e todas as alterações ficam registradas no hi
 | Cadastros | Disponível | Colaboradores (nome, matrícula, sexo, setor, jornada e horário) e setores. Base de todos os módulos |
 | Escalas de trabalho | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
 | Custos de pessoal | Em breve | Custo por funcionário com INSS, FGTS e provisões de férias e 13º salário |
-| Contratos de representantes | Em breve | Contratos de representação comercial (Lei 4.886/1965) |
+| Contratos de representantes | Disponível | Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, em PDF e Word |
 | Distratos | Em breve | Encerramento dos contratos de representação com indenização e aviso prévio |
 
 ## Instalação e execução
@@ -70,6 +70,31 @@ Segurança:
 - Todas as permissões são verificadas no servidor; proteção contra CSRF e cabeçalhos de segurança (CSP, X-Frame-Options).
 - O sistema exige sempre ao menos um administrador ativo.
 - **Histórico de alterações**: quem fez o quê e quando (logins, cadastros, geração e ajustes de escala).
+
+## Contratos de representantes
+
+Gera o pacote de contratação de representante comercial a partir do modelo da empresa
+(Antoniazzi & Cia e Antoniazzi Alimentos), preenchendo apenas os dados do **REPRESENTANTE**:
+
+- Empresa: razão social, CNPJ, nome fantasia e endereço;
+- Responsável legal: nome, sexo (ajusta “nascido/nascida”, “portador/portadora”…), nacionalidade,
+  data de nascimento, RG, CPF e endereço residencial (ou o mesmo da empresa);
+- Contrato: zona de influência/clientes (Anexo I) e data.
+
+O pacote contém, à escolha: os dois contratos (cada um com os Anexos I a IV), a Política de Privacidade
+Geral, o Termo Aditivo de comissão diferenciada e o Termo de Ciência e Adesão à Política de Privacidade.
+
+- A **prévia** mostra o documento completo com os dados do representante destacados; clicar em um
+  deles leva ao campo correspondente.
+- **Gerar PDF** abre a impressão do navegador (escolha “Salvar como PDF”), com o cabeçalho do
+  representante repetido em todas as páginas.
+- **Gerar Word (.docx)** baixa o documento editável, com cabeçalhos, logotipos e numeração de páginas.
+- CPF e CNPJ são conferidos pelos dígitos verificadores; o documento só é gerado com todos os dados preenchidos.
+- Um contrato pode ser salvo incompleto (rascunho). Não é permitido mais de um contrato **ativo** por CNPJ.
+- Gerar, criar, alterar e excluir contratos fica registrado no histórico.
+
+O texto fixo do modelo está em `js/contrato-modelo.js` (cláusulas, anexos e dados das empresas
+representadas) — alterações no modelo da empresa devem ser feitas ali.
 
 ## Escalas de trabalho
 
@@ -155,6 +180,10 @@ js/motor.js          geração, feriados e validação legal (usado no navegador
 js/api.js            cliente da API
 js/app.js            tela inicial, navegação entre módulos, cadastros e escalas
 js/acesso.js         login, primeiro acesso, usuários e histórico
+js/contrato-modelo.js  texto do contrato de representante e campos do representante
+js/contrato-docx.js  gerador do arquivo Word (.docx), sem dependências
+js/contratos.js      tela de contratos: cadastro, prévia, PDF e Word
+img/                 logotipos usados nos contratos
 server/server.js     servidor HTTP, rotas da API, sessão e segurança
 server/servico.js    regras de negócio e permissões
 server/db.js         banco de dados SQLite (esquema)

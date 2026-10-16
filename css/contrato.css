@@ -1,0 +1,125 @@
+/* Módulo Contratos de representantes: editor, prévia em folhas e impressão (PDF). */
+
+.ct-editor { display: grid; grid-template-columns: minmax(300px, 420px) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.ct-form { position: sticky; top: .5rem; max-height: calc(100vh - 1rem); overflow-y: auto; }
+.ct-form fieldset { display: grid; gap: .6rem; }
+.ct-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+.ct-grade .largo, .ct-grade .check { grid-column: 1 / -1; }
+.ct-grade > label { align-content: start; }
+.ct-grade label small.dica { margin: 0; font-weight: 400; }
+.ct-form textarea {
+  font: inherit; padding: .45rem .55rem; border: 1px solid var(--borda); border-radius: 6px;
+  background: var(--campo); color: inherit; resize: vertical;
+}
+.obrig { color: var(--erro); }
+.invalido { border-color: var(--erro) !important; box-shadow: 0 0 0 2px var(--perigo-fundo); }
+.ct-docs { display: grid; gap: .35rem; }
+.ct-docs label { align-items: flex-start; }
+.ct-docs input, .ct-form label.check input { margin-top: .2rem; flex: none; }
+.ct-acoes { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: .25rem; border-top: 1px solid var(--borda); }
+.ct-acoes button { flex: 1 1 auto; }
+.ct-pendencias { background: var(--perigo-fundo); color: var(--erro); border-radius: 6px; padding: .5rem .75rem; font-size: .9rem; }
+.ct-pendencias ul { margin: .25rem 0 0; padding-left: 1.1rem; }
+.suave { color: var(--suave); }
+
+.ct-previa-col { min-width: 0; }
+.ct-previa-topo { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; color: var(--suave); }
+.ct-previa-topo b { color: var(--texto); }
+.ct-previa {
+  display: grid; gap: 1rem; justify-items: center; padding: 1rem; border-radius: 8px;
+  background: var(--codigo); max-height: calc(100vh - 6rem); overflow: auto;
+}
+/* a folha fica sempre clara, como o papel, mesmo no tema escuro */
+.ct-previa .ct-folha {
+  width: 100%; max-width: 21.6cm; background: #ffffff; color: #000000;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25); padding: 1.2cm 1.6cm 1.4cm 2.2cm;
+}
+.ct-previa .ct-doc { display: grid; gap: 1rem; width: 100%; justify-items: center; }
+
+/* -------------------------------------------------------- texto do documento */
+
+.ct-folha { border-collapse: collapse; width: 100%; }
+.ct-folha > thead > tr > td, .ct-folha > tbody > tr > td { padding: 0; vertical-align: top; }
+.ct-doc { font-family: "Times New Roman", Times, "Liberation Serif", serif; font-size: 12pt; line-height: 1.35; color: #000000; }
+.ct-fonte-politica { font-size: 9.5pt; line-height: 1.9; }
+.ct-fonte-termo { font-family: Carlito, Calibri, "Segoe UI", Arial, sans-serif; line-height: 1.75; }
+
+.ct-cab { display: flex; gap: 1.2rem; align-items: flex-start; margin-bottom: 1.6rem; font-family: Arial, Helvetica, sans-serif; }
+.ct-logo { width: 2.2cm; height: auto; }
+.ct-cab-dados { font-size: 7.5pt; line-height: 1.25; color: #333333; }
+.ct-cab-logos { flex-direction: column; gap: .8rem; }
+.ct-logos { display: flex; justify-content: center; gap: 1rem; width: 100%; align-items: center; }
+.ct-logos img:first-child { width: 2cm; }
+.ct-logos img:last-child { width: 2.4cm; }
+
+.ct-titulo { font-family: Cambria, Caladea, Georgia, serif; font-style: italic; font-weight: 700; font-size: 13pt; text-decoration: underline; margin: 0 0 1.2em; }
+.ct-titulo.centro { text-align: center; text-decoration: none; }
+.ct-titulo-centro { text-align: center; font-size: inherit; font-weight: 700; margin: .8em 0 1.4em; }
+.ct-secao { font-size: inherit; margin: .4em 0 .6em; }
+.ct-secao-pol { font-size: inherit; margin: 1.4em 0 .6em .6cm; }
+.ct-p { margin: 0 0 .8em; text-align: justify; }
+.ct-compacto { margin-bottom: .15em; }
+.ct-recuo { text-indent: 1.25cm; }
+.ct-termo { text-indent: .5cm; }
+.ct-n { display: grid; grid-template-columns: 1cm minmax(0, 1fr); margin-bottom: .8em; }
+.ct-n .ct-p { margin: 0; }
+.ct-item { display: grid; grid-template-columns: .6cm minmax(0, 1fr); margin: 0 0 .6em .6cm; }
+.ct-item .ct-p { margin: 0; }
+.ct-rotulo { font-family: Carlito, Calibri, Arial, sans-serif; font-weight: 700; font-size: 8pt; margin: .8em 0 .8em .3cm; }
+.ct-zona { margin: 1em 0; white-space: normal; }
+.ct-contato { margin: 0 0 1em 45%; text-align: justify; }
+.ct-data { margin: 1.4em 0 0; }
+.ct-vermelho { color: #ff0000; }
+
+.ct-assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2.6em; break-inside: avoid; }
+.ct-assinaturas.um { grid-template-columns: 1fr; justify-items: center; }
+.ct-ass { line-height: 1.25; break-inside: avoid; }
+.ct-ass.centro { text-align: center; }
+.ct-linha { display: block; border-top: 1px solid #000000; width: 6.2cm; margin-bottom: .2em; }
+.ct-ass.centro .ct-linha { margin-inline: auto; }
+.ct-test-rotulo { margin: 2.4em 0 0; }
+.ct-test { display: flex; gap: 2.5cm; margin-top: 2.6em; break-inside: avoid; }
+.ct-test .ct-linha { width: 5.5cm; }
+.ct-test-linha { align-items: flex-end; gap: 1cm; margin-top: 3em; }
+.ct-ass-pol { display: grid; gap: 2.2em; margin: 2.5em 0 0 40%; }
+.ct-ass-termo { margin-top: 4em; font-family: Arial, Helvetica, sans-serif; font-size: 8pt; }
+.ct-ass-termo .ct-linha { width: 9cm; }
+.ct-versoes { border-collapse: collapse; margin: 1em auto 1.6em; font-size: 7.5pt; line-height: 1.3; }
+.ct-versoes th, .ct-versoes td { border: 1px solid #000000; padding: .25em .5em; text-align: center; }
+.ct-versoes th { background: #f2f2f2; }
+.ct-versoes td:nth-child(3) { text-align: left; max-width: 9cm; }
+
+/* dados do representante destacados na prévia */
+.ct-campo { background: #fff3b0; color: inherit; padding: 0 .1em; border-radius: 2px; cursor: pointer; box-shadow: 0 0 0 1px #e6c200; }
+.ct-campo:hover { background: #ffe066; }
+.ct-campo.vazio { background: #ffd6d6; box-shadow: 0 0 0 1px #e05252; color: #a40000; font-style: italic; }
+
+#impressao { display: none; }
+
+@media (max-width: 1100px) {
+  .ct-editor { grid-template-columns: minmax(0, 1fr); }
+  .ct-form { position: static; max-height: none; }
+  .ct-previa { max-height: none; }
+}
+@media (max-width: 520px) {
+  .ct-grade { grid-template-columns: minmax(0, 1fr); }
+  .ct-previa { padding: .5rem; }
+  .ct-previa .ct-folha { padding: .8cm .6cm; }
+}
+
+/* ------------------------------------------------------------- impressão */
+
+@media print {
+  body.imprimindo > *:not(#impressao) { display: none !important; }
+  body.imprimindo #impressao { display: block !important; }
+  body.imprimindo { background: #ffffff; }
+  body.imprimindo .ct-doc { break-before: page; }
+  body.imprimindo .ct-doc:first-child { break-before: auto; }
+  body.imprimindo .ct-folha + .ct-folha { break-before: page; }
+  body.imprimindo .ct-folha > thead > tr > td { padding-bottom: .2cm; }
+  body.imprimindo .ct-cab { margin-bottom: .9cm; }
+  body.imprimindo .ct-data, body.imprimindo .ct-assinaturas, body.imprimindo .ct-test-rotulo { break-after: avoid; }
+  body.imprimindo #impressao { page: contrato; }
+}
+/* página nomeada: não interfere na impressão da escala (A4 paisagem) */
+@page contrato { size: letter; margin: 1.1cm 2.3cm 1.6cm 3.7cm; }

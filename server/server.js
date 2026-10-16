@@ -22,12 +22,14 @@ const RAIZ = path.resolve(__dirname, '..');
 const ESTATICOS = {
   '/': 'index.html',
   '/index.html': 'index.html',
+  '/favicon.ico': 'img/icone.png',
 };
-const PASTAS_ESTATICAS = ['/css/', '/js/'];
+const PASTAS_ESTATICAS = ['/css/', '/js/', '/img/'];
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.png': 'image/png',
 };
 const COOKIE = 'escala_sid';
 const LIMITE_CORPO = 1024 * 1024;
@@ -170,6 +172,11 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   rota('POST', '/api/exemplo', ({ usuario }) => servico.carregarExemplo(usuario));
   rota('DELETE', '/api/dados', ({ usuario }) => servico.limparDados(usuario));
   rota('GET', '/api/backup', ({ usuario }) => servico.backup(usuario));
+  rota('GET', '/api/contratos', ({ usuario }) => servico.listarContratos(usuario));
+  rota('POST', '/api/contratos', ({ usuario, corpo }) => servico.salvarContrato(usuario, { ...corpo, id: null }));
+  rota('PUT', '/api/contratos/:id', ({ usuario, corpo, p }) => servico.salvarContrato(usuario, { ...corpo, id: p.id }));
+  rota('DELETE', '/api/contratos/:id', ({ usuario, p }) => servico.removerContrato(usuario, p.id));
+  rota('POST', '/api/contratos/:id/documento', ({ usuario, corpo, p }) => servico.registrarDocumento(usuario, p.id, corpo.formato));
   rota('POST', '/api/restaurar', ({ usuario, corpo }) => servico.restaurar(usuario, corpo), { limiteCorpo: LIMITE_CORPO_BACKUP });
 
   async function tratarApi(req, res, url) {

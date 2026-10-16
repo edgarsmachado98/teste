@@ -650,9 +650,11 @@
       await recarregar();
       periodoPadrao();
       mostrarAba('inicio');
+      window.dispatchEvent(new CustomEvent('app-iniciado', { detail: u }));
     },
     encerrar() {
       usuario = null;
+      window.dispatchEvent(new CustomEvent('app-encerrado'));
       estado = estadoVazio();
       render();
       document.body.classList.remove('perfil-consulta', 'perfil-admin');

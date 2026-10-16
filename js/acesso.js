@@ -36,6 +36,10 @@
     'dados.limpar': 'Apagou todos os dados',
     'dados.backup': 'Exportou backup',
     'dados.restaurar': 'Restaurou backup',
+    'contrato.criar': 'Cadastrou contrato de representante',
+    'contrato.alterar': 'Alterou contrato de representante',
+    'contrato.excluir': 'Excluiu contrato de representante',
+    'contrato.documento': 'Gerou documento do contrato',
   };
   const quando = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Nunca');
 
