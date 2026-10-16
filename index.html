@@ -7,16 +7,55 @@
   <link rel="stylesheet" href="css/estilo.css">
 </head>
 <body>
+  <!-- TELA DE ACESSO -->
+  <div id="tela-acesso" class="acesso" hidden>
+    <div class="acesso-caixa">
+      <div class="acesso-marca">
+        <h1>Gerador de Escala de Trabalho</h1>
+        <p>Escalas 6x1, 5x2 e 12x36 conforme a CLT</p>
+      </div>
+
+      <form id="form-login" class="formulario" hidden>
+        <h2>Entrar</h2>
+        <label>Login<input name="login" id="login-usuario" autocomplete="username" required autocapitalize="none" spellcheck="false"></label>
+        <label>Senha<input name="senha" id="login-senha" type="password" autocomplete="current-password" required></label>
+        <p class="msg-erro" id="login-erro" role="alert" hidden></p>
+        <button type="submit">Entrar</button>
+        <p class="dica">Esqueceu a senha? Peça a um administrador para redefini-la.</p>
+      </form>
+
+      <form id="form-primeiro" class="formulario" hidden>
+        <h2>Primeiro acesso</h2>
+        <p class="dica">Crie o usuário administrador. Ele poderá cadastrar os demais usuários do sistema.</p>
+        <label>Nome completo<input name="nome" id="pri-nome" required maxlength="100" autocomplete="name"></label>
+        <label>Login<input name="login" id="pri-login" required maxlength="60" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex.: maria.silva"></label>
+        <label>Senha<input name="senha" id="pri-senha" type="password" required autocomplete="new-password"></label>
+        <label>Confirmar senha<input name="confirma" id="pri-confirma" type="password" required autocomplete="new-password"></label>
+        <p class="dica">Mínimo de 8 caracteres, com letras e números.</p>
+        <p class="msg-erro" id="primeiro-erro" role="alert" hidden></p>
+        <button type="submit">Criar administrador e entrar</button>
+      </form>
+
+      <p class="acesso-nota">Os usuários e os dados ficam salvos somente neste navegador.</p>
+    </div>
+  </div>
+
+  <div id="app" hidden>
   <header class="topo">
     <div>
       <h1>Gerador de Escala de Trabalho</h1>
       <p class="sub">Escalas 6x1, 5x2 e 12x36 conforme a CLT e a Constituição Federal</p>
     </div>
     <div class="acoes-topo">
-      <button type="button" id="btn-exemplo" class="sec">Carregar exemplo</button>
+      <button type="button" id="btn-exemplo" class="sec so-edicao">Carregar exemplo</button>
       <button type="button" id="btn-exportar-json" class="sec">Backup (JSON)</button>
-      <label class="botao sec">Restaurar backup<input type="file" id="arq-json" accept=".json" hidden></label>
-      <button type="button" id="btn-limpar" class="perigo">Limpar tudo</button>
+      <label class="botao sec so-edicao">Restaurar backup<input type="file" id="arq-json" accept=".json" hidden></label>
+      <button type="button" id="btn-limpar" class="perigo so-edicao">Limpar tudo</button>
+    </div>
+    <div class="usuario-topo">
+      <span><b id="usuario-nome"></b> <span class="chip" id="usuario-perfil"></span></span>
+      <button type="button" id="btn-minha-senha" class="sec mini">Alterar senha</button>
+      <button type="button" id="btn-sair" class="sec mini">Sair</button>
     </div>
   </header>
 
@@ -25,12 +64,13 @@
     <button type="button" class="aba" data-aba="colaboradores">2. Colaboradores</button>
     <button type="button" class="aba" data-aba="regras">3. Regras e feriados</button>
     <button type="button" class="aba" data-aba="escala">4. Escala</button>
+    <button type="button" class="aba so-admin" data-aba="usuarios">Usuários</button>
   </nav>
 
   <main>
     <!-- SETORES -->
     <section id="aba-setores" class="painel ativo">
-      <form id="form-setor" class="cartao formulario">
+      <form id="form-setor" class="cartao formulario so-edicao">
         <h2 id="titulo-form-setor">Novo setor</h2>
         <input type="hidden" name="id">
         <label>Nome do setor<input name="nome" required maxlength="60" placeholder="Ex.: Vendas"></label>
@@ -56,7 +96,7 @@
 
     <!-- COLABORADORES -->
     <section id="aba-colaboradores" class="painel">
-      <form id="form-colab" class="cartao formulario">
+      <form id="form-colab" class="cartao formulario so-edicao">
         <h2 id="titulo-form-colab">Novo colaborador</h2>
         <input type="hidden" name="id">
         <label>Nome completo<input name="nome" required maxlength="100"></label>
@@ -81,7 +121,7 @@
           <h2>Colaboradores</h2>
           <div class="linha-botoes">
             <select id="filtro-setor-colab" aria-label="Filtrar por setor"></select>
-            <label class="botao sec">Importar CSV<input type="file" id="arq-csv" accept=".csv,.txt" hidden></label>
+            <label class="botao sec so-edicao">Importar CSV<input type="file" id="arq-csv" accept=".csv,.txt" hidden></label>
           </div>
         </div>
         <p class="dica">CSV com cabeçalho: <code>nome;matricula;sexo;setor;jornada;entrada</code> (sexo F/M; jornada 6x1, 5x2, 5x2-40, 6x1-6h ou 12x36). Setores inexistentes são criados.</p>
@@ -121,7 +161,7 @@
       </form>
       <div class="cartao">
         <h2>Feriados estaduais / municipais</h2>
-        <form id="form-feriado" class="linha-form">
+        <form id="form-feriado" class="linha-form so-edicao">
           <input type="date" name="data" required aria-label="Data">
           <input name="nome" required placeholder="Ex.: Aniversário da cidade" aria-label="Nome do feriado">
           <button type="submit">Adicionar</button>
@@ -141,11 +181,11 @@
           <label>Início<input type="date" name="inicio" required></label>
           <label>Fim<input type="date" name="fim" required></label>
           <label>Setor<select name="setor" id="filtro-setor-escala"></select></label>
-          <button type="submit">Gerar escala</button>
+          <button type="submit" class="so-edicao">Gerar escala</button>
           <button type="button" id="btn-csv" class="sec">Exportar CSV</button>
           <button type="button" id="btn-imprimir" class="sec">Imprimir</button>
         </form>
-        <p class="dica">Clique em uma célula para alternar entre trabalho e folga; a validação legal é refeita automaticamente.</p>
+        <p class="dica so-edicao">Clique em uma célula para alternar entre trabalho e folga; a validação legal é refeita automaticamente.</p>
         <div class="legenda">
           <span><i class="cel T"></i> Trabalho (horário)</span>
           <span><i class="cel F"></i> Folga / DSR</span>
@@ -160,11 +200,49 @@
         <div id="validacao"></div>
       </div>
     </section>
+
+    <!-- USUÁRIOS -->
+    <section id="aba-usuarios" class="painel">
+      <form id="form-usuario" class="cartao formulario">
+        <h2 id="titulo-form-usuario">Novo usuário</h2>
+        <input type="hidden" name="id">
+        <label>Nome completo<input name="nome" id="usu-nome" required maxlength="100"></label>
+        <label>Login<input name="login" id="usu-login" required maxlength="60" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
+        <label>Perfil
+          <select name="perfil" id="usu-perfil"></select>
+        </label>
+        <p class="dica" id="usu-perfil-dica"></p>
+        <label id="usu-ativo-rotulo" class="check" hidden><input type="checkbox" name="ativo" id="usu-ativo" checked> Usuário ativo</label>
+        <label><span id="usu-senha-rotulo">Senha</span><input name="senha" id="usu-senha" type="password" autocomplete="new-password"></label>
+        <label>Confirmar senha<input name="confirma" id="usu-confirma" type="password" autocomplete="new-password"></label>
+        <p class="dica" id="usu-senha-dica">Mínimo de 8 caracteres, com letras e números.</p>
+        <p class="msg-erro" id="usuario-erro" role="alert" hidden></p>
+        <div class="linha-botoes">
+          <button type="submit">Salvar usuário</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+      </form>
+      <div class="cartao">
+        <h2>Usuários do sistema</h2>
+        <table class="tabela">
+          <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Situação</th><th>Último acesso</th><th></th></tr></thead>
+          <tbody id="lista-usuarios"></tbody>
+        </table>
+        <ul class="regras-lista" id="perfis-lista"></ul>
+      </div>
+    </section>
   </main>
+  </div>
 
   <dialog id="dialogo">
     <form method="dialog" class="formulario">
       <p id="dialogo-msg"></p>
+      <div id="dialogo-senha" class="formulario" hidden>
+        <label id="dialogo-senha-atual-rotulo">Senha atual<input type="password" id="dlg-senha-atual" autocomplete="current-password"></label>
+        <label>Nova senha<input type="password" id="dlg-senha-nova" autocomplete="new-password"></label>
+        <label>Confirmar nova senha<input type="password" id="dlg-senha-confirma" autocomplete="new-password"></label>
+        <p class="msg-erro" id="dlg-senha-erro" role="alert" hidden></p>
+      </div>
       <textarea id="dialogo-texto" rows="10" readonly hidden></textarea>
       <div class="linha-botoes">
         <button type="submit" value="ok">OK</button>
@@ -175,6 +253,8 @@
   </dialog>
 
   <script src="js/motor.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/acesso.js"></script>
 </body>
 </html>

@@ -7,6 +7,30 @@ gere a escala do período e confira o relatório de conformidade legal.
 Não precisa de servidor nem instalação: basta abrir `index.html` no navegador.
 Os dados ficam salvos no próprio navegador (localStorage) e podem ser exportados/importados em JSON.
 
+## Acesso e usuários
+
+No primeiro acesso o sistema pede para criar o **usuário administrador**. Depois disso,
+todos entram com login e senha. O administrador cadastra os demais usuários na aba **Usuários**.
+
+| Perfil | Pode fazer |
+|--------|-----------|
+| Administrador | Tudo, inclusive cadastrar, editar, desativar, desbloquear e excluir usuários |
+| Operador | Cadastrar setores e colaboradores, ajustar regras e gerar/editar escalas |
+| Consulta | Apenas visualizar as escalas |
+
+- Senhas com no mínimo 8 caracteres, contendo letras e números.
+- As senhas não são guardadas: o sistema armazena apenas um hash PBKDF2-SHA-256 com sal individual.
+- 5 tentativas de login erradas bloqueiam o usuário por 5 minutos (o administrador pode desbloquear).
+- A sessão dura 8 horas e termina ao fechar a aba ou clicar em **Sair**.
+- Cada usuário pode trocar a própria senha em **Alterar senha**; o administrador pode redefinir a de qualquer um.
+- O sistema exige ao menos um administrador ativo.
+
+> **Importante:** como o sistema roda inteiramente no navegador, usuários e dados ficam salvos
+> apenas no navegador em uso. O login organiza quem pode fazer o quê, mas não substitui a
+> segurança de um servidor: alguém com acesso técnico ao computador consegue ler ou alterar
+> os dados salvos. Para uso por várias pessoas em computadores diferentes, ou com dados
+> sensíveis, o próximo passo é um backend com banco de dados.
+
 ## Como usar
 
 1. **Setores** — nome, mínimo de pessoas por dia, dias de funcionamento e se funciona em feriados.
@@ -76,6 +100,8 @@ index.html        interface
 css/estilo.css    estilos (inclui layout de impressão em A4 paisagem)
 js/motor.js       geração, feriados e validação legal (sem dependências; roda no Node também)
 js/app.js         telas, cadastro, importação/exportação
+js/auth.js        usuários: cadastro, senhas (PBKDF2) e bloqueio por tentativas
+js/acesso.js      tela de login, primeiro acesso, sessão e aba Usuários
 tests/            testes automatizados (node --test)
 ```
 

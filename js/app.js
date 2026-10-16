@@ -16,19 +16,40 @@
 
   // Diálogos na própria página (alert/confirm nativos são bloqueados em alguns ambientes)
   const dialogo = $('#dialogo');
-  function abrirDialogo(msg, { cancelar = false, texto = null } = {}) {
+  let validarDialogo = null;
+  /**
+   * Abre o diálogo. Com `validar` (função assíncrona que lança erro), o OK só
+   * fecha o diálogo quando a validação passa; o erro aparece em `erroEl`.
+   */
+  function abrirDialogo(msg, { cancelar = false, texto = null, senha = false, validar = null, erroEl = null } = {}) {
     $('#dialogo-msg').textContent = msg;
     const area = $('#dialogo-texto');
     area.hidden = texto == null;
     $('#dialogo-copiar').hidden = texto == null;
     if (texto != null) area.value = texto;
+    $('#dialogo-senha').hidden = !senha;
     $('#dialogo-cancelar').hidden = !cancelar;
+    validarDialogo = validar ? { validar, erroEl } : null;
     return new Promise((resolve) => {
-      dialogo.onclose = () => resolve(dialogo.returnValue === 'ok');
+      dialogo.onclose = () => { validarDialogo = null; resolve(dialogo.returnValue === 'ok'); };
       dialogo.returnValue = '';
       dialogo.showModal();
     });
   }
+  dialogo.querySelector('form').addEventListener('submit', async (ev) => {
+    if (!validarDialogo || !ev.submitter || ev.submitter.value !== 'ok') return;
+    ev.preventDefault();
+    const { validar, erroEl } = validarDialogo;
+    ev.submitter.disabled = true;
+    try {
+      await validar();
+      dialogo.close('ok');
+    } catch (e) {
+      if (erroEl) { erroEl.textContent = e.message; erroEl.hidden = false; }
+    } finally {
+      ev.submitter.disabled = false;
+    }
+  });
   const avisar = (msg) => { abrirDialogo(msg); };
   const confirmar = (msg) => abrirDialogo(msg, { cancelar: true });
   $('#dialogo-copiar').addEventListener('click', async () => {
@@ -40,6 +61,16 @@
   // Dentro de um frame (visualizador) downloads e impressão não funcionam
   const emFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
   if (emFrame) $('#btn-imprimir').hidden = true;
+
+  // ------------------------------------------------------------ permissões
+
+  let usuario = null;
+  const podeEditar = () => !!usuario && usuario.perfil !== 'consulta';
+  function exigirEdicao() {
+    if (podeEditar()) return true;
+    avisar('Seu perfil permite apenas consultar as escalas.');
+    return false;
+  }
 
   function estadoVazio() {
     return {
@@ -89,6 +120,7 @@
 
   formSetor.addEventListener('submit', (ev) => {
     ev.preventDefault();
+    if (!exigirEdicao()) return;
     const f = formSetor.elements;
     const dias = [0, 1, 2, 3, 4, 5, 6].map((i) => formSetor.querySelector(`input[name=dia][value="${i}"]`).checked);
     if (!dias.some(Boolean)) return avisar('Selecione ao menos um dia de funcionamento.');
@@ -113,6 +145,7 @@
     const b = ev.target.closest('button');
     if (!b) return;
     const s = estado.setores.find((x) => x.id === b.dataset.id);
+    if (!exigirEdicao()) return;
     if (b.dataset.acao === 'editar') {
       const f = formSetor.elements;
       f.id.value = s.id; f.nome.value = s.nome; f.minimoPorDia.value = s.minimoPorDia;
@@ -176,6 +209,7 @@
 
   formColab.addEventListener('submit', (ev) => {
     ev.preventDefault();
+    if (!exigirEdicao()) return;
     const f = formColab.elements;
     if (!estado.setores.length) return avisar('Cadastre um setor primeiro.');
     const dados = {
@@ -201,6 +235,7 @@
     const b = ev.target.closest('button');
     if (!b) return;
     const c = estado.colaboradores.find((x) => x.id === b.dataset.id);
+    if (!exigirEdicao()) return;
     if (b.dataset.acao === 'editar') {
       const f = formColab.elements;
       for (const k of ['id', 'nome', 'matricula', 'sexo', 'setorId', 'jornada', 'entrada']) f[k].value = c[k];
@@ -239,6 +274,7 @@
     const arq = ev.target.files[0];
     ev.target.value = '';
     if (!arq) return;
+    if (!exigirEdicao()) return;
     const texto = (await arq.text()).replace(/^﻿/, '');
     const linhas = texto.split(/\r?\n/).filter((l) => l.trim());
     if (linhas.length < 2) return avisar('Arquivo vazio.');
@@ -279,6 +315,7 @@
 
   const formRegras = $('#form-regras');
   formRegras.addEventListener('change', () => {
+    if (!exigirEdicao()) { renderRegras(); return; }
     estado.regras.domingoHomensSemanas = Number(formRegras.elements.domingoHomensSemanas.value);
     estado.incluirFacultativos = formRegras.elements.incluirFacultativos.checked;
     salvarERender();
@@ -286,6 +323,7 @@
 
   $('#form-feriado').addEventListener('submit', (ev) => {
     ev.preventDefault();
+    if (!exigirEdicao()) return;
     const f = ev.target.elements;
     estado.feriadosExtras = estado.feriadosExtras.filter((x) => x.data !== f.data.value);
     estado.feriadosExtras.push({ data: f.data.value, nome: f.nome.value.trim() });
@@ -297,11 +335,15 @@
   $('#lista-feriados').addEventListener('click', (ev) => {
     const b = ev.target.closest('button[data-data]');
     if (!b) return;
+    if (!exigirEdicao()) return;
     estado.feriadosExtras = estado.feriadosExtras.filter((x) => x.data !== b.dataset.data);
     salvarERender();
   });
 
   function renderRegras() {
+    formRegras.querySelectorAll('input, select').forEach((el) => {
+      el.disabled = !podeEditar() || el.name === 'domingoMulheresSemanas';
+    });
     formRegras.elements.domingoHomensSemanas.value = String(estado.regras.domingoHomensSemanas || 3);
     formRegras.elements.incluirFacultativos.checked = !!estado.incluirFacultativos;
     const ano = new Date().getFullYear();
@@ -329,6 +371,7 @@
 
   formGerar.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (!exigirEdicao()) return;
     const inicio = formGerar.elements.inicio.value;
     const fim = formGerar.elements.fim.value;
     if (!inicio || !fim || inicio > fim) return avisar('Período inválido.');
@@ -346,6 +389,7 @@
   $('#area-escala').addEventListener('click', (ev) => {
     const td = ev.target.closest('td[data-c]');
     if (!td || !estado.escala) return;
+    if (!exigirEdicao()) return;
     const colab = estado.colaboradores.find((c) => c.id === td.dataset.c);
     const i = Number(td.dataset.i);
     const cel = estado.escala.celulas[colab.id];
@@ -489,6 +533,7 @@
     const arq = ev.target.files[0];
     ev.target.value = '';
     if (!arq) return;
+    if (!exigirEdicao()) return;
     try {
       const dados = JSON.parse(await arq.text());
       if (!Array.isArray(dados.setores) || !Array.isArray(dados.colaboradores)) throw new Error();
@@ -500,12 +545,14 @@
   });
 
   $('#btn-limpar').addEventListener('click', async () => {
-    if (!(await confirmar('Apagar todos os setores, colaboradores e escalas?'))) return;
+    if (!exigirEdicao()) return;
+    if (!(await confirmar('Apagar todos os setores, colaboradores e escalas? Os usuários do sistema são mantidos.'))) return;
     estado = estadoVazio();
     salvarERender();
   });
 
   $('#btn-exemplo').addEventListener('click', async () => {
+    if (!exigirEdicao()) return;
     if ((estado.setores.length || estado.colaboradores.length) && !(await confirmar('Substituir os dados atuais pelo exemplo?'))) return;
     const todos = [true, true, true, true, true, true, true];
     estado = estadoVazio();
@@ -541,11 +588,26 @@
 
   formSetor.dispatchEvent(new Event('reset'));
   atualizarDicaJornada();
-  salvarERender();
 
-  // primeira visita: abre com dados de exemplo e a escala já gerada
-  if (!estado.setores.length && !estado.colaboradores.length) {
-    $('#btn-exemplo').click();
-    setTimeout(() => { formGerar.requestSubmit(); mostrarAba('escala'); });
-  }
+  // A tela principal só é montada depois do login (js/acesso.js)
+  window.EscalaApp = {
+    iniciar(u) {
+      usuario = u;
+      document.body.classList.toggle('perfil-consulta', !podeEditar());
+      document.body.classList.toggle('perfil-admin', u.perfil === 'admin');
+      estado = carregar();
+      salvarERender();
+      mostrarAba(podeEditar() ? 'setores' : 'escala');
+      // primeiro uso: abre com dados de exemplo e a escala já gerada
+      if (podeEditar() && !estado.setores.length && !estado.colaboradores.length) {
+        $('#btn-exemplo').click();
+        setTimeout(() => { formGerar.requestSubmit(); mostrarAba('escala'); });
+      }
+    },
+    encerrar() {
+      usuario = null;
+      document.body.classList.remove('perfil-consulta', 'perfil-admin');
+    },
+    mostrarAba, avisar, confirmar, abrirDialogo, esc,
+  };
 })();
