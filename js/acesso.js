@@ -98,6 +98,7 @@
   async function verificarSessao() {
     try {
       const s = await api.get('/api/status');
+      if (s.versao) document.getElementById('versao-sistema').textContent = `Versão ${s.versao}`;
       if (s.usuario) await entrar(s.usuario);
       else mostrarAcesso(!s.temUsuarios);
     } catch (e) {

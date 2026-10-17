@@ -2,7 +2,7 @@
 chcp 65001 >nul
 title Gestao de Pessoal RH
 cd /d "%~dp0"
-where node >nul 2>nul
+where node >/dev/null 2>nul
 if errorlevel 1 (
   echo Node.js nao encontrado. Instale a versao LTS em https://nodejs.org e tente de novo.
   pause
@@ -14,7 +14,16 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+netstat -ano | findstr /r /c:":3000 .*LISTENING" >nul
+if not errorlevel 1 (
+  echo.
+  echo ATENCAO: o sistema ja esta aberto em outra janela ^(porta 3000 em uso^).
+  echo Se for uma versao anterior, feche a outra janela preta e abra este arquivo de novo.
+  echo.
+  pause
+  exit /b 1
+)
 echo Abrindo http://localhost:3000 ... Para encerrar, feche esta janela.
-start "" cmd /c "timeout /t 2 >nul & start http://localhost:3000"
+start "" cmd /c "timeout /t 2 >/dev/null & start http://localhost:3000"
 node --disable-warning=ExperimentalWarning server/server.js
 pause

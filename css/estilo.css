@@ -374,3 +374,4 @@ body.perfil-consulta .grade td[data-c]:hover { outline: 0; }
 @media (prefers-reduced-motion: reduce) {
   .lateral { transition: none; }
 }
+.versao { color: var(--topo-suave); font-size: .72rem; opacity: .8; }

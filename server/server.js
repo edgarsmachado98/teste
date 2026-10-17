@@ -32,6 +32,7 @@ const TIPOS = {
   '.png': 'image/png',
 };
 const COOKIE = 'escala_sid';
+const VERSAO = require('../package.json').version;
 const LIMITE_CORPO = 1024 * 1024;
 const LIMITE_CORPO_BACKUP = 20 * 1024 * 1024;
 
@@ -126,7 +127,7 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   };
 
   // ---- acesso
-  rota('GET', '/api/status', ({ usuario }) => ({ temUsuarios: servico.temUsuarios(), usuario }));
+  rota('GET', '/api/status', ({ usuario }) => ({ temUsuarios: servico.temUsuarios(), usuario, versao: VERSAO }));
 
   rota('POST', '/api/primeiro-acesso', async ({ corpo, req, res }) => {
     const s = await servico.criarPrimeiroAdmin(corpo);
@@ -236,7 +237,7 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
         return res.end('Não encontrado');
       }
-      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(arquivo)], 'Cache-Control': 'no-cache' });
+      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(arquivo)], 'Cache-Control': 'no-store' });
       res.end(req.method === 'HEAD' ? undefined : conteudo);
     });
   }
@@ -273,9 +274,23 @@ if (require.main === module) {
     cookieSeguro: process.env.COOKIE_SECURE === '1',
     confiarProxy: process.env.TRUST_PROXY === '1',
   });
+  servidor.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.error('');
+      console.error(`ATENÇÃO: a porta ${porta} já está em uso.`);
+      console.error('Provavelmente o sistema (talvez uma versão anterior) já está aberto em outra janela.');
+      console.error('Feche a outra janela do servidor e inicie de novo, ou use outra porta (ex.: PORT=3001).');
+      console.error('');
+    } else {
+      console.error('Não foi possível iniciar o servidor:', e.message);
+    }
+    db.close();
+    process.exit(1);
+  });
   servidor.listen(porta, host, () => {
     const endereco = host === '0.0.0.0' ? 'localhost' : host;
-    console.log(`Gestão de Pessoal RH rodando em http://${endereco}:${porta}`);
+    console.log(`Gestão de Pessoal RH — versão ${VERSAO}`);
+    console.log(`Rodando em http://${endereco}:${porta}`);
     console.log(`Banco de dados: ${arquivo}`);
   });
   const encerrar = () => servidor.close(() => { db.close(); process.exit(0); });

@@ -36,7 +36,7 @@ test('fluxo completo: primeiro acesso, perfis, dados e escala', async (t) => {
   const adm = cliente(base);
 
   let r = await adm('GET', '/api/status');
-  assert.deepStrictEqual(r.dados, { temUsuarios: false, usuario: null });
+  assert.deepStrictEqual(r.dados, { temUsuarios: false, usuario: null, versao: require('../package.json').version });
 
   r = await adm('GET', '/api/dados');
   assert.strictEqual(r.status, 401);
