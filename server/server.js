@@ -177,6 +177,15 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   rota('PUT', '/api/contratos/:id', ({ usuario, corpo, p }) => servico.salvarContrato(usuario, { ...corpo, id: p.id }));
   rota('DELETE', '/api/contratos/:id', ({ usuario, p }) => servico.removerContrato(usuario, p.id));
   rota('POST', '/api/contratos/:id/documento', ({ usuario, corpo, p }) => servico.registrarDocumento(usuario, p.id, corpo.formato));
+  rota('GET', '/api/indices/:serie', ({ usuario, p }) => servico.indices(usuario, p.serie));
+  rota('POST', '/api/indices/:serie/atualizar', ({ usuario, p }) => servico.atualizarIndices(usuario, p.serie));
+  rota('PUT', '/api/indices/:serie/:mes', ({ usuario, corpo, p }) => servico.salvarIndice(usuario, p.serie, p.mes, corpo.valor));
+  rota('DELETE', '/api/indices/:serie/:mes', ({ usuario, p }) => servico.removerIndice(usuario, p.serie, p.mes));
+  rota('GET', '/api/distratos', ({ usuario }) => servico.listarDistratos(usuario));
+  rota('POST', '/api/distratos', ({ usuario, corpo }) => servico.salvarDistrato(usuario, { ...corpo, id: null }));
+  rota('PUT', '/api/distratos/:id', ({ usuario, corpo, p }) => servico.salvarDistrato(usuario, { ...corpo, id: p.id }));
+  rota('DELETE', '/api/distratos/:id', ({ usuario, p }) => servico.removerDistrato(usuario, p.id));
+  rota('POST', '/api/distratos/:id/documento', ({ usuario, corpo, p }) => servico.registrarDocumentoDistrato(usuario, p.id, corpo.formato));
   rota('POST', '/api/restaurar', ({ usuario, corpo }) => servico.restaurar(usuario, corpo), { limiteCorpo: LIMITE_CORPO_BACKUP });
 
   async function tratarApi(req, res, url) {

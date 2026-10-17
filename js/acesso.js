@@ -40,6 +40,12 @@
     'contrato.alterar': 'Alterou contrato de representante',
     'contrato.excluir': 'Excluiu contrato de representante',
     'contrato.documento': 'Gerou documento do contrato',
+    'distrato.criar': 'Registrou distrato',
+    'distrato.alterar': 'Alterou distrato',
+    'distrato.excluir': 'Excluiu distrato',
+    'distrato.documento': 'Gerou documento do distrato',
+    'indice.atualizar': 'Atualizou o IGP-M',
+    'indice.manual': 'Informou índice manualmente',
   };
   const quando = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Nunca');
 

@@ -7,6 +7,10 @@
 const crypto = require('node:crypto');
 const M = require('../js/motor.js');
 const CT = require('../js/contrato-modelo.js');
+const K = require('../js/distrato-calculo.js');
+
+/** Séries de índices disponíveis (Sistema Gerenciador de Séries do Banco Central). */
+const SERIES = { igpm: { sgs: 189, nome: 'IGP-M (FGV)' } };
 const senhas = require('./senhas.js');
 
 const PERFIS = {
@@ -85,6 +89,7 @@ function criarServico(db, opcoes = {}) {
   const iso = () => new Date(agora()).toISOString();
   const paramsHash = opcoes.paramsHash || senhas.PADRAO;
   const hashSenha = (s) => senhas.gerarHash(s, paramsHash);
+  const buscarUrl = opcoes.buscar || ((url, o) => fetch(url, o));
   // hash de referência para igualar o tempo de resposta quando o login não existe
   const hashFicticio = hashSenha('senha-ficticia-0');
 
@@ -636,6 +641,8 @@ function criarServico(db, opcoes = {}) {
   function removerContrato(ator, id) {
     exigir(ator, 'operador');
     const l = q('SELECT * FROM contratos_representante WHERE id = ?').get(id) || falhar(404, 'Contrato não encontrado.');
+    const n = q('SELECT COUNT(*) AS n FROM distratos WHERE contrato_id = ?').get(id).n;
+    if (n) falhar(409, `O contrato possui ${n} distrato(s) registrado(s). Exclua os distratos antes.`);
     q('DELETE FROM contratos_representante WHERE id = ?').run(id);
     auditar(ator, 'contrato.excluir', `${l.razao_social} (${l.cnpj})`);
   }
@@ -648,12 +655,198 @@ function criarServico(db, opcoes = {}) {
     auditar(ator, 'contrato.documento', `${l.razao_social}: ${formato === 'pdf' ? 'PDF' : 'Word'}`);
   }
 
+  // ------------------------------------------------------------- índices
+
+  function lerIndices(serie) {
+    const out = {};
+    for (const l of q('SELECT mes, valor FROM indices WHERE serie = ? ORDER BY mes').all(serie)) out[l.mes] = l.valor;
+    return out;
+  }
+
+  function serieValida(serie) {
+    return SERIES[serie] || falhar(404, 'Índice não disponível.');
+  }
+
+  function indices(ator, serie) {
+    exigir(ator, 'consulta');
+    const s = serieValida(serie);
+    const meses = lerIndices(serie);
+    const info = q('SELECT MAX(atualizado_em) AS em FROM indices WHERE serie = ? AND fonte = ?').get(serie, 'bcb');
+    const manuais = q('SELECT mes FROM indices WHERE serie = ? AND fonte = ? ORDER BY mes').all(serie, 'manual').map((l) => l.mes);
+    const lista = Object.keys(meses);
+    return { serie, nome: s.nome, meses, manuais, ultimoMes: lista[lista.length - 1] || null, atualizadoEm: info.em || null };
+  }
+
+  /** Busca a série no Banco Central (API pública do SGS) e grava no banco. */
+  async function atualizarIndices(ator, serie) {
+    exigir(ator, 'operador');
+    const s = serieValida(serie);
+    const hoje = new Date(agora());
+    const fim = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+    const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${s.sgs}/dados?formato=json&dataInicial=01/01/2000&dataFinal=${fim}`;
+    let lista;
+    try {
+      const r = await buscarUrl(url, { signal: AbortSignal.timeout(20000), headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      lista = await r.json();
+      if (!Array.isArray(lista)) throw new Error('resposta inesperada');
+    } catch (e) {
+      falhar(502, `Não foi possível consultar o Banco Central (${e.message}). Verifique a conexão com a internet ` +
+        'do servidor ou informe os índices manualmente.');
+    }
+    let n = 0;
+    db.transacao(() => {
+      const st = q(`INSERT INTO indices (serie, mes, valor, fonte, atualizado_em) VALUES (?, ?, ?, 'bcb', ?)
+        ON CONFLICT(serie, mes) DO UPDATE SET valor = excluded.valor, fonte = 'bcb', atualizado_em = excluded.atualizado_em`);
+      for (const it of lista) {
+        const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(it.data || ''));
+        const v = Number(String(it.valor).replace(',', '.'));
+        if (!m || !Number.isFinite(v)) continue;
+        st.run(serie, `${m[3]}-${m[2]}`, v, iso());
+        n++;
+      }
+    });
+    auditar(ator, 'indice.atualizar', `${s.nome}: ${n} mês(es) obtidos do Banco Central`);
+    return indices(ator, serie);
+  }
+
+  function salvarIndice(ator, serie, mes, valor) {
+    exigir(ator, 'operador');
+    const s = serieValida(serie);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(mes))) falhar(400, 'Mês inválido.');
+    const v = K.lerValor(valor);
+    if (v == null || v < -50 || v > 50) falhar(400, 'Informe a variação mensal em % (ex.: 0,41 ou -0,36).');
+    q(`INSERT INTO indices (serie, mes, valor, fonte, atualizado_em) VALUES (?, ?, ?, 'manual', ?)
+       ON CONFLICT(serie, mes) DO UPDATE SET valor = excluded.valor, fonte = 'manual', atualizado_em = excluded.atualizado_em`)
+      .run(serie, mes, v, iso());
+    auditar(ator, 'indice.manual', `${s.nome} ${mes.split('-').reverse().join('/')}: ${String(v).replace('.', ',')}%`);
+    return indices(ator, serie);
+  }
+
+  function removerIndice(ator, serie, mes) {
+    exigir(ator, 'operador');
+    serieValida(serie);
+    q('DELETE FROM indices WHERE serie = ? AND mes = ?').run(serie, String(mes));
+    return indices(ator, serie);
+  }
+
+  // ------------------------------------------------------------ distratos
+
+  const periodoValido = (p, rotulo) => {
+    p = p || {};
+    const valor = K.lerValor(p.valor);
+    if (valor != null && valor < 0) falhar(400, `${rotulo}: o valor não pode ser negativo.`);
+    const out = { inicio: p.inicio || '', fim: p.fim || '', valor: valor == null ? '' : K.centavos(valor) };
+    if (out.inicio) dataValida(out.inicio, `${rotulo}: data inicial`);
+    if (out.fim) dataValida(out.fim, `${rotulo}: data final`);
+    if (out.inicio && out.fim && out.inicio > out.fim) falhar(400, `${rotulo}: a data final deve ser posterior à inicial.`);
+    if (out.valor && (!out.inicio || !out.fim)) falhar(400, `${rotulo}: informe o período (início e fim).`);
+    return out;
+  };
+
+  function normalizarDistrato(d) {
+    const contrato = q('SELECT * FROM contratos_representante WHERE id = ?').get(d.contratoId) ||
+      falhar(400, 'Selecione o contrato do representante.');
+    if (!['cia', 'alimentos'].includes(d.representada)) falhar(400, 'Selecione a empresa representada.');
+    const dataInicio = dataValida(d.dataInicio, 'Data de início do contrato');
+    const dataDistrato = dataValida(d.dataDistrato, 'Data do distrato');
+    const dataAviso = d.dataAviso ? dataValida(d.dataAviso, 'Data do aviso prévio') : dataDistrato;
+    if (dataInicio > dataDistrato) falhar(400, 'A data do distrato deve ser posterior ao início do contrato.');
+    if (!Array.isArray(d.comissoes) || d.comissoes.length > 600) falhar(400, 'Lista de comissões inválida.');
+    const comissoes = [];
+    for (const c of d.comissoes) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(c && c.mes))) falhar(400, 'Mês de comissão inválido.');
+      const v = K.lerValor(c.valor);
+      if (v == null) continue;
+      if (v < 0) falhar(400, `Comissão de ${K.rotuloMes(c.mes)} não pode ser negativa.`);
+      comissoes.push({ mes: c.mes, valor: K.centavos(v) });
+    }
+    const t = (v, max) => {
+      const s = String(v == null ? '' : v).trim();
+      if (s.length > max) falhar(400, `Texto muito longo (máximo ${max} caracteres).`);
+      return s;
+    };
+    const docs = Array.isArray(d.documentos) ? d.documentos.filter((x) => ['distrato', 'aviso'].includes(x)) : [];
+    return {
+      contrato,
+      dados: {
+        contratoId: contrato.id, representada: d.representada, dataInicio, dataDistrato, dataAviso, comissoes,
+        aReceber: periodoValido(d.aReceber, 'Comissões a receber'),
+        pendentes: periodoValido(d.pendentes, 'Comissões sobre títulos pendentes'),
+        pagarAviso: d.pagarAviso !== false, pagarIndenizacao: d.pagarIndenizacao !== false,
+        desconsiderarDeflacao: d.desconsiderarDeflacao !== false,
+        profissao: t(d.profissao, 60), estadoCivil: t(d.estadoCivil, 120), naturalidade: t(d.naturalidade, 80),
+        documentos: docs.length ? docs : ['distrato', 'aviso'],
+      },
+    };
+  }
+
+  const distratoDeLinha = (l, ind) => {
+    const dados = JSON.parse(l.dados);
+    const c = q('SELECT razao_social, cnpj FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
+    return {
+      id: l.id, ...dados, razao: c.razao_social, cnpj: c.cnpj,
+      resultado: K.calcular(dados, ind || lerIndices('igpm')),
+      criadoPor: l.criado_por, criadoEm: l.criado_em, atualizadoEm: l.atualizado_em,
+    };
+  };
+
+  function listarDistratos(ator) {
+    exigir(ator, 'consulta');
+    const ind = lerIndices('igpm');
+    return q('SELECT * FROM distratos ORDER BY data_distrato DESC').all().map((l) => distratoDeLinha(l, ind));
+  }
+
+  function salvarDistrato(ator, d) {
+    exigir(ator, 'operador');
+    const { contrato, dados } = normalizarDistrato(d);
+    const r = K.calcular(dados, lerIndices('igpm'));
+    const existente = q('SELECT id FROM distratos WHERE contrato_id = ? AND representada = ?').get(dados.contratoId, dados.representada);
+    if (existente && existente.id !== d.id) {
+      falhar(409, 'Já existe um distrato deste contrato para esta empresa representada. Abra-o na lista para editar.');
+    }
+    const empresa = dados.representada === 'cia' ? 'Antoniazzi & Cia' : 'Antoniazzi Alimentos';
+    const detalhe = `${contrato.razao_social} / ${empresa}: total R$ ${K.moeda(r.total)}`;
+    let id = d.id;
+    if (id) {
+      const res = q('UPDATE distratos SET contrato_id = ?, representada = ?, data_distrato = ?, total = ?, dados = ?, atualizado_em = ? WHERE id = ?')
+        .run(dados.contratoId, dados.representada, dados.dataDistrato, r.total, JSON.stringify(dados), iso(), id);
+      if (!res.changes) falhar(404, 'Distrato não encontrado.');
+      auditar(ator, 'distrato.alterar', detalhe);
+    } else {
+      id = novoId();
+      q(`INSERT INTO distratos (id, contrato_id, representada, data_distrato, total, dados, criado_por, criado_em, atualizado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, dados.contratoId, dados.representada, dados.dataDistrato, r.total,
+        JSON.stringify(dados), ator.login, iso(), iso());
+      auditar(ator, 'distrato.criar', detalhe);
+    }
+    return distratoDeLinha(q('SELECT * FROM distratos WHERE id = ?').get(id));
+  }
+
+  function removerDistrato(ator, id) {
+    exigir(ator, 'operador');
+    const l = q('SELECT * FROM distratos WHERE id = ?').get(id) || falhar(404, 'Distrato não encontrado.');
+    q('DELETE FROM distratos WHERE id = ?').run(id);
+    const c = q('SELECT razao_social FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
+    auditar(ator, 'distrato.excluir', `${c.razao_social || ''} / ${l.representada === 'cia' ? 'Antoniazzi & Cia' : 'Antoniazzi Alimentos'}`);
+  }
+
+  function registrarDocumentoDistrato(ator, id, formato) {
+    exigir(ator, 'consulta');
+    const l = q('SELECT * FROM distratos WHERE id = ?').get(id) || falhar(404, 'Distrato não encontrado.');
+    if (!['pdf', 'docx'].includes(formato)) falhar(400, 'Formato inválido.');
+    const c = q('SELECT razao_social FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
+    auditar(ator, 'distrato.documento', `${c.razao_social || ''}: ${formato === 'pdf' ? 'PDF' : 'Word'}`);
+  }
+
   function backup(ator) {
     exigir(ator, 'admin');
     const d = dados(ator);
     const contratos = q('SELECT * FROM contratos_representante').all().map(contratoDeLinha);
+    const distratos = q('SELECT * FROM distratos').all().map((l) => ({ ...JSON.parse(l.dados), criadoPor: l.criado_por, criadoEm: l.criado_em }));
+    const indicesSalvos = q('SELECT serie, mes, valor, fonte FROM indices ORDER BY serie, mes').all().map((l) => ({ ...l }));
     auditar(ator, 'dados.backup', null);
-    return { versao: 2, exportadoEm: iso(), ...d, contratos };
+    return { versao: 3, exportadoEm: iso(), ...d, contratos, distratos, indices: indicesSalvos };
   }
 
   function restaurar(ator, b) {
@@ -698,13 +891,36 @@ function criarServico(db, opcoes = {}) {
     });
     if (Array.isArray(b.contratos)) {
       db.transacao(() => {
+        q('DELETE FROM distratos').run();
         q('DELETE FROM contratos_representante').run();
+        const mapa = {};
         for (const ct of b.contratos) {
           const c = normalizarContrato(ct);
           const { situacao, ...dadosJson } = c;
+          const novo = novoId();
+          if (ct.id) mapa[ct.id] = novo;
           q(`INSERT INTO contratos_representante (id, razao_social, cnpj, situacao, dados, criado_por, criado_em, atualizado_em)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(novoId(), c.razao, c.cnpj, situacao, JSON.stringify(dadosJson),
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(novo, c.razao, c.cnpj, situacao, JSON.stringify(dadosJson),
             ct.criadoPor || ator.login, ct.criadoEm || iso(), iso());
+        }
+        for (const ds of Array.isArray(b.distratos) ? b.distratos : []) {
+          if (!mapa[ds.contratoId]) continue;
+          const { dados: dd } = normalizarDistrato({ ...ds, contratoId: mapa[ds.contratoId] });
+          const r = K.calcular(dd, lerIndices('igpm'));
+          q(`INSERT INTO distratos (id, contrato_id, representada, data_distrato, total, dados, criado_por, criado_em, atualizado_em)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(novoId(), dd.contratoId, dd.representada, dd.dataDistrato, r.total,
+            JSON.stringify(dd), ds.criadoPor || ator.login, ds.criadoEm || iso(), iso());
+        }
+      });
+    }
+    if (Array.isArray(b.indices)) {
+      db.transacao(() => {
+        const st = q(`INSERT INTO indices (serie, mes, valor, fonte, atualizado_em) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(serie, mes) DO UPDATE SET valor = excluded.valor, fonte = excluded.fonte, atualizado_em = excluded.atualizado_em`);
+        for (const it of b.indices) {
+          if (SERIES[it.serie] && /^\d{4}-\d{2}$/.test(it.mes) && Number.isFinite(Number(it.valor))) {
+            st.run(it.serie, it.mes, Number(it.valor), it.fonte === 'bcb' ? 'bcb' : 'manual', iso());
+          }
         }
       });
     }
@@ -719,6 +935,8 @@ function criarServico(db, opcoes = {}) {
     salvarConfig, salvarFeriado, removerFeriado, gerarEscala, alterarCelula,
     carregarExemplo, limparDados, backup, restaurar,
     listarContratos, salvarContrato, removerContrato, registrarDocumento,
+    indices, atualizarIndices, salvarIndice, removerIndice,
+    listarDistratos, salvarDistrato, removerDistrato, registrarDocumentoDistrato,
   };
 }
 

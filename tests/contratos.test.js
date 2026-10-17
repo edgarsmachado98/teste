@@ -74,7 +74,7 @@ test('Word: gera um .docx válido com o conteúdo e os logotipos', () => {
   const buf = Buffer.from(bytes);
   assert.strictEqual(buf.readUInt32LE(0), 0x04034b50); // assinatura ZIP
   const fim = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  assert.strictEqual(buf.readUInt16LE(fim + 10), 18); // partes no pacote
+  assert.strictEqual(buf.readUInt16LE(fim + 10), 20); // partes no pacote
   const txt = buf.toString('utf8');
   for (const parte of ['word/document.xml', 'word/header_logo.xml', 'word/media/logo-moinho.png', '[Content_Types].xml']) {
     assert.ok(txt.includes(parte), parte);

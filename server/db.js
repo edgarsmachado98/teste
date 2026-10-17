@@ -84,6 +84,28 @@ CREATE TABLE IF NOT EXISTS contratos_representante (
   atualizado_em TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS indices (
+  serie         TEXT NOT NULL,
+  mes           TEXT NOT NULL,
+  valor         REAL NOT NULL,
+  fonte         TEXT NOT NULL DEFAULT 'manual',
+  atualizado_em TEXT NOT NULL,
+  PRIMARY KEY (serie, mes)
+);
+
+CREATE TABLE IF NOT EXISTS distratos (
+  id            TEXT PRIMARY KEY,
+  contrato_id   TEXT NOT NULL REFERENCES contratos_representante(id),
+  representada  TEXT NOT NULL CHECK (representada IN ('cia', 'alimentos')),
+  data_distrato TEXT NOT NULL,
+  total         REAL NOT NULL DEFAULT 0,
+  dados         TEXT NOT NULL,
+  criado_por    TEXT,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL,
+  UNIQUE (contrato_id, representada)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes(usuario_id);
 CREATE INDEX IF NOT EXISTS idx_contratos_cnpj ON contratos_representante(cnpj);
 CREATE INDEX IF NOT EXISTS idx_colaboradores_setor ON colaboradores(setor_id);

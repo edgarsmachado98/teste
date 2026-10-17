@@ -101,6 +101,7 @@
     contrato: { fonte: 'Times New Roman', tam: 24, linha: 276, apos: 160 },
     politica: { fonte: 'Times New Roman', tam: 19, linha: 360, apos: 160 },
     termo: { fonte: 'Calibri', tam: 24, linha: 360, apos: 160 },
+    distrato: { fonte: 'Arial', tam: 21, linha: 264, apos: 200 },
   };
 
   function run(texto, f, est) {
@@ -190,6 +191,23 @@
           break;
         case 'secao':
           P(runs(a1, vals, f, { b: true }), { alinhar: 'left', antes: 120, manter: true });
+          break;
+        case 'clausula':
+          P(runs(a1, vals, f, { b: true, u: true }), { alinhar: 'left', antes: 160, apos: 0, manter: true });
+          break;
+        case 'dataLivre':
+          P(runs(a1, vals, f), { alinhar: a2 && a2.direita ? 'right' : 'left', esq: a2 && a2.recuo ? 1700 : 0, antes: 360, apos: 240, manter: true });
+          break;
+        case 'assLado':
+          out.push(tabela([LARGURA_UTIL / 2, LARGURA_UTIL / 2], a1.map((l) => assinatura(l, true))));
+          break;
+        case 'assPilha':
+          out.push(assinatura(a1, false));
+          break;
+        case 'testNum':
+          P(run('Testemunhas:', f, {}), { antes: 480, alinhar: 'left', manter: true });
+          P(run('1.' + linhaAss(32), f, {}), { antes: 360, alinhar: 'left', manter: true });
+          P(run('2.' + linhaAss(32), f, {}), { antes: 360, alinhar: 'left' });
           break;
         case 'secaoPol':
           P(runs(a1, vals, f, { b: true }), { alinhar: 'left', esq: 360, antes: 240, manter: true });
@@ -282,6 +300,8 @@
     } else if (tipo === 'logos') {
       corpo = par(imagem('rIdAntoniazzi', imagens.antoniazzi, 2.0) + run('      ', f, {}) +
         imagem('rIdMoinho', imagens.moinho, 2.4), { alinhar: 'center', apos: 240 }) + dados + par('');
+    } else if (tipo === 'antoniazzi') {
+      corpo = par(imagem('rIdAntoniazzi', imagens.antoniazzi, 2.2), { alinhar: 'center' });
     } else if (tipo === 'dados') {
       corpo = dados + par('');
     } else {
@@ -303,17 +323,20 @@
 
   function gerar(documentos, vals, imagens) {
     idDesenho = 1;
-    const tiposCab = ['logo', 'dados', 'nenhum', 'logos'];
+    const tiposCab = ['logo', 'dados', 'nenhum', 'logos', 'antoniazzi'];
     const corpo = [];
     documentos.forEach((doc, i) => {
       const comNumero = doc.fonte === 'contrato' && doc.cabecalho !== 'nenhum';
       const sect = '<w:sectPr>' +
-        `<w:headerReference w:type="default" r:id="rIdCab_${doc.cabecalho}"/>` +
+        // logotipo só na primeira página (distrato da Antoniazzi Alimentos, como no modelo)
+        (doc.cabecalho === 'antoniazzi'
+          ? '<w:headerReference w:type="default" r:id="rIdCab_nenhum"/><w:headerReference w:type="first" r:id="rIdCab_antoniazzi"/>'
+          : `<w:headerReference w:type="default" r:id="rIdCab_${doc.cabecalho}"/>`) +
         `<w:footerReference w:type="default" r:id="${comNumero ? 'rIdRodNum' : 'rIdRodVazio'}"/>` +
         (i ? '<w:type w:val="nextPage"/>' : '') +
         '<w:pgSz w:w="12240" w:h="15840"/>' +
         '<w:pgMar w:top="1900" w:right="1440" w:bottom="1300" w:left="2126" w:header="420" w:footer="500" w:gutter="0"/>' +
-        '<w:pgNumType w:start="1"/></w:sectPr>';
+        '<w:pgNumType w:start="1"/>' + (doc.cabecalho === 'antoniazzi' ? '<w:titlePg/>' : '') + '</w:sectPr>';
       corpo.push(blocosParaXml(doc, vals));
       // as propriedades de seção ficam no último parágrafo da seção (ou no fim do corpo)
       if (i < documentos.length - 1) corpo.push(par('', { secao: sect }));

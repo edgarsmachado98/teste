@@ -60,9 +60,9 @@
         <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Regras e feriados</button>
       </div>
       <button type="button" class="modulo" data-modulo="contratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="rotulo">Contratos de representantes</span></button>
+      <button type="button" class="modulo" data-modulo="distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="rotulo">Distratos</span></button>
       <p class="grupo-menu">Em desenvolvimento</p>
       <button type="button" class="modulo" data-modulo="custos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="rotulo">Custos de pessoal</span> <span class="chip breve">em breve</span></button>
-      <button type="button" class="modulo" data-modulo="distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="rotulo">Distratos</span> <span class="chip breve">em breve</span></button>
       <p class="grupo-menu so-admin">Administração</p>
       <button type="button" class="modulo so-admin" data-modulo="usuarios"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg><span class="rotulo">Usuários</span></button>
     </nav>
@@ -132,8 +132,8 @@
           <span>Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, com geração em PDF e Word.</span>
         </button>
         <button type="button" class="card-modulo" data-ir="distratos">
-          <span class="card-topo"><b>Distratos</b><span class="chip breve">Em breve</span></span>
-          <span>Encerramento de contratos de representação com cálculo de indenização e aviso prévio.</span>
+          <span class="card-topo"><b>Distratos</b><span class="chip bom">Disponível</span></span>
+          <span>Cálculo da indenização (1/12) e do aviso prévio com correção pelo IGP-M, e termo de distrato e aviso prévio em PDF e Word.</span>
         </button>
       </div>
     </section>
@@ -208,16 +208,122 @@
     </section>
 
     <section id="aba-distratos" class="painel" data-modulo="distratos">
-      <div class="cartao em-breve">
-        <span class="chip breve">Em desenvolvimento</span>
-        <h2>Distratos de contratos de representação</h2>
-        <p>Vai calcular e registrar o encerramento de contratos de representação comercial:</p>
-        <ul>
-          <li>Indenização de no mínimo 1/12 do total das comissões recebidas durante a representação, na rescisão sem justo motivo (Lei 4.886/1965, art. 27, “j”).</li>
-          <li>Aviso prévio de 30 dias ou pagamento de 1/3 das comissões dos últimos 3 meses (art. 34).</li>
-          <li>Motivos de rescisão com e sem justa causa (arts. 35 e 36).</li>
-          <li>Termo de distrato para conferência e assinatura.</li>
-        </ul>
+      <div class="cartao" id="dt-lista-cartao">
+        <div class="cab-cartao">
+          <h2>Distratos de representação comercial</h2>
+          <div class="linha-botoes">
+            <input type="search" id="dt-busca" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar distrato">
+            <button type="button" id="dt-novo" class="so-edicao">Novo distrato</button>
+          </div>
+        </div>
+        <table class="tabela">
+          <thead><tr><th>Representante</th><th>CNPJ</th><th>Empresa representada</th><th>Data do distrato</th><th class="num">Total</th><th></th></tr></thead>
+          <tbody id="dt-lista"></tbody>
+        </table>
+      </div>
+
+      <div id="dt-editor" class="ct-editor dt-editor" hidden>
+        <form id="dt-form" class="cartao formulario ct-form" novalidate>
+          <div class="cab-cartao">
+            <h2 id="dt-titulo">Novo distrato</h2>
+            <button type="button" id="dt-voltar" class="sec mini">Voltar à lista</button>
+          </div>
+
+          <fieldset><legend>1. Representante</legend>
+            <div class="dt-busca-linha">
+              <label>CNPJ do representante<input id="dt-cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" autocomplete="off"></label>
+              <button type="button" id="dt-buscar" class="sec">Buscar</button>
+            </div>
+            <div id="dt-representante" class="dt-representante" hidden></div>
+          </fieldset>
+
+          <fieldset><legend>2. Empresa representada</legend>
+            <label class="check"><input type="radio" name="representada" value="cia"> Antoniazzi &amp; Cia Ltda</label>
+            <label class="check"><input type="radio" name="representada" value="alimentos"> Antoniazzi Ind. e Com. de Alimentos Ltda</label>
+          </fieldset>
+
+          <fieldset><legend>3. Datas</legend>
+            <div class="ct-grade">
+              <label><span>Início do contrato</span><input type="date" id="dt-inicio"></label>
+              <label><span>Data do distrato</span><input type="date" id="dt-data"></label>
+              <label><span>Data do aviso prévio</span><input type="date" id="dt-data-aviso"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>4. Comissões recebidas por mês</legend>
+            <p class="dica">Informe o valor total recebido em cada mês de vigência. Meses em branco não entram no cálculo.</p>
+            <div class="linha-botoes">
+              <button type="button" id="dt-colar" class="sec mini">Colar da planilha</button>
+              <button type="button" id="dt-limpar-meses" class="sec mini">Limpar valores</button>
+            </div>
+            <div class="dt-meses-rolagem"><table class="tabela dt-meses">
+              <thead><tr><th>Mês</th><th class="num">Comissão (R$)</th><th class="num">IGP-M acum.</th><th class="num">Atualizada (R$)</th></tr></thead>
+              <tbody id="dt-meses"></tbody>
+              <tfoot><tr><th>Total</th><th class="num" id="dt-soma-nominal"></th><th></th><th class="num" id="dt-soma-atualizada"></th></tr></tfoot>
+            </table></div>
+          </fieldset>
+
+          <fieldset><legend>5. Comissões sobre títulos pendentes</legend>
+            <div class="ct-grade dt-periodo">
+              <label><span>Início</span><input type="date" id="dt-pend-inicio"></label>
+              <label><span>Fim</span><input type="date" id="dt-pend-fim"></label>
+              <label class="largo"><span>Valor (R$)</span><input id="dt-pend-valor" inputmode="decimal" placeholder="0,00"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>6. Comissões a receber</legend>
+            <div class="ct-grade dt-periodo">
+              <label><span>Início</span><input type="date" id="dt-rec-inicio"></label>
+              <label><span>Fim</span><input type="date" id="dt-rec-fim"></label>
+              <label class="largo"><span>Valor (R$)</span><input id="dt-rec-valor" inputmode="decimal" placeholder="0,00"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>7. Opções do cálculo</legend>
+            <label class="check"><input type="checkbox" id="dt-pagar-indenizacao" checked> Pagar indenização de 1/12 (Lei 4.886/65, art. 27, “j”)</label>
+            <label class="check"><input type="checkbox" id="dt-pagar-aviso" checked> Pagar aviso prévio indenizado (art. 34)</label>
+            <label class="check"><input type="checkbox" id="dt-deflacao" checked> Não reduzir comissões quando o IGP-M acumulado for negativo</label>
+          </fieldset>
+
+          <fieldset><legend>8. Qualificação no documento (opcional)</legend>
+            <div class="ct-grade">
+              <label><span>Profissão</span><input id="dt-profissao" maxlength="60" placeholder="empresário"></label>
+              <label><span>Naturalidade</span><input id="dt-naturalidade" maxlength="80" placeholder="Bragança Paulista SP"></label>
+              <label class="largo"><span>Estado civil</span><input id="dt-estado-civil" maxlength="120" placeholder="casado no regime de comunhão parcial de bens"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>9. Documentos</legend>
+            <label class="check"><input type="checkbox" name="dt-documento" value="distrato" checked> Termo de distrato</label>
+            <label class="check"><input type="checkbox" name="dt-documento" value="aviso" checked> Aviso prévio</label>
+          </fieldset>
+
+          <div class="ct-pendencias" id="dt-pendencias" role="alert" hidden></div>
+          <div class="ct-acoes">
+            <button type="submit" class="sec so-edicao">Salvar</button>
+            <button type="button" id="dt-pdf">Gerar PDF</button>
+            <button type="button" id="dt-docx">Gerar Word (.docx)</button>
+          </div>
+          <p class="dica">“Gerar PDF” abre a janela de impressão: escolha <b>Salvar como PDF</b> como destino.</p>
+        </form>
+
+        <div class="ct-previa-col">
+          <div class="cartao dt-resultado">
+            <div class="cab-cartao">
+              <h2>Cálculo do distrato</h2>
+              <span class="dica" id="dt-indice-status"></span>
+            </div>
+            <div class="linha-botoes">
+              <button type="button" id="dt-atualizar-igpm" class="sec mini so-edicao">Atualizar IGP-M (Banco Central)</button>
+              <a class="botao sec mini" href="https://calculoexato.com.br/parprima.aspx?codMenu=FinanAtualizaIndice" target="_blank" rel="noopener noreferrer">Conferir no Cálculo Exato</a>
+            </div>
+            <div id="dt-faltando" class="dt-faltando" hidden></div>
+            <div id="dt-tiles" class="resumo dt-tiles"></div>
+            <p class="dt-total" id="dt-total"></p>
+          </div>
+          <div class="ct-previa-topo"><b>Prévia dos documentos</b> <span id="dt-resumo-docs"></span></div>
+          <div id="dt-previa" class="ct-previa"></div>
+        </div>
       </div>
     </section>
 
@@ -442,8 +548,12 @@
   <script src="js/api.js"></script>
   <script src="js/contrato-modelo.js"></script>
   <script src="js/contrato-docx.js"></script>
+  <script src="js/distrato-calculo.js"></script>
+  <script src="js/distrato-modelo.js"></script>
+  <script src="js/documento-html.js"></script>
   <script src="js/app.js"></script>
   <script src="js/contratos.js"></script>
+  <script src="js/distratos.js"></script>
   <script src="js/acesso.js"></script>
 </body>
 </html>

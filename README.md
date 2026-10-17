@@ -15,7 +15,7 @@ cada uma com seu login e perfil, e todas as alterações ficam registradas no hi
 | Escalas de trabalho | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
 | Custos de pessoal | Em breve | Custo por funcionário com INSS, FGTS e provisões de férias e 13º salário |
 | Contratos de representantes | Disponível | Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, em PDF e Word |
-| Distratos | Em breve | Encerramento dos contratos de representação com indenização e aviso prévio |
+| Distratos | Disponível | Cálculo do distrato com correção pelo IGP-M e termo de distrato e aviso prévio em PDF e Word |
 
 ## Instalação e execução
 
@@ -98,6 +98,37 @@ Geral, o Termo Aditivo de comissão diferenciada e o Termo de Ciência e Adesão
 
 O texto fixo do modelo está em `js/contrato-modelo.js` (cláusulas, anexos e dados das empresas
 representadas) — alterações no modelo da empresa devem ser feitas ali.
+
+## Distratos
+
+Calcula o encerramento de um contrato de representação e gera o **Termo de Distrato** e o **Aviso
+Prévio** no modelo de cada empresa representada (Antoniazzi & Cia ou Antoniazzi Alimentos).
+
+1. **Representante** — busque pelo CNPJ; os dados vêm do cadastro em *Contratos de representantes*.
+2. **Empresa representada** — Antoniazzi & Cia ou Antoniazzi Ind. e Com. de Alimentos.
+3. **Datas** — início do contrato (vem do contrato), data do distrato e data do aviso prévio.
+4. **Comissões recebidas por mês** — um campo para cada mês de vigência; aceita colar direto da
+   planilha (mês e valor, ex.: `abr-24  572,76`).
+5. **Comissões sobre títulos pendentes** e **comissões a receber** — período (início e fim) e valor.
+
+### Regras do cálculo (planilha “Cálculo de Comissões”)
+
+| Item | Cálculo |
+|------|---------|
+| Correção de cada comissão | IGP-M acumulado do mês da comissão até o mês anterior ao do distrato (mesma regra do Cálculo Exato). Se o acumulado for negativo, mantém-se o valor original |
+| Indenização — Lei 4.886/65, art. 27, “j” | (comissões atualizadas + a receber + títulos pendentes) ÷ 12 |
+| Aviso prévio — art. 34 | soma das comissões atualizadas dos 3 últimos meses com comissão ÷ 3 |
+| Total líquido | aviso prévio + indenização + comissões a receber + comissões sobre títulos pendentes |
+
+O total é a soma das parcelas já arredondadas em centavos, para fechar com os valores listados no termo.
+O valor por extenso é gerado automaticamente.
+
+### IGP-M
+
+A tabela do IGP-M (FGV) é obtida da API pública do Banco Central (SGS, série 189) pelo botão
+**Atualizar IGP-M** — o servidor precisa de acesso à internet. Se faltar algum mês (por exemplo, o
+índice do mês anterior ainda não divulgado), o sistema avisa e permite informar a variação mensal à mão.
+O botão **Conferir no Cálculo Exato** abre o site para conferência.
 
 ## Escalas de trabalho
 
@@ -186,6 +217,10 @@ js/acesso.js         login, primeiro acesso, usuários e histórico
 js/contrato-modelo.js  texto do contrato de representante e campos do representante
 js/contrato-docx.js  gerador do arquivo Word (.docx), sem dependências
 js/contratos.js      tela de contratos: cadastro, prévia, PDF e Word
+js/distrato-calculo.js  cálculo do distrato (IGP-M, indenização, aviso prévio, valor por extenso)
+js/distrato-modelo.js   termos de distrato e aviso prévio das duas empresas
+js/distratos.js      tela de distratos
+js/documento-html.js prévia, impressão (PDF) e Word compartilhados pelos documentos
 img/                 logotipos usados nos contratos
 server/server.js     servidor HTTP, rotas da API, sessão e segurança
 server/servico.js    regras de negócio e permissões
