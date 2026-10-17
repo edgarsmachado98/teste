@@ -1,54 +1,59 @@
+/* Paleta da marca Farinha de Trigo Maria Inês:
+   vermelho #AD2624 (ações principais), azul-marinho #2F416C (menu, ações
+   secundárias), dourado do trigo #D6B458 (detalhes) e fundo creme. */
 :root {
-  --fundo: #f4f6f9;
+  --fundo: #f7f4ee;
   --cartao: #ffffff;
-  --texto: #1f2933;
-  --suave: #616e7c;
-  --borda: #d9e2ec;
-  --primaria: #1f6feb;
-  --primaria-escura: #1857b8;
-  --perigo: #c62828;
+  --texto: #1e2433;
+  --suave: #5f6676;
+  --borda: #e4ded3;
+  --primaria: #ad2624;
+  --primaria-escura: #8c1d1b;
+  --secundaria: #2f416c;
+  --dourado: #d6b458;
+  --perigo: #b3261e;
   --trabalho: #e3f2e8;
   --trabalho-texto: #1b5e20;
-  --folga: #fff4d6;
+  --folga: #fdf3dc;
   --folga-texto: #8a5a00;
   --feriado: #fde2e2;
   --feriado-texto: #a12020;
-  --domingo: #eef2ff;
-  --erro: #c62828;
-  --topo: #102a43;
+  --domingo: #edf0f7;
+  --erro: #b3261e;
+  --topo: #1f2e4f;
   --topo-texto: #ffffff;
-  --topo-suave: #bcccdc;
-  --abas: #243b53;
+  --topo-suave: #bcc6d9;
+  --abas: #2f416c;
   --campo: #ffffff;
-  --cabecalho: #f8fafc;
-  --realce: #eef4ff;
-  --perigo-fundo: #fdecea;
-  --codigo: #eef2f7;
+  --cabecalho: #faf7f1;
+  --realce: #fbf2e1;
+  --perigo-fundo: #fbe9e7;
+  --codigo: #f1ece3;
   --trabalho-dom: #d7ebe0;
   --alerta-texto: #8a5a00;
-  --aviso-borda: #f0d68a;
+  --aviso-borda: #ecd59a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --fundo: #0f1720; --cartao: #17212c; --texto: #e4ebf2; --suave: #93a3b4; --borda: #2b3a4a;
-    --primaria: #4c8df6; --primaria-escura: #3a78de; --perigo: #ef6b6b;
+    --fundo: #12161f; --cartao: #1b2130; --texto: #ebe8e2; --suave: #a3a9b6; --borda: #2e3647;
+    --primaria: #c8433a; --primaria-escura: #a8352d; --secundaria: #aabde6; --dourado: #dcbf6e; --perigo: #ef7b70;
     --trabalho: #173326; --trabalho-texto: #8fdcaa; --folga: #3a2f12; --folga-texto: #f2c46a;
-    --feriado: #3d1c1f; --feriado-texto: #f39a9a; --domingo: #1c2540; --erro: #ff7070;
-    --topo: #0a1622; --topo-texto: #ffffff; --topo-suave: #93a3b4; --abas: #142334;
-    --campo: #101922; --cabecalho: #1b2733; --realce: #1d2c45; --perigo-fundo: #3d1c1f;
-    --codigo: #22303e; --trabalho-dom: #1d3b2e; --alerta-texto: #f2c46a; --aviso-borda: #6b5520;
+    --feriado: #3d1c1f; --feriado-texto: #f39a9a; --domingo: #1e2742; --erro: #ff7b70;
+    --topo: #0e1626; --topo-texto: #ffffff; --topo-suave: #9ba7bf; --abas: #24365e;
+    --campo: #141a26; --cabecalho: #20283a; --realce: #2b2619; --perigo-fundo: #3d1c1f;
+    --codigo: #252c3b; --trabalho-dom: #1d3b2e; --alerta-texto: #f2c46a; --aviso-borda: #6b5520;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --fundo: #0f1720; --cartao: #17212c; --texto: #e4ebf2; --suave: #93a3b4; --borda: #2b3a4a;
-  --primaria: #4c8df6; --primaria-escura: #3a78de; --perigo: #ef6b6b;
+  --fundo: #12161f; --cartao: #1b2130; --texto: #ebe8e2; --suave: #a3a9b6; --borda: #2e3647;
+  --primaria: #c8433a; --primaria-escura: #a8352d; --secundaria: #aabde6; --dourado: #dcbf6e; --perigo: #ef7b70;
   --trabalho: #173326; --trabalho-texto: #8fdcaa; --folga: #3a2f12; --folga-texto: #f2c46a;
-  --feriado: #3d1c1f; --feriado-texto: #f39a9a; --domingo: #1c2540; --erro: #ff7070;
-  --topo: #0a1622; --topo-texto: #ffffff; --topo-suave: #93a3b4; --abas: #142334;
-  --campo: #101922; --cabecalho: #1b2733; --realce: #1d2c45; --perigo-fundo: #3d1c1f;
-  --codigo: #22303e; --trabalho-dom: #1d3b2e; --alerta-texto: #f2c46a; --aviso-borda: #6b5520;
+  --feriado: #3d1c1f; --feriado-texto: #f39a9a; --domingo: #1e2742; --erro: #ff7b70;
+  --topo: #0e1626; --topo-texto: #ffffff; --topo-suave: #9ba7bf; --abas: #24365e;
+  --campo: #141a26; --cabecalho: #20283a; --realce: #2b2619; --perigo-fundo: #3d1c1f;
+  --codigo: #252c3b; --trabalho-dom: #1d3b2e; --alerta-texto: #f2c46a; --aviso-borda: #6b5520;
   color-scheme: dark;
 }
 
@@ -77,13 +82,15 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
   display: flex; flex-direction: column; gap: 1rem;
   padding: 1rem .75rem; background: var(--topo); color: var(--topo-texto);
 }
-.marca { display: flex; align-items: center; gap: .6rem; padding: .25rem .5rem .75rem; border-bottom: 1px solid var(--abas); }
-.marca b { display: block; font-size: 1rem; line-height: 1.2; }
-.marca small { display: block; color: var(--topo-suave); font-size: .78rem; }
-.marca-sigla {
-  display: grid; place-items: center; flex: none; width: 2.25rem; height: 2.25rem; border-radius: 8px;
-  background: var(--primaria); color: #ffffff; font-weight: 700; font-size: .85rem; letter-spacing: .03em;
+.marca { display: grid; gap: .55rem; padding: .25rem .25rem .8rem; border-bottom: 1px solid var(--abas); }
+/* o logo tem fundo branco: fica numa placa branca, como em uma embalagem */
+.marca-logo {
+  display: block; width: 100%; height: auto; background: #ffffff; border-radius: 8px;
+  padding: .45rem .6rem; box-shadow: 0 1px 0 rgba(0, 0, 0, .2);
 }
+.marca-sistema { padding: 0 .35rem; }
+.marca b { display: block; font-size: .95rem; line-height: 1.2; }
+.marca small { display: block; color: var(--topo-suave); font-size: .76rem; }
 
 .modulos { display: flex; flex-direction: column; gap: .15rem; flex: 1; }
 .modulo {
@@ -93,7 +100,7 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
 }
 .modulo .rotulo { flex: 1; min-width: 0; }
 .modulo:hover { background: rgba(255, 255, 255, .07); color: var(--topo-texto); }
-.modulo.ativo { background: var(--abas); color: var(--topo-texto); font-weight: 600; }
+.modulo.ativo { background: var(--abas); color: var(--topo-texto); font-weight: 600; box-shadow: inset 3px 0 0 #e0483f; }
 .modulo .chip.breve { font-size: .62rem; }
 .icone {
   width: 1.15rem; height: 1.15rem; flex: none; fill: none; stroke: currentColor;
@@ -111,7 +118,7 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
   padding: .4rem .6rem; font-weight: 400; font-size: .9rem;
 }
 .aba:hover { background: rgba(255, 255, 255, .07); color: var(--topo-texto); }
-.aba.ativa { color: var(--topo-texto); font-weight: 600; background: rgba(99, 179, 237, .16); }
+.aba.ativa { color: var(--topo-texto); font-weight: 600; background: rgba(214, 180, 88, .2); box-shadow: inset 2px 0 0 var(--dourado); }
 
 .lateral-rodape { display: grid; gap: .5rem; padding: .75rem .5rem 0; border-top: 1px solid var(--abas); }
 .usuario-lateral { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
@@ -166,7 +173,7 @@ button, .botao {
   background: var(--primaria); color: #ffffff; cursor: pointer; font-weight: 500;
 }
 button:hover, .botao:hover { background: var(--primaria-escura); }
-button.sec, .botao.sec { background: var(--campo); color: var(--primaria); }
+button.sec, .botao.sec { background: var(--campo); color: var(--secundaria); border-color: var(--secundaria); }
 button.sec:hover, .botao.sec:hover { background: var(--realce); }
 button.perigo { background: var(--campo); color: var(--perigo); border-color: var(--perigo); }
 button.perigo:hover { background: var(--perigo-fundo); }
@@ -375,3 +382,6 @@ body.perfil-consulta .grade td[data-c]:hover { outline: 0; }
   .lateral { transition: none; }
 }
 .versao { color: var(--topo-suave); font-size: .72rem; opacity: .8; }
+.acesso-logo { display: block; width: min(15rem, 100%); height: auto; margin: 0 auto 1rem; background: #ffffff; border-radius: 8px; padding: .4rem .5rem; }
+.acesso-marca { text-align: center; }
+.acesso-caixa { border-top: 4px solid var(--primaria); }
