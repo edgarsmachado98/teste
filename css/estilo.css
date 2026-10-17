@@ -32,20 +32,10 @@
   --trabalho-dom: #d7ebe0;
   --alerta-texto: #8a5a00;
   --aviso-borda: #ecd59a;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --fundo: #12131f; --cartao: #1b1d2e; --texto: #ebe8e2; --suave: #a3a9b6; --borda: #2d3048;
-    --primaria: #5b60d6; --primaria-escura: #474cc0; --secundaria: #b4b8f2; --dourado: #f5c400; --perigo: #ef7b70;
-    --trabalho: #173326; --trabalho-texto: #8fdcaa; --folga: #3a2f12; --folga-texto: #f2c46a;
-    --feriado: #3d1c1f; --feriado-texto: #f39a9a; --domingo: #1f2244; --erro: #ff7b70;
-    --topo: #0f1030; --topo-texto: #ffffff; --topo-suave: #a3a6cf; --abas: #2a2d7a;
-    --campo: #151726; --cabecalho: #202338; --realce: #2e2a12; --perigo-fundo: #3d1c1f;
-    --codigo: #252840; --trabalho-dom: #1d3b2e; --alerta-texto: #f2c46a; --aviso-borda: #6b5520;
-    color-scheme: dark;
-  }
-}
+/* modo claro é o padrão; o modo escuro é ligado pelo botão do menu (js/tema.js) */
 :root[data-theme="dark"] {
   --fundo: #12131f; --cartao: #1b1d2e; --texto: #ebe8e2; --suave: #a3a9b6; --borda: #2d3048;
   --primaria: #5b60d6; --primaria-escura: #474cc0; --secundaria: #b4b8f2; --dourado: #f5c400; --perigo: #ef7b70;
@@ -120,6 +110,7 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
 .aba:hover { background: rgba(255, 255, 255, .07); color: var(--topo-texto); }
 .aba.ativa { color: var(--topo-texto); font-weight: 600; background: rgba(245, 196, 0, .18); box-shadow: inset 2px 0 0 var(--dourado); }
 
+.btn-tema { justify-content: flex-start; gap: .5rem; width: 100%; }
 .lateral-rodape { display: grid; gap: .5rem; padding: .75rem .5rem 0; border-top: 1px solid var(--abas); }
 .usuario-lateral { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .usuario-lateral b { font-weight: 600; overflow-wrap: anywhere; }
