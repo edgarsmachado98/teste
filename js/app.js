@@ -531,6 +531,16 @@
     renderValidacao(ocorrencias, filtro);
   }
 
+  /** "2 alerta(s) de cobertura e 4 de folga em feriado." */
+  function resumoAlertas(alertas) {
+    const nomes = { Cobertura: 'de cobertura', 'Folga em feriado': 'de folga em feriado', 'Folgas seguidas': 'de folgas seguidas' };
+    const cont = {};
+    for (const a of alertas) cont[a.regra] = (cont[a.regra] || 0) + 1;
+    const partes = Object.entries(cont).map(([r, n]) => `${n} ${nomes[r] || `(${r})`}`);
+    const ultima = partes.pop();
+    return `Alertas: ${partes.length ? partes.join(', ') + ' e ' : ''}${ultima}.`;
+  }
+
   function renderValidacao(ocorrencias, filtro) {
     const nomeColab = (id) => {
       const c = estado.colaboradores.find((x) => x.id === id);
@@ -551,7 +561,7 @@
       <p class="status ${erros.length ? 'ruim' : 'bom'}">${erros.length
         ? `${erros.length} violação(ões) da legislação encontrada(s).`
         : 'Nenhuma violação da legislação trabalhista encontrada.'}
-        ${alertas.length ? ` ${alertas.length} alerta(s) de cobertura.` : ''}</p>
+        ${alertas.length ? ` ${resumoAlertas(alertas)}` : ''}</p>
       ${erros.length ? `<h3>Violações</h3><ul>${erros.map(item).join('')}</ul>` : ''}
       ${alertas.length ? `<h3>Alertas</h3><ul>${alertas.map(item).join('')}</ul>` : ''}
       ${infos.length ? `<details><summary>Observações (${infos.length})</summary><ul>${infos.map(item).join('')}</ul></details>` : ''}`;

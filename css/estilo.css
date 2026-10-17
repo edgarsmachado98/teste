@@ -313,7 +313,9 @@ input[readonly] { background: var(--codigo); color: var(--suave); }
 /* perfis */
 body:not(.perfil-admin) .so-admin { display: none !important; }
 body.perfil-consulta .so-edicao,
-body.perfil-consulta .tabela .acoes button { display: none !important; }
+body.perfil-consulta #lista-setores .acoes button,
+body.perfil-consulta #lista-colabs .acoes button,
+body.perfil-consulta #lista-feriados .acoes button { display: none !important; }
 body.perfil-consulta #aba-setores.ativo,
 body.perfil-consulta #aba-colaboradores.ativo { grid-template-columns: minmax(0, 1fr); }
 body.perfil-consulta .grade td[data-c] { cursor: default; }
