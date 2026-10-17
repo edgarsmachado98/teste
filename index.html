@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CORE RH</title>
+  <link rel="icon" type="image/png" href="img/icone.png">
+  <link rel="stylesheet" href="css/estilo.css">
+  <link rel="stylesheet" href="css/contrato.css">
+  <script src="js/tema.js"></script>
+</head>
+<body>
+  <!-- TELA DE ACESSO -->
+  <div id="tela-acesso" class="acesso" hidden>
+    <div class="acesso-caixa">
+      <div class="acesso-marca">
+        <img src="img/logo-moinho-santa-maria.png" alt="Moinho Santa Maria" class="acesso-logo" width="170" height="198">
+        <h1>CORE RH</h1>
+        <p>Rotinas do departamento pessoal em conformidade com a legislação trabalhista</p>
+      </div>
+
+      <form id="form-login" class="formulario" hidden>
+        <h2>Entrar</h2>
+        <label>Login<input name="login" id="login-usuario" autocomplete="username" required autocapitalize="none" spellcheck="false"></label>
+        <label>Senha<input name="senha" id="login-senha" type="password" autocomplete="current-password" required></label>
+        <p class="msg-erro" id="login-erro" role="alert" hidden></p>
+        <button type="submit">Entrar</button>
+        <p class="dica">Esqueceu a senha? Peça a um administrador para redefini-la.</p>
+      </form>
+
+      <form id="form-primeiro" class="formulario" hidden>
+        <h2>Primeiro acesso</h2>
+        <p class="dica">Crie o usuário administrador. Ele poderá cadastrar os demais usuários do sistema.</p>
+        <label>Nome completo<input name="nome" id="pri-nome" required maxlength="100" autocomplete="name"></label>
+        <label>Login<input name="login" id="pri-login" required maxlength="60" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex.: maria.silva"></label>
+        <label>Senha<input name="senha" id="pri-senha" type="password" required autocomplete="new-password"></label>
+        <label>Confirmar senha<input name="confirma" id="pri-confirma" type="password" required autocomplete="new-password"></label>
+        <p class="dica">Mínimo de 8 caracteres, com letras e números.</p>
+        <p class="msg-erro" id="primeiro-erro" role="alert" hidden></p>
+        <button type="submit">Criar administrador e entrar</button>
+      </form>
+
+    </div>
+  </div>
+
+  <div id="app" class="layout" hidden>
+  <aside class="lateral" id="menu-lateral" aria-label="Menu principal">
+    <div class="marca">
+      <img src="img/logo-moinho-santa-maria.png" alt="Moinho Santa Maria" class="marca-logo" width="170" height="198">
+      <span class="marca-sistema"><b>CORE RH</b><small>Gestão de pessoal</small></span>
+    </div>
+    <nav class="modulos" aria-label="Módulos do sistema">
+      <button type="button" class="modulo ativo" data-modulo="inicio"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span class="rotulo">Início</span></button>
+      <button type="button" class="modulo" data-modulo="cadastros"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg><span class="rotulo">Cadastros</span></button>
+      <div class="subitens" data-modulo="cadastros">
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Colaboradores</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores</button>
+      </div>
+      <button type="button" class="modulo" data-modulo="escalas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/></svg><span class="rotulo">Escalas de trabalho</span></button>
+      <div class="subitens" data-modulo="escalas">
+        <button type="button" class="aba" data-modulo="escalas" data-aba="escala">Escala</button>
+        <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Regras e feriados</button>
+      </div>
+      <button type="button" class="modulo" data-modulo="contratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="rotulo">Contratos de representantes</span></button>
+      <button type="button" class="modulo" data-modulo="distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="rotulo">Distratos</span></button>
+      <p class="grupo-menu">Em desenvolvimento</p>
+      <button type="button" class="modulo" data-modulo="custos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="rotulo">Custos de pessoal</span> <span class="chip breve">em breve</span></button>
+      <p class="grupo-menu so-admin">Administração</p>
+      <button type="button" class="modulo so-admin" data-modulo="usuarios"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg><span class="rotulo">Usuários</span></button>
+    </nav>
+    <div class="lateral-rodape">
+      <div class="usuario-lateral">
+        <b id="usuario-nome"></b>
+        <span class="chip" id="usuario-perfil"></span>
+      </div>
+      <button type="button" id="btn-tema" class="sec mini btn-tema" aria-pressed="false">Modo escuro</button>
+      <div class="linha-botoes">
+        <button type="button" id="btn-minha-senha" class="sec mini">Alterar senha</button>
+        <button type="button" id="btn-sair" class="sec mini">Sair</button>
+      </div>
+      <small class="versao" id="versao-sistema"></small>
+    </div>
+  </aside>
+  <div class="fundo-menu" id="fundo-menu" hidden></div>
+
+  <div class="conteudo">
+  <header class="topo">
+    <div class="topo-titulo">
+      <button type="button" class="btn-menu sec" id="btn-menu" aria-controls="menu-lateral" aria-expanded="false">Menu</button>
+      <div>
+        <p class="sub" id="caminho-pagina">CORE RH</p>
+        <h1 id="titulo-pagina">Início</h1>
+      </div>
+    </div>
+    <div class="acoes-topo">
+      <button type="button" id="btn-exemplo" class="sec so-edicao">Carregar exemplo</button>
+      <button type="button" id="btn-exportar-json" class="sec so-admin">Backup (JSON)</button>
+      <label class="botao sec so-admin">Restaurar backup<input type="file" id="arq-json" accept=".json" hidden></label>
+      <button type="button" id="btn-limpar" class="perigo so-admin">Limpar tudo</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- INÍCIO -->
+    <section id="aba-inicio" class="painel ativo" data-modulo="inicio">
+      <div class="boas-vindas">
+        <p class="saudacao" id="saudacao">Bem-vindo</p>
+        <h2>CORE RH</h2>
+        <p class="lead">Um só lugar para as rotinas do departamento pessoal. Cadastre colaboradores e setores,
+          monte escalas de trabalho que respeitam a CLT, acompanhe o custo de cada funcionário com encargos
+          e provisões, e administre os contratos de representantes comerciais do início ao distrato.</p>
+        <p class="lead suave">Cada pessoa acessa de acordo com o seu perfil, e todas as alterações ficam
+          registradas no histórico.</p>
+      </div>
+
+      <div class="resumo" id="resumo-inicio"></div>
+
+      <h3 class="titulo-secao">Módulos</h3>
+      <div class="cards-modulos">
+        <button type="button" class="card-modulo" data-ir="cadastros">
+          <span class="card-topo"><b>Cadastros</b><span class="chip bom">Disponível</span></span>
+          <span>Colaboradores (nome, matrícula, sexo, setor, jornada e horário) e setores da empresa.
+            Base usada por todos os módulos.</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="escalas">
+          <span class="card-topo"><b>Escalas de trabalho</b><span class="chip bom">Disponível</span></span>
+          <span>Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação de jornada,
+            descanso semanal e interjornada.</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="custos">
+          <span class="card-topo"><b>Custos de pessoal</b><span class="chip breve">Em breve</span></span>
+          <span>Custo por funcionário com INSS, FGTS e provisões de férias e 13º salário.</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="contratos">
+          <span class="card-topo"><b>Contratos de representantes</b><span class="chip bom">Disponível</span></span>
+          <span>Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, com geração em PDF e Word.</span>
+        </button>
+        <button type="button" class="card-modulo" data-ir="distratos">
+          <span class="card-topo"><b>Distratos</b><span class="chip bom">Disponível</span></span>
+          <span>Cálculo da indenização (1/12) e do aviso prévio com correção pelo IGP-M, e termo de distrato e aviso prévio em PDF e Word.</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- MÓDULOS EM DESENVOLVIMENTO -->
+    <section id="aba-custos" class="painel" data-modulo="custos">
+      <div class="cartao em-breve">
+        <span class="chip breve">Em desenvolvimento</span>
+        <h2>Custos de pessoal</h2>
+        <p>Vai calcular quanto cada funcionário custa para a empresa, mês a mês, a partir do cadastro de colaboradores:</p>
+        <ul>
+          <li>Salário e adicionais (noturno, horas extras, feriados trabalhados vindos da escala).</li>
+          <li>INSS patronal, RAT/SAT e terceiros, conforme o regime tributário da empresa.</li>
+          <li>FGTS de 8% sobre a remuneração.</li>
+          <li>Provisão mensal de férias com o adicional de 1/3 e de 13º salário, com os encargos sobre as provisões.</li>
+          <li>Totais por setor e por período.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="aba-contratos" class="painel" data-modulo="contratos">
+      <div class="cartao" id="ct-lista-cartao">
+        <div class="cab-cartao">
+          <h2>Contratos de representação comercial</h2>
+          <div class="linha-botoes">
+            <input type="search" id="ct-busca" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar contrato">
+            <select id="ct-filtro" aria-label="Filtrar por situação">
+              <option value="">Todos</option>
+              <option value="ativo">Ativos</option>
+              <option value="encerrado">Encerrados</option>
+            </select>
+            <button type="button" id="ct-novo" class="so-edicao">Novo contrato</button>
+          </div>
+        </div>
+        <table class="tabela">
+          <thead><tr><th>Representante</th><th>CNPJ</th><th>Cidade</th><th>Zona de influência</th><th>Data</th><th>Situação</th><th></th></tr></thead>
+          <tbody id="ct-lista"></tbody>
+        </table>
+      </div>
+
+      <div id="ct-editor" class="ct-editor" hidden>
+        <form id="ct-form" class="cartao formulario ct-form" novalidate>
+          <div class="cab-cartao">
+            <h2 id="ct-titulo">Novo contrato</h2>
+            <button type="button" id="ct-voltar" class="sec mini">Voltar à lista</button>
+          </div>
+          <p class="dica">Preencha os dados do <b>REPRESENTANTE</b>; o restante do texto segue o modelo da empresa.
+            Na prévia, os dados preenchidos aparecem destacados — clique em um deles para editá-lo.</p>
+          <fieldset><legend>Empresa representante</legend><div class="ct-grade" id="ct-grupo-empresa"></div></fieldset>
+          <fieldset><legend>Responsável legal</legend><div class="ct-grade" id="ct-grupo-responsavel"></div></fieldset>
+          <fieldset id="ct-fs-residencia"><legend>Endereço residencial do responsável</legend><div class="ct-grade" id="ct-grupo-residencia"></div></fieldset>
+          <fieldset><legend>Contrato</legend>
+            <div class="ct-grade" id="ct-grupo-contrato"></div>
+            <label>Situação
+              <select id="ct-situacao"><option value="ativo">Ativo</option><option value="encerrado">Encerrado</option></select>
+            </label>
+          </fieldset>
+          <fieldset><legend>Documentos do pacote</legend><div id="ct-documentos" class="ct-docs"></div></fieldset>
+          <div class="ct-pendencias" id="ct-pendencias" role="alert" hidden></div>
+          <div class="ct-acoes">
+            <button type="submit" class="sec so-edicao">Salvar</button>
+            <button type="button" id="ct-pdf">Gerar PDF</button>
+            <button type="button" id="ct-docx">Gerar Word (.docx)</button>
+          </div>
+          <p class="dica">“Gerar PDF” abre a janela de impressão: escolha <b>Salvar como PDF</b> como destino.</p>
+        </form>
+        <div class="ct-previa-col">
+          <div class="ct-previa-topo"><b>Prévia do documento</b> <span id="ct-resumo-docs"></span></div>
+          <div id="ct-previa" class="ct-previa"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="aba-distratos" class="painel" data-modulo="distratos">
+      <div class="cartao" id="dt-lista-cartao">
+        <div class="cab-cartao">
+          <h2>Distratos de representação comercial</h2>
+          <div class="linha-botoes">
+            <input type="search" id="dt-busca" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar distrato">
+            <button type="button" id="dt-novo" class="so-edicao">Novo distrato</button>
+          </div>
+        </div>
+        <table class="tabela">
+          <thead><tr><th>Representante</th><th>CNPJ</th><th>Empresa representada</th><th>Data do distrato</th><th class="num">Total</th><th></th></tr></thead>
+          <tbody id="dt-lista"></tbody>
+        </table>
+      </div>
+
+      <div id="dt-editor" class="ct-editor dt-editor" hidden>
+        <form id="dt-form" class="cartao formulario ct-form" novalidate>
+          <div class="cab-cartao">
+            <h2 id="dt-titulo">Novo distrato</h2>
+            <button type="button" id="dt-voltar" class="sec mini">Voltar à lista</button>
+          </div>
+
+          <fieldset><legend>1. Representante</legend>
+            <div class="dt-busca-linha">
+              <label>CNPJ do representante<input id="dt-cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" autocomplete="off"></label>
+              <button type="button" id="dt-buscar" class="sec">Buscar</button>
+            </div>
+            <div id="dt-representante" class="dt-representante" hidden></div>
+          </fieldset>
+
+          <fieldset><legend>2. Empresa representada</legend>
+            <label class="check"><input type="radio" name="representada" value="cia"> Antoniazzi &amp; Cia Ltda</label>
+            <label class="check"><input type="radio" name="representada" value="alimentos"> Antoniazzi Ind. e Com. de Alimentos Ltda</label>
+          </fieldset>
+
+          <fieldset><legend>3. Datas</legend>
+            <div class="ct-grade">
+              <label><span>Início do contrato</span><input type="date" id="dt-inicio"></label>
+              <label><span>Data do distrato</span><input type="date" id="dt-data"></label>
+              <label><span>Data do aviso prévio</span><input type="date" id="dt-data-aviso"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>4. Comissões recebidas por mês</legend>
+            <p class="dica">Informe o valor total recebido em cada mês de vigência. Meses em branco não entram no cálculo.</p>
+            <div class="linha-botoes">
+              <button type="button" id="dt-colar" class="sec mini">Colar da planilha</button>
+              <button type="button" id="dt-limpar-meses" class="sec mini">Limpar valores</button>
+            </div>
+            <div class="dt-meses-rolagem"><table class="tabela dt-meses">
+              <thead><tr><th>Mês</th><th class="num">Comissão (R$)</th><th class="num">IGP-M acum.</th><th class="num">Atualizada (R$)</th></tr></thead>
+              <tbody id="dt-meses"></tbody>
+              <tfoot><tr><th>Total</th><th class="num" id="dt-soma-nominal"></th><th></th><th class="num" id="dt-soma-atualizada"></th></tr></tfoot>
+            </table></div>
+          </fieldset>
+
+          <fieldset><legend>5. Comissões sobre títulos pendentes</legend>
+            <div class="ct-grade dt-periodo">
+              <label><span>Início</span><input type="date" id="dt-pend-inicio"></label>
+              <label><span>Fim</span><input type="date" id="dt-pend-fim"></label>
+              <label class="largo"><span>Valor (R$)</span><input id="dt-pend-valor" inputmode="decimal" placeholder="0,00"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>6. Comissões a receber</legend>
+            <div class="ct-grade dt-periodo">
+              <label><span>Início</span><input type="date" id="dt-rec-inicio"></label>
+              <label><span>Fim</span><input type="date" id="dt-rec-fim"></label>
+              <label class="largo"><span>Valor (R$)</span><input id="dt-rec-valor" inputmode="decimal" placeholder="0,00"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>7. Opções do cálculo</legend>
+            <label class="check"><input type="checkbox" id="dt-pagar-indenizacao" checked> Pagar indenização de 1/12 (Lei 4.886/65, art. 27, “j”)</label>
+            <label class="check"><input type="checkbox" id="dt-pagar-aviso" checked> Pagar aviso prévio indenizado (art. 34)</label>
+            <label class="check"><input type="checkbox" id="dt-deflacao" checked> Não reduzir comissões quando o IGP-M acumulado for negativo</label>
+          </fieldset>
+
+          <fieldset><legend>8. Qualificação no documento (opcional)</legend>
+            <div class="ct-grade">
+              <label><span>Profissão</span><input id="dt-profissao" maxlength="60" placeholder="empresário"></label>
+              <label><span>Naturalidade</span><input id="dt-naturalidade" maxlength="80" placeholder="Bragança Paulista SP"></label>
+              <label class="largo"><span>Estado civil</span><input id="dt-estado-civil" maxlength="120" placeholder="casado no regime de comunhão parcial de bens"></label>
+            </div>
+          </fieldset>
+
+          <fieldset><legend>9. Documentos</legend>
+            <label class="check"><input type="checkbox" name="dt-documento" value="distrato" checked> Termo de distrato</label>
+            <label class="check"><input type="checkbox" name="dt-documento" value="aviso" checked> Aviso prévio</label>
+          </fieldset>
+
+          <div class="ct-pendencias" id="dt-pendencias" role="alert" hidden></div>
+          <div class="ct-acoes">
+            <button type="submit" class="sec so-edicao">Salvar</button>
+            <button type="button" id="dt-pdf">Gerar PDF</button>
+            <button type="button" id="dt-docx">Gerar Word (.docx)</button>
+          </div>
+          <p class="dica">“Gerar PDF” abre a janela de impressão: escolha <b>Salvar como PDF</b> como destino.</p>
+        </form>
+
+        <div class="ct-previa-col">
+          <div class="cartao dt-resultado">
+            <div class="cab-cartao">
+              <h2>Cálculo do distrato</h2>
+              <span class="dica" id="dt-indice-status"></span>
+            </div>
+            <div class="linha-botoes">
+              <button type="button" id="dt-atualizar-igpm" class="sec mini so-edicao">Atualizar IGP-M (Banco Central)</button>
+              <a class="botao sec mini" href="https://calculoexato.com.br/parprima.aspx?codMenu=FinanAtualizaIndice" target="_blank" rel="noopener noreferrer">Conferir no Cálculo Exato</a>
+            </div>
+            <div id="dt-faltando" class="dt-faltando" hidden></div>
+            <div id="dt-tiles" class="resumo dt-tiles"></div>
+            <p class="dt-total" id="dt-total"></p>
+          </div>
+          <div class="ct-previa-topo"><b>Prévia dos documentos</b> <span id="dt-resumo-docs"></span></div>
+          <div id="dt-previa" class="ct-previa"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETORES -->
+    <section id="aba-setores" class="painel" data-modulo="cadastros">
+      <form id="form-setor" class="cartao formulario so-edicao">
+        <h2 id="titulo-form-setor">Novo setor</h2>
+        <input type="hidden" name="id">
+        <label>Nome do setor<input name="nome" required maxlength="60" placeholder="Ex.: Vendas"></label>
+        <label>Mínimo de pessoas por dia<input name="minimoPorDia" type="number" min="0" value="1"></label>
+        <fieldset>
+          <legend>Dias de funcionamento</legend>
+          <div class="dias-semana" id="dias-funcionamento"></div>
+        </fieldset>
+        <label class="check"><input type="checkbox" name="funcionaFeriados"> Funciona em feriados</label>
+        <div class="linha-botoes">
+          <button type="submit">Salvar setor</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+      </form>
+      <div class="cartao">
+        <h2>Setores cadastrados</h2>
+        <table class="tabela">
+          <thead><tr><th>Setor</th><th>Mínimo/dia</th><th>Funcionamento</th><th>Feriados</th><th>Colaboradores</th><th></th></tr></thead>
+          <tbody id="lista-setores"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- COLABORADORES -->
+    <section id="aba-colaboradores" class="painel" data-modulo="cadastros">
+      <form id="form-colab" class="cartao formulario so-edicao">
+        <h2 id="titulo-form-colab">Novo colaborador</h2>
+        <input type="hidden" name="id">
+        <label>Nome completo<input name="nome" required maxlength="100"></label>
+        <label>Matrícula<input name="matricula" required maxlength="20"></label>
+        <label>Sexo
+          <select name="sexo" required>
+            <option value="F">Feminino</option>
+            <option value="M">Masculino</option>
+          </select>
+        </label>
+        <label>Setor<select name="setorId" required id="sel-setor-colab"></select></label>
+        <label>Jornada<select name="jornada" required id="sel-jornada"></select></label>
+        <label>Horário de entrada<input name="entrada" type="time" value="08:00" required></label>
+        <p class="dica" id="dica-jornada"></p>
+        <div class="linha-botoes">
+          <button type="submit">Salvar colaborador</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+      </form>
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Colaboradores</h2>
+          <div class="linha-botoes">
+            <select id="filtro-setor-colab" aria-label="Filtrar por setor"></select>
+            <label class="botao sec so-edicao">Importar CSV<input type="file" id="arq-csv" accept=".csv,.txt" hidden></label>
+          </div>
+        </div>
+        <p class="dica">CSV com cabeçalho: <code>nome;matricula;sexo;setor;jornada;entrada</code> (sexo F/M; jornada 6x1, 5x2, 5x2-40, 6x1-6h ou 12x36). Setores inexistentes são criados.</p>
+        <table class="tabela">
+          <thead><tr><th>Matrícula</th><th>Nome</th><th>Sexo</th><th>Setor</th><th>Jornada</th><th>Horário</th><th></th></tr></thead>
+          <tbody id="lista-colabs"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- REGRAS -->
+    <section id="aba-regras" class="painel" data-modulo="escalas">
+      <form id="form-regras" class="cartao formulario">
+        <h2>Regras da escala</h2>
+        <label>Folga dominical — homens
+          <select name="domingoHomensSemanas">
+            <option value="3">A cada 3 semanas (comércio — Lei 10.101/2000, art. 6º)</option>
+            <option value="7">A cada 7 semanas (demais atividades — Portaria MTP 671/2021)</option>
+          </select>
+        </label>
+        <label>Folga dominical — mulheres
+          <select name="domingoMulheresSemanas" disabled>
+            <option value="2">A cada 2 semanas (revezamento quinzenal — CLT art. 386)</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="incluirFacultativos"> Tratar Carnaval e Corpus Christi como feriado</label>
+
+        <ul class="regras-lista">
+          <li><b>Jornada:</b> até 8h diárias e 44h semanais (CF art. 7º, XIII; CLT art. 58); horas extras até 2h/dia (art. 59).</li>
+          <li><b>Repouso semanal:</b> 24h consecutivas, no máximo 6 dias seguidos de trabalho (CF art. 7º, XV; CLT art. 67; OJ 410 SDI-1 TST).</li>
+          <li><b>Interjornada:</b> mínimo de 11h entre duas jornadas (CLT art. 66).</li>
+          <li><b>Intervalo intrajornada:</b> 1h a 2h acima de 6h; 15 min entre 4h e 6h (CLT art. 71).</li>
+          <li><b>Mulheres:</b> escala de revezamento quinzenal favorecendo o repouso dominical (CLT art. 386).</li>
+          <li><b>12x36:</b> mediante acordo individual escrito ou norma coletiva (CLT art. 59-A).</li>
+          <li><b>Feriados:</b> trabalho em feriado pago em dobro ou compensado com folga (Lei 605/1949, art. 9º).</li>
+          <li><b>Trabalho noturno:</b> 22h às 5h, hora de 52min30s e adicional mínimo de 20% (CLT art. 73).</li>
+        </ul>
+
+        <h3>Preferências da empresa para compor a escala</h3>
+        <label class="check"><input type="checkbox" name="evitarFolgaFeriado" id="regra-evitar-feriado">
+          Folga não coincidir com feriado</label>
+        <p class="dica">Nos setores que funcionam em feriados, a folga semanal é marcada em outro dia. Folgas
+          obrigatórias por lei (como o domingo do rodízio) têm prioridade e podem cair num feriado.</p>
+        <label>Folgas seguidas
+          <select name="maxFolgasSeguidas" id="regra-max-folgas">
+            <option value="0">Sem limite</option>
+            <option value="2">No máximo 2 dias</option>
+            <option value="3">No máximo 3 dias</option>
+            <option value="4">No máximo 4 dias</option>
+          </select>
+        </label>
+        <p class="dica">Conta folgas, feriados e dias em que o setor fecha. Sequências causadas só por
+          fechamento do setor não são alteradas.</p>
+      </form>
+      <div class="cartao">
+        <h2>Feriados estaduais / municipais</h2>
+        <form id="form-feriado" class="linha-form so-edicao">
+          <input type="date" name="data" required aria-label="Data">
+          <input name="nome" required placeholder="Ex.: Aniversário da cidade" aria-label="Nome do feriado">
+          <button type="submit">Adicionar</button>
+        </form>
+        <table class="tabela">
+          <thead><tr><th>Data</th><th>Feriado</th><th>Tipo</th><th></th></tr></thead>
+          <tbody id="lista-feriados"></tbody>
+        </table>
+        <p class="dica">Feriados nacionais são calculados automaticamente para o período da escala (acima, os do ano atual e do próximo).</p>
+      </div>
+    </section>
+
+    <!-- ESCALA -->
+    <section id="aba-escala" class="painel" data-modulo="escalas">
+      <div class="cartao">
+        <form id="form-gerar" class="linha-form">
+          <label>Início<input type="date" name="inicio" required></label>
+          <label>Fim<input type="date" name="fim" required></label>
+          <label>Setor<select name="setor" id="filtro-setor-escala"></select></label>
+          <button type="submit" class="so-edicao">Gerar escala</button>
+          <button type="button" id="btn-csv" class="sec">Exportar CSV</button>
+          <button type="button" id="btn-imprimir" class="sec">Imprimir</button>
+        </form>
+        <p class="dica" id="info-escala"></p>
+        <p class="dica so-edicao">Clique em uma célula para alternar entre trabalho e folga; a validação legal é refeita automaticamente.</p>
+        <div class="legenda">
+          <span><i class="cel T"></i> Trabalho (horário)</span>
+          <span><i class="cel F"></i> Folga / DSR</span>
+          <span><i class="cel FER"></i> Feriado (setor fechado)</span>
+          <span><i class="cel dom"></i> Domingo</span>
+          <span><i class="cel fer"></i> Feriado</span>
+        </div>
+      </div>
+      <div id="area-escala"></div>
+      <div class="cartao" id="area-validacao" hidden>
+        <h2>Conformidade legal</h2>
+        <div id="validacao"></div>
+      </div>
+    </section>
+
+    <!-- USUÁRIOS -->
+    <section id="aba-usuarios" class="painel" data-modulo="usuarios">
+      <form id="form-usuario" class="cartao formulario">
+        <h2 id="titulo-form-usuario">Novo usuário</h2>
+        <input type="hidden" name="id">
+        <label>Nome completo<input name="nome" id="usu-nome" required maxlength="100"></label>
+        <label>Login<input name="login" id="usu-login" required maxlength="60" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
+        <label>Perfil
+          <select name="perfil" id="usu-perfil"></select>
+        </label>
+        <p class="dica" id="usu-perfil-dica"></p>
+        <label id="usu-ativo-rotulo" class="check" hidden><input type="checkbox" name="ativo" id="usu-ativo" checked> Usuário ativo</label>
+        <label><span id="usu-senha-rotulo">Senha</span><input name="senha" id="usu-senha" type="password" autocomplete="new-password"></label>
+        <label>Confirmar senha<input name="confirma" id="usu-confirma" type="password" autocomplete="new-password"></label>
+        <p class="dica" id="usu-senha-dica">Mínimo de 8 caracteres, com letras e números.</p>
+        <p class="msg-erro" id="usuario-erro" role="alert" hidden></p>
+        <div class="linha-botoes">
+          <button type="submit">Salvar usuário</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+      </form>
+      <div class="cartao">
+        <h2>Usuários do sistema</h2>
+        <table class="tabela">
+          <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Situação</th><th>Último acesso</th><th></th></tr></thead>
+          <tbody id="lista-usuarios"></tbody>
+        </table>
+        <ul class="regras-lista" id="perfis-lista"></ul>
+      </div>
+      <div class="cartao historico">
+        <div class="cab-cartao">
+          <h2>Histórico de alterações</h2>
+          <button type="button" id="btn-auditoria" class="sec mini">Atualizar</button>
+        </div>
+        <div class="rolagem-vertical">
+          <table class="tabela">
+            <thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr></thead>
+            <tbody id="lista-auditoria"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  </div>
+  </div>
+
+  <dialog id="dialogo">
+    <form method="dialog" class="formulario">
+      <p id="dialogo-msg"></p>
+      <div id="dialogo-senha" class="formulario" hidden>
+        <label id="dialogo-senha-atual-rotulo">Senha atual<input type="password" id="dlg-senha-atual" autocomplete="current-password"></label>
+        <label>Nova senha<input type="password" id="dlg-senha-nova" autocomplete="new-password"></label>
+        <label>Confirmar nova senha<input type="password" id="dlg-senha-confirma" autocomplete="new-password"></label>
+        <p class="msg-erro" id="dlg-senha-erro" role="alert" hidden></p>
+      </div>
+      <textarea id="dialogo-texto" rows="10" readonly hidden></textarea>
+      <div class="linha-botoes">
+        <button type="submit" value="ok">OK</button>
+        <button type="button" id="dialogo-copiar" class="sec" hidden>Copiar</button>
+        <button type="submit" value="cancelar" id="dialogo-cancelar" class="sec" hidden>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="impressao" aria-hidden="true"></div>
+
+  <script src="js/motor.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/contrato-modelo.js"></script>
+  <script src="js/contrato-docx.js"></script>
+  <script src="js/distrato-calculo.js"></script>
+  <script src="js/distrato-modelo.js"></script>
+  <script src="js/documento-html.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/contratos.js"></script>
+  <script src="js/distratos.js"></script>
+  <script src="js/acesso.js"></script>
+</body>
+</html>
