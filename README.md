@@ -1,4 +1,4 @@
-# Gestão de Pessoal RH
+# CORE RH
 
 Um só lugar para as rotinas do departamento pessoal. Cadastre colaboradores e setores, monte escalas
 de trabalho que respeitam a CLT, acompanhe o custo de cada funcionário com encargos e provisões, e

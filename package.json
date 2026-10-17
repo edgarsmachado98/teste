@@ -1,7 +1,7 @@
 {
   "name": "gestao-pessoal-rh",
-  "version": "4.1.0",
-  "description": "Gestão de Pessoal RH: rotinas do departamento pessoal conforme a legislação trabalhista brasileira",
+  "version": "4.2.0",
+  "description": "CORE RH: rotinas do departamento pessoal conforme a legislação trabalhista brasileira",
   "private": true,
   "engines": {
     "node": ">=22.13"

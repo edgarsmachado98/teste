@@ -394,7 +394,7 @@
       'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" ' +
       'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
       `<dc:title>${xml('Contrato de Representação Comercial - ' + (vals.razao || ''))}</dc:title>` +
-      '<dc:creator>Gestão de Pessoal RH</dc:creator>' +
+      '<dc:creator>CORE RH</dc:creator>' +
       `<dcterms:created xsi:type="dcterms:W3CDTF">${agora}</dcterms:created></cp:coreProperties>`;
 
     const arquivos = [

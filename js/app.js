@@ -1,4 +1,4 @@
-/* Interface do Gestão de Pessoal RH. Os dados ficam no servidor (API em /api). */
+/* Interface do CORE RH. Os dados ficam no servidor (API em /api). */
 (function () {
   'use strict';
 
@@ -147,8 +147,8 @@
     const nomeModulo = $(`.modulo[data-modulo="${mod}"] .rotulo`).textContent;
     const aba = abas.find((b) => b.dataset.aba === nome);
     $('#titulo-pagina').textContent = aba ? aba.textContent : nomeModulo;
-    $('#caminho-pagina').textContent = aba ? nomeModulo : 'Gestão de Pessoal RH';
-    document.title = mod === 'inicio' ? 'Gestão de Pessoal RH' : `${$('#titulo-pagina').textContent} · Gestão de Pessoal RH`;
+    $('#caminho-pagina').textContent = aba ? nomeModulo : 'CORE RH';
+    document.title = mod === 'inicio' ? 'CORE RH' : `${$('#titulo-pagina').textContent} · CORE RH`;
     abrirMenu(false);
     if (mod === 'inicio') renderInicio();
   }
