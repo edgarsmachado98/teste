@@ -468,26 +468,65 @@ function criarServico(db, opcoes = {}) {
     auditar(ator, 'colaborador.excluir', `${c.matricula} ${c.nome}`);
   }
 
-  /** Importação em lote (CSV). Setores inexistentes são criados (seg a sáb). */
-  function importarColaboradores(ator, linhas) {
+  const CAMPOS_ATUALIZAVEIS = ['nome', 'sexo', 'setor', 'jornada', 'entrada', 'cargo', 'salario', 'admissao'];
+
+  /** Setor pelo nome; se não existir, é criado (seg a sáb). */
+  function setorPorNome(nome) {
+    const nomeSetor = texto(nome, 'o setor', 60);
+    let setor = q('SELECT id FROM setores WHERE nome = ? COLLATE NOCASE').get(nomeSetor);
+    if (!setor) {
+      setor = { id: novoId() };
+      q('INSERT INTO setores (id, nome, minimo_por_dia, dias_funcionamento, funciona_feriados) VALUES (?, ?, 1, ?, 0)')
+        .run(setor.id, nomeSetor, JSON.stringify([false, true, true, true, true, true, true]));
+    }
+    return setor.id;
+  }
+  const horaCSV = (v) => (/^\d{1,2}:\d{2}$/.test(String(v || '')) ? String(v).padStart(5, '0') : null);
+
+  /**
+   * Importação em lote (CSV).
+   * opcoes.cadastrar: cadastra as matrículas novas (setores inexistentes são criados);
+   * opcoes.atualizar: campos que serão atualizados nas matrículas já cadastradas
+   * (só os preenchidos na planilha; colunas vazias mantêm o valor atual).
+   */
+  function importarColaboradores(ator, linhas, opcoes = {}) {
     exigir(ator, 'operador');
+    const cadastrar = opcoes.cadastrar !== false;
+    const atualizar = Array.isArray(opcoes.atualizar)
+      ? opcoes.atualizar.filter((k) => CAMPOS_ATUALIZAVEIS.includes(k)) : ['cargo', 'salario', 'admissao'];
     if (!Array.isArray(linhas) || !linhas.length) falhar(400, 'Nenhuma linha para importar.');
     if (linhas.length > 5000) falhar(400, 'Importe no máximo 5000 colaboradores por vez.');
     const ignorados = [];
     let importados = 0;
+    let atualizados = 0;
     db.transacao(() => {
       linhas.forEach((l, i) => {
         const ref = `linha ${l.linha || i + 2}`;
         try {
-          const nomeSetor = texto(l.setor, 'o setor', 60);
-          let setor = q('SELECT id FROM setores WHERE nome = ? COLLATE NOCASE').get(nomeSetor);
-          if (!setor) {
-            setor = { id: novoId() };
-            q('INSERT INTO setores (id, nome, minimo_por_dia, dias_funcionamento, funciona_feriados) VALUES (?, ?, 1, ?, 0)')
-              .run(setor.id, nomeSetor, JSON.stringify([false, true, true, true, true, true, true]));
+          const existente = q('SELECT * FROM colaboradores WHERE matricula = ?').get(String(l.matricula || '').trim());
+          if (existente) {
+            if (!atualizar.length) throw new ErroApp(409, 'matrícula já cadastrada');
+            const atual = colabDeLinha(existente);
+            const campos = atualizar.filter((k) => String(l[k] == null ? '' : l[k]).trim() !== '');
+            if (!campos.length) throw new ErroApp(409, 'matrícula já cadastrada, sem dados para atualizar');
+            for (const k of campos) {
+              const v = String(l[k]).trim();
+              if (k === 'setor') atual.setorId = setorPorNome(v);
+              else if (k === 'sexo') atual.sexo = v.charAt(0).toUpperCase();
+              else if (k === 'entrada') atual.entrada = horaCSV(v) || v;
+              else atual[k] = v;
+            }
+            gravarColab(normalizarColab(atual), atual.id);
+            atualizados++;
+            return;
           }
-          const entrada = /^\d{1,2}:\d{2}$/.test(String(l.entrada || '')) ? String(l.entrada).padStart(5, '0') : '08:00';
-          const c = normalizarColab({ ...l, setorId: setor.id, jornada: l.jornada || '6x1', entrada, sexo: String(l.sexo || '').charAt(0) });
+          if (!cadastrar) throw new ErroApp(409, 'matrícula não cadastrada');
+          if (!String(l.nome || '').trim() || !String(l.setor || '').trim()) {
+            throw new ErroApp(400, 'matrícula não cadastrada; para cadastrar, informe nome, sexo e setor');
+          }
+          const setorId = setorPorNome(l.setor);
+          const entrada = horaCSV(l.entrada) || '08:00';
+          const c = normalizarColab({ ...l, setorId, jornada: l.jornada || '6x1', entrada, sexo: String(l.sexo || '').charAt(0) });
           if (q('SELECT 1 FROM colaboradores WHERE matricula = ?').get(c.matricula)) throw new ErroApp(409, 'matrícula repetida');
           gravarColab(c, null);
           importados++;
@@ -497,8 +536,8 @@ function criarServico(db, opcoes = {}) {
         }
       });
     });
-    auditar(ator, 'colaborador.importar', `${importados} importado(s), ${ignorados.length} ignorado(s)`);
-    return { importados, ignorados };
+    auditar(ator, 'colaborador.importar', `${importados} cadastrado(s), ${atualizados} atualizado(s), ${ignorados.length} ignorado(s)`);
+    return { importados, atualizados, ignorados };
   }
 
   // ------------------------------------------------- regras e feriados

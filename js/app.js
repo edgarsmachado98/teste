@@ -396,11 +396,9 @@
     const linhas = texto.split(/\r?\n/).filter((l) => l.trim());
     if (linhas.length < 2) return avisar('Arquivo vazio.');
     const sep = linhas[0].includes(';') ? ';' : ',';
-    const cab = linhas[0].split(sep).map((h) => h.trim().toLowerCase());
+    const cab = linhas[0].split(sep).map((h) => h.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
     const col = (nome) => cab.indexOf(nome);
-    if (['nome', 'matricula', 'sexo', 'setor'].some((n) => col(n) < 0)) {
-      return avisar('Cabeçalho deve conter: nome;matricula;sexo;setor;jornada;entrada');
-    }
+    if (col('matricula') < 0) return avisar('O cabeçalho precisa ter a coluna matricula.');
     const registros = linhas.slice(1).map((linha, n) => {
       const v = linha.split(sep).map((x) => x.trim());
       const pega = (nome) => (col(nome) >= 0 ? v[col(nome)] || '' : '');
@@ -410,13 +408,67 @@
         setor: pega('setor'), jornada: pega('jornada'), entrada: pega('entrada'),
         cargo: pega('cargo'), salario: pega('salario'), admissao: data(pega('admissao')),
       };
-    });
+    }).filter((r) => r.matricula);
+    if (!registros.length) return avisar('Nenhuma linha com matrícula encontrada.');
+    const colunas = CAMPOS_IMPORTACAO.filter(([k]) => col(k) >= 0);
+    const opcoes = await opcoesImportacao(registros, colunas);
+    if (!opcoes) return;
     let r = null;
-    await executar(async () => { r = await api.post('/api/colaboradores/importar', { linhas: registros }); });
+    await executar(async () => { r = await api.post('/api/colaboradores/importar', { linhas: registros, opcoes }); });
     if (r) {
-      avisar(`${r.importados} colaborador(es) importado(s).` + (r.ignorados.length ? `\nIgnorados: ${r.ignorados.join('; ')}` : ''));
+      avisar(`${r.importados} colaborador(es) cadastrado(s) e ${r.atualizados || 0} atualizado(s).` +
+        (r.ignorados.length ? `\n\nIgnorados:\n${r.ignorados.slice(0, 20).join('\n')}` +
+          (r.ignorados.length > 20 ? `\n… e mais ${r.ignorados.length - 20}` : '') : ''));
     }
   });
+
+  // [coluna, nome, marcado por padrão ao atualizar]
+  const CAMPOS_IMPORTACAO = [
+    ['cargo', 'Cargo', true], ['salario', 'Salário', true], ['admissao', 'Admissão', true],
+    ['nome', 'Nome', false], ['sexo', 'Sexo', false], ['setor', 'Setor', false],
+    ['jornada', 'Jornada', false], ['entrada', 'Horário de entrada', false],
+  ];
+
+  /** Caixa de diálogo: cadastrar matrículas novas e/ou atualizar as já cadastradas, escolhendo os campos. */
+  function opcoesImportacao(registros, colunas) {
+    const dlg = $('#dialogo-importar');
+    const cadastradas = new Set(estado.colaboradores.map((c) => c.matricula));
+    const existentes = registros.filter((r) => cadastradas.has(r.matricula)).length;
+    const novas = registros.length - existentes;
+    const podeCadastrar = colunas.some(([k]) => k === 'nome') && colunas.some(([k]) => k === 'setor') && colunas.some(([k]) => k === 'sexo');
+    $('#imp-resumo').textContent = `O arquivo tem ${registros.length} linha(s): ${novas} matrícula(s) nova(s) e ${existentes} já cadastrada(s).`;
+    const cad = $('#imp-cadastrar');
+    const atu = $('#imp-atualizar');
+    $('#imp-cadastrar-rotulo').textContent = `Cadastrar as matrículas novas (${novas})`;
+    $('#imp-atualizar-rotulo').textContent = `Atualizar os dados das matrículas já cadastradas (${existentes})`;
+    cad.checked = podeCadastrar && novas > 0;
+    cad.disabled = !podeCadastrar || !novas;
+    $('#imp-cadastrar-dica').hidden = podeCadastrar || !novas;
+    $('#imp-cadastrar-dica').textContent = 'Para cadastrar, o arquivo precisa das colunas nome, sexo e setor.';
+    atu.checked = existentes > 0 && colunas.length > 0;
+    atu.disabled = !existentes || !colunas.length;
+    $('#imp-lista-campos').innerHTML = colunas.length
+      ? colunas.map(([k, nome, padrao]) => `<label class="check"><input type="checkbox" name="imp-campo" value="${k}" ${padrao ? 'checked' : ''}> ${nome}</label>`).join('')
+      : '<p class="dica">O arquivo não tem colunas que possam ser atualizadas.</p>';
+    const atualizarEstado = () => {
+      $('#imp-campos').disabled = !atu.checked;
+      const campos = dlg.querySelectorAll('input[name=imp-campo]:checked').length;
+      $('#imp-confirmar').disabled = !cad.checked && !(atu.checked && campos);
+    };
+    dlg.onchange = atualizarEstado;
+    atualizarEstado();
+    return new Promise((resolve) => {
+      dlg.onclose = () => {
+        if (dlg.returnValue !== 'ok') return resolve(null);
+        resolve({
+          cadastrar: cad.checked,
+          atualizar: atu.checked ? [...dlg.querySelectorAll('input[name=imp-campo]:checked')].map((x) => x.value) : [],
+        });
+      };
+      dlg.returnValue = '';
+      dlg.showModal();
+    });
+  }
 
   // ---------------------------------------------------------------- regras
 

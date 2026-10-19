@@ -473,3 +473,6 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 }
 @page relatorio { size: A4 landscape; margin: 10mm; }
 .rl-tabela td .chip { white-space: normal; }
+.imp-campos { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: .35rem .75rem; }
+#dialogo-importar h2 { margin: 0; }
+#imp-campos:disabled { opacity: .55; }

@@ -84,6 +84,12 @@ de vida e outros), férias vencidas e **desligamento** (data, tipo, motivo da en
 observação). Quem saiu da empresa deve ser **desligado**, não excluído: sai das próximas escalas e
 continua nos relatórios. Colaboradores com lançamentos de folha não podem ser excluídos.
 
+Para preencher salário, cargo e admissão de quem já está cadastrado, use **Importar CSV** com o cabeçalho
+`matricula;cargo;salario;admissao` (data em dd/mm/aaaa). Antes de importar, uma caixa de diálogo mostra
+quantas matrículas são novas e quantas já existem, e você marca se quer **cadastrar as novas** e/ou
+**atualizar as já cadastradas**, escolhendo os campos (cargo, salário, admissão, nome, sexo, setor, jornada,
+horário). Células vazias na planilha mantêm o valor atual.
+
 ### Lançamentos (folha mensal)
 
 1. Escolha o mês e clique em **Abrir competência**: o sistema cria um lançamento para cada colaborador com

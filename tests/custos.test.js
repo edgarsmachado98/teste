@@ -184,6 +184,38 @@ test('competência, lançamentos, importação, desligamento e permissões', () 
   assert.strictEqual(s.custos(ADMIN).competencias.length, 1);
 });
 
+test('importação de colaboradores atualiza cargo, salário e admissão de matrículas já cadastradas', () => {
+  const { s } = servico();
+  const setor = s.salvarSetor(ADMIN, { nome: 'Vendas', minimoPorDia: 0, diasFuncionamento: [true, true, true, true, true, true, true] });
+  s.salvarColaborador(ADMIN, { nome: 'Ana', matricula: '1', sexo: 'F', setorId: setor.id, jornada: '5x2', entrada: '09:00', cargo: 'Vendedora', salario: 2000 });
+  const r = s.importarColaboradores(ADMIN, [
+    { linha: 2, matricula: '1', cargo: '', salario: '2.450,00', admissao: '2021-03-08' },
+    { linha: 3, matricula: '2', nome: 'Bia', sexo: 'F', setor: 'Vendas', salario: '1.900,00' },
+    { linha: 4, matricula: '1' },
+    { linha: 5, matricula: '1', salario: 'abc' },
+  ]);
+  assert.deepStrictEqual([r.importados, r.atualizados, r.ignorados.length], [1, 1, 2]);
+  assert.match(r.ignorados[0], /linha 4.*sem dados para atualizar/);
+  assert.match(r.ignorados[1], /linha 5.*Salário/);
+  const ana = s.dados(ADMIN).colaboradores.find((c) => c.matricula === '1');
+  // só os campos informados mudam; jornada, horário e cargo vazio ficam como estavam
+  assert.deepStrictEqual([ana.salario, ana.admissao, ana.cargo, ana.jornada, ana.entrada], [2450, '2021-03-08', 'Vendedora', '5x2', '09:00']);
+
+  // opções da caixa de diálogo: só atualizar (sem cadastrar) e escolher os campos, inclusive setor
+  const r2 = s.importarColaboradores(ADMIN, [
+    { linha: 2, matricula: '1', nome: 'Ana Lima', setor: 'Logística', salario: '9.999,00' },
+    { linha: 3, matricula: '3', nome: 'Caio', sexo: 'M', setor: 'Vendas' },
+  ], { cadastrar: false, atualizar: ['nome', 'setor'] });
+  assert.deepStrictEqual([r2.importados, r2.atualizados], [0, 1]);
+  assert.match(r2.ignorados[0], /linha 3.*não cadastrada/);
+  const d = s.dados(ADMIN);
+  const ana2 = d.colaboradores.find((c) => c.matricula === '1');
+  assert.deepStrictEqual([ana2.nome, d.setores.find((x) => x.id === ana2.setorId).nome, ana2.salario], ['Ana Lima', 'Logística', 2450]);
+  // nada a atualizar: matrícula existente é ignorada
+  const r3 = s.importarColaboradores(ADMIN, [{ linha: 2, matricula: '1', salario: 1 }], { atualizar: [] });
+  assert.match(r3.ignorados[0], /já cadastrada/);
+});
+
 test('exemplo traz seis meses de folha e os relatórios funcionam com ele', () => {
   const { s } = servico();
   s.carregarExemplo(ADMIN);

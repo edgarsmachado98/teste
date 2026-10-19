@@ -492,7 +492,8 @@
           </div>
         </div>
         <p class="dica">CSV com cabeçalho: <code>nome;matricula;sexo;setor;jornada;entrada</code> (sexo F/M; jornada 6x1, 5x2, 5x2-40, 6x1-6h ou 12x36) e, se quiser,
-          <code>cargo;salario;admissao</code> (data em dd/mm/aaaa). Setores inexistentes são criados.</p>
+          <code>cargo;salario;admissao</code> (data em dd/mm/aaaa). Setores inexistentes são criados. Ao importar, você escolhe se
+          cadastra as matrículas novas e quais dados atualizar nas já cadastradas (para preencher salários, basta <code>matricula;cargo;salario;admissao</code>).</p>
         <table class="tabela">
           <thead><tr><th>Matrícula</th><th>Nome</th><th>Sexo</th><th>Setor</th><th>Jornada</th><th>Horário</th><th>Situação</th><th></th></tr></thead>
           <tbody id="lista-colabs"></tbody>
@@ -647,6 +648,25 @@
         <button type="submit" value="ok">OK</button>
         <button type="button" id="dialogo-copiar" class="sec" hidden>Copiar</button>
         <button type="submit" value="cancelar" id="dialogo-cancelar" class="sec" hidden>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-importar" aria-labelledby="imp-titulo">
+    <form method="dialog" class="formulario">
+      <h2 id="imp-titulo">Importar colaboradores</h2>
+      <p id="imp-resumo"></p>
+      <label class="check"><input type="checkbox" id="imp-cadastrar"> <span id="imp-cadastrar-rotulo">Cadastrar as matrículas novas</span></label>
+      <p class="dica" id="imp-cadastrar-dica" hidden></p>
+      <label class="check"><input type="checkbox" id="imp-atualizar"> <span id="imp-atualizar-rotulo">Atualizar os dados das matrículas já cadastradas</span></label>
+      <fieldset id="imp-campos">
+        <legend>Dados a atualizar</legend>
+        <div class="imp-campos" id="imp-lista-campos"></div>
+        <p class="dica">Só os campos marcados mudam. Células vazias na planilha mantêm o valor atual.</p>
+      </fieldset>
+      <div class="linha-botoes">
+        <button type="submit" value="ok" id="imp-confirmar">Importar</button>
+        <button type="submit" value="cancelar" class="sec" formnovalidate>Cancelar</button>
       </div>
     </form>
   </dialog>

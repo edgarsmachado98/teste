@@ -162,7 +162,7 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   rota('PUT', '/api/setores/:id', ({ usuario, corpo, p }) => servico.salvarSetor(usuario, { ...corpo, id: p.id }));
   rota('DELETE', '/api/setores/:id', ({ usuario, p }) => servico.removerSetor(usuario, p.id));
   rota('POST', '/api/colaboradores', ({ usuario, corpo }) => servico.salvarColaborador(usuario, { ...corpo, id: null }));
-  rota('POST', '/api/colaboradores/importar', ({ usuario, corpo }) => servico.importarColaboradores(usuario, corpo.linhas));
+  rota('POST', '/api/colaboradores/importar', ({ usuario, corpo }) => servico.importarColaboradores(usuario, corpo.linhas, corpo.opcoes));
   rota('PUT', '/api/colaboradores/:id', ({ usuario, corpo, p }) => servico.salvarColaborador(usuario, { ...corpo, id: p.id }));
   rota('DELETE', '/api/colaboradores/:id', ({ usuario, p }) => servico.removerColaborador(usuario, p.id));
   rota('PUT', '/api/regras', ({ usuario, corpo }) => servico.salvarConfig(usuario, corpo));
