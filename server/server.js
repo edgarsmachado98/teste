@@ -187,6 +187,12 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   rota('PUT', '/api/distratos/:id', ({ usuario, corpo, p }) => servico.salvarDistrato(usuario, { ...corpo, id: p.id }));
   rota('DELETE', '/api/distratos/:id', ({ usuario, p }) => servico.removerDistrato(usuario, p.id));
   rota('POST', '/api/distratos/:id/documento', ({ usuario, corpo, p }) => servico.registrarDocumentoDistrato(usuario, p.id, corpo.formato));
+  rota('GET', '/api/custos', ({ usuario }) => servico.custos(usuario));
+  rota('PUT', '/api/custos/parametros', ({ usuario, corpo }) => servico.salvarParametrosCustos(usuario, corpo));
+  rota('POST', '/api/folha/:comp/abrir', ({ usuario, p }) => servico.abrirCompetencia(usuario, p.comp));
+  rota('PUT', '/api/folha/:comp', ({ usuario, corpo, p }) => servico.salvarFolha(usuario, p.comp, corpo), { limiteCorpo: LIMITE_CORPO_BACKUP });
+  rota('POST', '/api/folha/:comp/importar', ({ usuario, corpo, p }) => servico.importarFolha(usuario, p.comp, corpo.linhas), { limiteCorpo: LIMITE_CORPO_BACKUP });
+  rota('DELETE', '/api/folha/:comp', ({ usuario, p }) => servico.removerCompetencia(usuario, p.comp));
   rota('POST', '/api/restaurar', ({ usuario, corpo }) => servico.restaurar(usuario, corpo), { limiteCorpo: LIMITE_CORPO_BACKUP });
 
   async function tratarApi(req, res, url) {

@@ -63,8 +63,12 @@
       </div>
       <button type="button" class="modulo" data-modulo="contratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="rotulo">Contratos de representantes</span></button>
       <button type="button" class="modulo" data-modulo="distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="rotulo">Distratos</span></button>
-      <p class="grupo-menu">Em desenvolvimento</p>
-      <button type="button" class="modulo" data-modulo="custos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="rotulo">Custos de pessoal</span> <span class="chip breve">em breve</span></button>
+      <button type="button" class="modulo so-edicao" data-modulo="custos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="rotulo">Custos de pessoal</span></button>
+      <div class="subitens so-edicao" data-modulo="custos">
+        <button type="button" class="aba" data-modulo="custos" data-aba="folha">Lançamentos</button>
+        <button type="button" class="aba" data-modulo="custos" data-aba="relatorios">Relatórios</button>
+        <button type="button" class="aba" data-modulo="custos" data-aba="parametros-custos">Encargos e alertas</button>
+      </div>
       <p class="grupo-menu so-admin">Administração</p>
       <button type="button" class="modulo so-admin" data-modulo="usuarios"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg><span class="rotulo">Usuários</span></button>
     </nav>
@@ -127,9 +131,10 @@
           <span>Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação de jornada,
             descanso semanal e interjornada.</span>
         </button>
-        <button type="button" class="card-modulo" data-ir="custos">
-          <span class="card-topo"><b>Custos de pessoal</b><span class="chip breve">Em breve</span></span>
-          <span>Custo por funcionário com INSS, FGTS e provisões de férias e 13º salário.</span>
+        <button type="button" class="card-modulo so-edicao" data-ir="custos">
+          <span class="card-topo"><b>Custos de pessoal</b><span class="chip bom">Disponível</span></span>
+          <span>Folha mensal com encargos, provisões e benefícios, e relatórios de custos, benefícios, turnover,
+            absenteísmo e banco de horas.</span>
         </button>
         <button type="button" class="card-modulo" data-ir="contratos">
           <span class="card-topo"><b>Contratos de representantes</b><span class="chip bom">Disponível</span></span>
@@ -142,19 +147,85 @@
       </div>
     </section>
 
-    <!-- MÓDULOS EM DESENVOLVIMENTO -->
-    <section id="aba-custos" class="painel" data-modulo="custos">
-      <div class="cartao em-breve">
-        <span class="chip breve">Em desenvolvimento</span>
-        <h2>Custos de pessoal</h2>
-        <p>Vai calcular quanto cada funcionário custa para a empresa, mês a mês, a partir do cadastro de colaboradores:</p>
-        <ul>
-          <li>Salário e adicionais (noturno, horas extras, feriados trabalhados vindos da escala).</li>
-          <li>INSS patronal, RAT/SAT e terceiros, conforme o regime tributário da empresa.</li>
-          <li>FGTS de 8% sobre a remuneração.</li>
-          <li>Provisão mensal de férias com o adicional de 1/3 e de 13º salário, com os encargos sobre as provisões.</li>
-          <li>Totais por setor e por período.</li>
-        </ul>
+    <!-- CUSTOS DE PESSOAL -->
+    <section id="aba-folha" class="painel" data-modulo="custos">
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Lançamentos da folha</h2>
+          <div class="linha-botoes">
+            <label class="em-linha">Competência <input type="month" id="fl-comp"></label>
+            <button type="button" id="fl-abrir">Abrir competência</button>
+          </div>
+        </div>
+        <p class="dica">Abrir a competência cria um lançamento para cada colaborador com vínculo no mês, já com o salário e os
+          benefícios do cadastro. Depois informe as horas extras, ocorrências e o banco de horas, ou importe a planilha da folha.</p>
+        <div id="fl-competencias" class="fl-competencias"></div>
+      </div>
+
+      <div class="cartao" id="fl-area" hidden>
+        <div class="cab-cartao">
+          <h2 id="fl-titulo"></h2>
+          <div class="linha-botoes">
+            <input type="search" id="fl-busca" placeholder="Buscar colaborador" aria-label="Buscar colaborador">
+            <button type="button" id="fl-colar" class="sec">Colar da planilha</button>
+            <label class="botao sec">Importar CSV<input type="file" id="fl-arquivo" accept=".csv,.txt" hidden></label>
+            <button type="button" id="fl-modelo" class="sec">Baixar modelo</button>
+            <button type="button" id="fl-excluir" class="perigo">Excluir competência</button>
+          </div>
+        </div>
+        <div class="fl-saude">
+          <label>Fatura do plano de saúde (R$)<input id="fl-premio" inputmode="decimal" autocomplete="off"></label>
+          <label>Sinistros do mês (R$)<input id="fl-sinistros" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+          <p class="dica">Valores do relatório de utilização da operadora. Sem a fatura, vale a soma do plano de saúde dos lançamentos.</p>
+        </div>
+        <div class="fl-rolagem"><table class="fl-grade" id="fl-grade"></table></div>
+        <div class="fl-rodape">
+          <span id="fl-status" class="dica"></span>
+          <button type="button" id="fl-salvar">Salvar lançamentos</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="aba-relatorios" class="painel" data-modulo="custos">
+      <div class="cartao rl-filtros">
+        <label class="rl-tipo">Relatório<select id="rl-tipo"></select></label>
+        <label>De<input type="month" id="rl-de"></label>
+        <label>Até<input type="month" id="rl-ate"></label>
+        <label>Setor<select id="rl-setor"></select></label>
+        <div class="linha-botoes">
+          <button type="button" id="rl-imprimir" class="sec">Imprimir / PDF</button>
+          <button type="button" id="rl-csv" class="sec">Exportar CSV</button>
+        </div>
+      </div>
+      <div id="rl-saida" class="rl-saida"></div>
+    </section>
+
+    <section id="aba-parametros-custos" class="painel" data-modulo="custos">
+      <form id="form-encargos" class="cartao formulario" novalidate>
+        <h2>Encargos sobre a folha</h2>
+        <label>Regime tributário<select name="regime" id="enc-regime"></select></label>
+        <div class="duas-colunas">
+          <label>INSS patronal (%)<input name="inss" inputmode="decimal"></label>
+          <label>FGTS (%)<input name="fgts" inputmode="decimal"></label>
+          <label>RAT/SAT (%)<select name="rat"><option value="1">1% (risco leve)</option><option value="2">2% (risco médio)</option><option value="3">3% (risco grave)</option></select></label>
+          <label>FAP (0,5 a 2,0)<input name="fap" inputmode="decimal"></label>
+          <label>Terceiros (%)<input name="terceiros" inputmode="decimal"></label>
+        </div>
+        <p class="dica">O RAT depende do CNAE preponderante (Decreto 3.048/1999, anexo V) e o FAP é divulgado anualmente pela
+          Receita/Previdência. Terceiros (Sistema S, salário-educação e Incra) somam 5,8% na maioria das empresas;
+          confira o código FPAS da empresa.</p>
+        <h3>Alertas dos relatórios</h3>
+        <div class="duas-colunas">
+          <label>Sinistralidade: atenção a partir de (%)<input name="alertaSinistralidade" inputmode="decimal"></label>
+          <label>Sinistralidade: crítica a partir de (%)<input name="limiteSinistralidade" inputmode="decimal"></label>
+          <label>Horas extras: média mensal acima de (h)<input name="alertaHorasExtras" inputmode="decimal"></label>
+          <label>Banco de horas: saldo acima de (h)<input name="alertaBancoHoras" inputmode="decimal"></label>
+        </div>
+        <div class="linha-botoes"><button type="submit">Salvar parâmetros</button></div>
+      </form>
+      <div class="cartao">
+        <h2>Como o custo é calculado</h2>
+        <div id="enc-resumo"></div>
       </div>
     </section>
 
@@ -374,6 +445,34 @@
         <label>Jornada<select name="jornada" required id="sel-jornada"></select></label>
         <label>Horário de entrada<input name="entrada" type="time" value="08:00" required></label>
         <p class="dica" id="dica-jornada"></p>
+        <fieldset class="ficha-rh"><legend>Contrato e custos</legend>
+          <label>Cargo<input name="cargo" maxlength="60"></label>
+          <div class="duas-colunas">
+            <label>Salário (R$)<input name="salario" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+            <label>Admissão<input name="admissao" type="date"></label>
+          </div>
+          <details>
+            <summary>Benefícios (custo mensal da empresa)</summary>
+            <div class="duas-colunas" id="colab-beneficios"></div>
+            <p class="dica">Informe o custo líquido para a empresa (ex.: vale-transporte já descontados os 6% do salário).</p>
+          </details>
+          <details>
+            <summary>Férias</summary>
+            <div class="duas-colunas">
+              <label>Períodos vencidos<select name="feriasVencidas"><option value="0">Nenhum</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
+              <label>Início do período aquisitivo<input name="inicioAquisitivo" type="date"></label>
+            </div>
+            <p class="dica">Sem o início do período aquisitivo, conta-se a partir da admissão.</p>
+          </details>
+          <details id="colab-desligamento">
+            <summary>Desligamento</summary>
+            <label>Data do desligamento<input name="desligamento" type="date"></label>
+            <label>Tipo de desligamento<select name="tipoDesligamento" id="sel-tipo-deslig"></select></label>
+            <label>Motivo (entrevista de desligamento)<select name="motivoDesligamento" id="sel-motivo-deslig"></select></label>
+            <label>Observação<textarea name="obsDesligamento" maxlength="300" rows="2"></textarea></label>
+            <p class="dica">Desligados saem das próximas escalas, mas continuam nos relatórios de custos e turnover.</p>
+          </details>
+        </fieldset>
         <div class="linha-botoes">
           <button type="submit">Salvar colaborador</button>
           <button type="reset" class="sec">Cancelar</button>
@@ -383,13 +482,19 @@
         <div class="cab-cartao">
           <h2>Colaboradores</h2>
           <div class="linha-botoes">
+            <select id="filtro-situacao-colab" aria-label="Filtrar por situação">
+              <option value="ativos">Ativos</option>
+              <option value="desligados">Desligados</option>
+              <option value="">Todos</option>
+            </select>
             <select id="filtro-setor-colab" aria-label="Filtrar por setor"></select>
             <label class="botao sec so-edicao">Importar CSV<input type="file" id="arq-csv" accept=".csv,.txt" hidden></label>
           </div>
         </div>
-        <p class="dica">CSV com cabeçalho: <code>nome;matricula;sexo;setor;jornada;entrada</code> (sexo F/M; jornada 6x1, 5x2, 5x2-40, 6x1-6h ou 12x36). Setores inexistentes são criados.</p>
+        <p class="dica">CSV com cabeçalho: <code>nome;matricula;sexo;setor;jornada;entrada</code> (sexo F/M; jornada 6x1, 5x2, 5x2-40, 6x1-6h ou 12x36) e, se quiser,
+          <code>cargo;salario;admissao</code> (data em dd/mm/aaaa). Setores inexistentes são criados.</p>
         <table class="tabela">
-          <thead><tr><th>Matrícula</th><th>Nome</th><th>Sexo</th><th>Setor</th><th>Jornada</th><th>Horário</th><th></th></tr></thead>
+          <thead><tr><th>Matrícula</th><th>Nome</th><th>Sexo</th><th>Setor</th><th>Jornada</th><th>Horário</th><th>Situação</th><th></th></tr></thead>
           <tbody id="lista-colabs"></tbody>
         </table>
       </div>
@@ -549,6 +654,7 @@
   <div id="impressao" aria-hidden="true"></div>
 
   <script src="js/motor.js"></script>
+  <script src="js/custos-calculo.js"></script>
   <script src="js/api.js"></script>
   <script src="js/contrato-modelo.js"></script>
   <script src="js/contrato-docx.js"></script>
@@ -558,6 +664,7 @@
   <script src="js/app.js"></script>
   <script src="js/contratos.js"></script>
   <script src="js/distratos.js"></script>
+  <script src="js/custos.js"></script>
   <script src="js/acesso.js"></script>
 </body>
 </html>

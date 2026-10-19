@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const M = require('../js/motor.js');
 const CT = require('../js/contrato-modelo.js');
 const K = require('../js/distrato-calculo.js');
+const CU = require('../js/custos-calculo.js');
 
 /** Séries de índices disponíveis (Sistema Gerenciador de Séries do Banco Central). */
 const SERIES = { igpm: { sgs: 189, nome: 'IGP-M (FGV)' } };
@@ -77,9 +78,29 @@ const setorDeLinha = (s) => ({
   diasFuncionamento: JSON.parse(s.dias_funcionamento), funcionaFeriados: !!s.funciona_feriados,
 });
 
+/** Dados contratuais do colaborador usados nos custos (coluna rh, em JSON). */
+function rhPadrao(rh) {
+  const r = rh || {};
+  const beneficios = {};
+  for (const b of CU.BENEFICIOS) beneficios[b.id] = r.beneficios && r.beneficios[b.id] !== '' && r.beneficios[b.id] != null ? r.beneficios[b.id] : '';
+  return {
+    cargo: r.cargo || '', salario: r.salario == null ? '' : r.salario, admissao: r.admissao || '',
+    desligamento: r.desligamento || '', tipoDesligamento: r.tipoDesligamento || '',
+    motivoDesligamento: r.motivoDesligamento || '', obsDesligamento: r.obsDesligamento || '',
+    feriasVencidas: r.feriasVencidas || 0, inicioAquisitivo: r.inicioAquisitivo || '', beneficios,
+  };
+}
+
 const colabDeLinha = (c) => ({
   id: c.id, nome: c.nome, matricula: c.matricula, sexo: c.sexo,
   setorId: c.setor_id, jornada: c.jornada, entrada: c.entrada,
+  ...rhPadrao(JSON.parse(c.rh || '{}')),
+});
+
+/** Perfil Consulta não vê salário, benefícios nem os motivos do desligamento. */
+const colabSemCustos = (c) => ({
+  id: c.id, nome: c.nome, matricula: c.matricula, sexo: c.sexo, setorId: c.setorId, jornada: c.jornada,
+  entrada: c.entrada, cargo: c.cargo, admissao: c.admissao, desligamento: c.desligamento,
 });
 
 // ---------------------------------------------------------------- serviço
@@ -306,9 +327,10 @@ function criarServico(db, opcoes = {}) {
   function dados(ator) {
     exigir(ator, 'consulta');
     const escala = lerEscala();
+    const verCustos = NIVEL[ator.perfil] >= NIVEL.operador;
     return {
       setores: lerSetores(),
-      colaboradores: lerColaboradores(),
+      colaboradores: verCustos ? lerColaboradores() : lerColaboradores().map(colabSemCustos),
       feriadosExtras: q('SELECT data, nome FROM feriados ORDER BY data').all().map((f) => ({ ...f })),
       ...config(),
       escala,
@@ -368,7 +390,43 @@ function criarServico(db, opcoes = {}) {
     return {
       nome: texto(d.nome, 'o nome do colaborador', 100),
       matricula: texto(d.matricula, 'a matrícula', 20),
-      sexo, setorId: d.setorId, jornada: d.jornada, entrada,
+      sexo, setorId: d.setorId, jornada: d.jornada, entrada, rh: normalizarRH(d),
+    };
+  }
+
+  /** Valor numérico opcional ('' quando vazio). */
+  function numeroOpcional(v, rotulo, max) {
+    const n = CU.lerNumero(v);
+    if (n == null) {
+      if (v != null && String(v).trim() !== '') falhar(400, `${rotulo}: valor inválido.`);
+      return '';
+    }
+    if (n < 0 || n > max) falhar(400, `${rotulo}: valor inválido.`);
+    return CU.centavos(n);
+  }
+
+  function normalizarRH(d) {
+    const cargo = String(d.cargo || '').trim();
+    if (cargo.length > 60) falhar(400, 'Cargo deve ter no máximo 60 caracteres.');
+    const admissao = d.admissao ? dataValida(d.admissao, 'Data de admissão') : '';
+    const desligamento = d.desligamento ? dataValida(d.desligamento, 'Data de desligamento') : '';
+    if (admissao && desligamento && desligamento < admissao) falhar(400, 'A data de desligamento deve ser posterior à admissão.');
+    let tipo = '';
+    if (desligamento) {
+      tipo = CU.TIPOS_DESLIGAMENTO[d.tipoDesligamento] ? d.tipoDesligamento : falhar(400, 'Informe o tipo de desligamento.');
+    }
+    const obs = desligamento ? String(d.obsDesligamento || '').trim() : '';
+    if (obs.length > 300) falhar(400, 'Observação do desligamento deve ter no máximo 300 caracteres.');
+    const vencidas = Number(d.feriasVencidas || 0);
+    if (!Number.isInteger(vencidas) || vencidas < 0 || vencidas > 3) falhar(400, 'Férias vencidas: informe de 0 a 3 períodos.');
+    const beneficios = {};
+    for (const b of CU.BENEFICIOS) beneficios[b.id] = numeroOpcional(d.beneficios && d.beneficios[b.id], b.nome, 100000);
+    return {
+      cargo, salario: numeroOpcional(d.salario, 'Salário', 10000000), admissao, desligamento, tipoDesligamento: tipo,
+      motivoDesligamento: desligamento && CU.MOTIVOS_DESLIGAMENTO[d.motivoDesligamento] ? d.motivoDesligamento : '',
+      obsDesligamento: obs, feriasVencidas: vencidas,
+      inicioAquisitivo: d.inicioAquisitivo ? dataValida(d.inicioAquisitivo, 'Início do período aquisitivo') : '',
+      beneficios,
     };
   }
 
@@ -376,28 +434,36 @@ function criarServico(db, opcoes = {}) {
     const repetida = q('SELECT id FROM colaboradores WHERE matricula = ?').get(c.matricula);
     if (repetida && repetida.id !== id) falhar(409, `A matrícula ${c.matricula} já está cadastrada.`);
     if (id) {
-      const r = q('UPDATE colaboradores SET nome = ?, matricula = ?, sexo = ?, setor_id = ?, jornada = ?, entrada = ? WHERE id = ?')
-        .run(c.nome, c.matricula, c.sexo, c.setorId, c.jornada, c.entrada, id);
+      const r = q('UPDATE colaboradores SET nome = ?, matricula = ?, sexo = ?, setor_id = ?, jornada = ?, entrada = ?, rh = ? WHERE id = ?')
+        .run(c.nome, c.matricula, c.sexo, c.setorId, c.jornada, c.entrada, JSON.stringify(c.rh), id);
       if (!r.changes) falhar(404, 'Colaborador não encontrado.');
       return id;
     }
     const novo = novoId();
-    q('INSERT INTO colaboradores (id, nome, matricula, sexo, setor_id, jornada, entrada) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(novo, c.nome, c.matricula, c.sexo, c.setorId, c.jornada, c.entrada);
+    q('INSERT INTO colaboradores (id, nome, matricula, sexo, setor_id, jornada, entrada, rh) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(novo, c.nome, c.matricula, c.sexo, c.setorId, c.jornada, c.entrada, JSON.stringify(c.rh));
     return novo;
   }
 
   function salvarColaborador(ator, d) {
     exigir(ator, 'operador');
     const c = normalizarColab(d);
+    const antes = d.id ? q('SELECT rh FROM colaboradores WHERE id = ?').get(d.id) : null;
     const id = gravarColab(c, d.id);
-    auditar(ator, d.id ? 'colaborador.alterar' : 'colaborador.criar', `${c.matricula} ${c.nome}`);
+    const desligouAgora = c.rh.desligamento && (!antes || JSON.parse(antes.rh || '{}').desligamento !== c.rh.desligamento);
+    auditar(ator, desligouAgora ? 'colaborador.desligar' : d.id ? 'colaborador.alterar' : 'colaborador.criar',
+      `${c.matricula} ${c.nome}${desligouAgora ? ` em ${dataBR(c.rh.desligamento)} (${CU.TIPOS_DESLIGAMENTO[c.rh.tipoDesligamento].nome})` : ''}`);
     return colabDeLinha(q('SELECT * FROM colaboradores WHERE id = ?').get(id));
   }
 
   function removerColaborador(ator, id) {
     exigir(ator, 'operador');
     const c = q('SELECT * FROM colaboradores WHERE id = ?').get(id) || falhar(404, 'Colaborador não encontrado.');
+    const n = q('SELECT COUNT(*) AS n FROM folha_lancamentos WHERE colaborador_id = ?').get(id).n;
+    if (n) {
+      falhar(409, `${c.nome} tem ${n} lançamento(s) de folha. Para manter o histórico de custos e o turnover, ` +
+        'registre o desligamento no cadastro em vez de excluir.');
+    }
     q('DELETE FROM colaboradores WHERE id = ?').run(id);
     auditar(ator, 'colaborador.excluir', `${c.matricula} ${c.nome}`);
   }
@@ -478,8 +544,10 @@ function criarServico(db, opcoes = {}) {
 
   function configMotor(inicio, fim) {
     const c = config();
+    // desligados antes do período ou admitidos depois dele ficam fora da escala
+    const ativos = lerColaboradores().filter((c) => (!c.admissao || c.admissao <= fim) && (!c.desligamento || c.desligamento >= inicio));
     return {
-      inicio, fim, setores: lerSetores(), colaboradores: lerColaboradores(),
+      inicio, fim, setores: lerSetores(), colaboradores: ativos,
       feriadosExtras: q('SELECT data, nome FROM feriados').all().map((f) => ({ ...f })),
       regras: c.regras, incluirFacultativos: c.incluirFacultativos,
     };
@@ -529,7 +597,7 @@ function criarServico(db, opcoes = {}) {
   // ------------------------------------------- exemplo, limpeza, backup
 
   function limparTabelas() {
-    db.exec('DELETE FROM escala; DELETE FROM colaboradores; DELETE FROM setores; DELETE FROM feriados; DELETE FROM configuracoes;');
+    db.exec('DELETE FROM folha_lancamentos; DELETE FROM folha_competencias; DELETE FROM escala; DELETE FROM colaboradores; DELETE FROM setores; DELETE FROM feriados; DELETE FROM configuracoes;');
   }
 
   function carregarExemplo(ator) {
@@ -539,15 +607,41 @@ function criarServico(db, opcoes = {}) {
       ['Vendas', 4, todos, true], ['Administrativo', 1, [false, true, true, true, true, true, false], false],
       ['Segurança', 1, todos, true],
     ];
+    // [nome, sexo, setor, jornada, entrada, cargo, salário, admissão, extras]
+    const atual = new Date(agora()).toISOString().slice(0, 7);
+    const mes = (n, dia) => `${CU.somarMes(atual, n)}-${dia}`;
     const pessoas = [
-      ['Ana Souza', 'F', 0, '6x1', '08:00'], ['Bruno Lima', 'M', 0, '6x1', '08:00'],
-      ['Carla Mendes', 'F', 0, '6x1', '10:00'], ['Diego Alves', 'M', 0, '6x1', '10:00'],
-      ['Eduarda Rocha', 'F', 0, '6x1', '12:00'], ['Felipe Costa', 'M', 0, '6x1', '12:00'],
-      ['Gabriela Nunes', 'F', 0, '6x1', '13:00'], ['Henrique Dias', 'M', 0, '6x1', '13:00'],
-      ['Isabela Martins', 'F', 1, '5x2', '08:00'], ['João Pereira', 'M', 1, '5x2-40', '09:00'],
-      ['Karina Ferreira', 'F', 2, '12x36', '07:00'], ['Lucas Oliveira', 'M', 2, '12x36', '07:00'],
-      ['Marcos Ribeiro', 'M', 2, '12x36', '19:00'], ['Natália Gomes', 'F', 2, '12x36', '19:00'],
+      ['Ana Souza', 'F', 0, '6x1', '08:00', 'Vendedora', 2350, '2021-03-08', { he50: [8, 14] }],
+      ['Bruno Lima', 'M', 0, '6x1', '08:00', 'Vendedor', 2350, '2022-07-11', { he50: [0, 6] }],
+      ['Carla Mendes', 'F', 0, '6x1', '10:00', 'Supervisora de vendas', 3400, '2019-05-02', { feriasVencidas: 1, saude: 770 }],
+      ['Diego Alves', 'M', 0, '6x1', '10:00', 'Vendedor', 2350, '2020-09-14', { feriasVencidas: 2 }],
+      ['Eduarda Rocha', 'F', 0, '6x1', '12:00', 'Vendedora', 2250, '2023-01-16', {}],
+      ['Felipe Costa', 'M', 0, '6x1', '12:00', 'Vendedor', 2450, '2021-11-03', { he50: [18, 28] }],
+      ['Gabriela Nunes', 'F', 0, '6x1', '13:00', 'Vendedora', 2250, '2024-02-05', { banco: [9, 12, 0, 2] }],
+      ['Henrique Dias', 'M', 0, '6x1', '13:00', 'Vendedor', 2150, '2024-08-19', {}],
+      ['Isabela Martins', 'F', 1, '5x2', '08:00', 'Analista de RH', 4200, '2020-02-10', { banco: [4, 10, 2, 8], saude: 770 }],
+      ['João Pereira', 'M', 1, '5x2-40', '09:00', 'Assistente financeiro', 3800, '2022-04-04', { he50: [0, 5], banco: [3, 8, 0, 6] }],
+      ['Karina Ferreira', 'F', 2, '12x36', '07:00', 'Vigilante', 2550, '2021-06-01', { he100: true }],
+      ['Lucas Oliveira', 'M', 2, '12x36', '07:00', 'Vigilante', 2550, '2023-09-11', { he100: true }],
+      ['Marcos Ribeiro', 'M', 2, '12x36', '19:00', 'Vigilante', 2550, '2020-12-07', { he100: true, noturno: 98 }],
+      ['Natália Gomes', 'F', 2, '12x36', '19:00', 'Vigilante', 2550, mes(-3, '05'), { noturno: 98 }],
+      // desligados no período (histórico para o turnover)
+      ['Otávio Prado', 'M', 0, '6x1', '08:00', 'Vendedor', 2350, '2023-02-13', {
+        desligamento: mes(-4, '18'), tipoDesligamento: 'pedido', motivoDesligamento: 'concorrencia',
+        obsDesligamento: 'Recebeu proposta com salário 15% maior.' }],
+      ['Paula Teixeira', 'F', 0, '6x1', '10:00', 'Vendedora', 2250, mes(-9, '03'), {
+        desligamento: mes(-2, '10'), tipoDesligamento: 'sem_justa', motivoDesligamento: 'desempenho' }],
+      ['Rafael Moura', 'M', 2, '12x36', '19:00', 'Vigilante', 2550, mes(-5, '02'), {
+        desligamento: CU.ultimoDia(CU.somarMes(atual, -3)), tipoDesligamento: 'termino', motivoDesligamento: 'fim_contrato', noturno: 98 }],
     ];
+    // gerador pseudoaleatório determinístico: o exemplo sai igual a cada carga
+    let semente = 20240611;
+    const sorteio = () => {
+      semente = (semente * 1103515245 + 12345) % 2147483648;
+      return semente / 2147483648;
+    };
+    const entre = (a, b) => Math.round(a + sorteio() * (b - a));
+    const motivos = Object.keys(CU.MOTIVOS_ATESTADO);
     db.transacao(() => {
       limparTabelas();
       const ids = setores.map(([nome, minimo, dias, fer]) => {
@@ -556,9 +650,52 @@ function criarServico(db, opcoes = {}) {
           .run(id, nome, minimo, JSON.stringify(dias), fer ? 1 : 0);
         return id;
       });
-      pessoas.forEach(([nome, sexo, s, jornada, entrada], k) => {
-        q('INSERT INTO colaboradores (id, nome, matricula, sexo, setor_id, jornada, entrada) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(novoId(), nome, String(10001 + k), sexo, ids[s], jornada, entrada);
+      const colabs = pessoas.map(([nome, sexo, s, jornada, entrada, cargo, salario, admissao, x], k) => {
+        const c = {
+          id: novoId(), nome, matricula: String(10001 + k), sexo, setorId: ids[s], jornada, entrada, cargo, salario, admissao,
+          desligamento: x.desligamento || '', tipoDesligamento: x.tipoDesligamento || '', motivoDesligamento: x.motivoDesligamento || '',
+          obsDesligamento: x.obsDesligamento || '', feriasVencidas: x.feriasVencidas || 0, inicioAquisitivo: '',
+          beneficios: {
+            vt: jornada === '12x36' ? 120 : 176, vr: s === 1 ? 660 : 550, va: 250, saude: x.saude || 385, seguro: 14.9, outrosBeneficios: '',
+          },
+          extras: x, setor: s,
+        };
+        const n = normalizarColab(c);
+        q('INSERT INTO colaboradores (id, nome, matricula, sexo, setor_id, jornada, entrada, rh) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(c.id, n.nome, n.matricula, n.sexo, n.setorId, n.jornada, n.entrada, JSON.stringify(n.rh));
+        return c;
+      });
+      // seis meses de folha com horas extras, ocorrências, banco de horas e sinistralidade do plano de saúde
+      const fatores = [0.58, 0.64, 0.71, 0.69, 0.78, 0.82];
+      CU.listarCompetencias(CU.somarMes(atual, -6), CU.somarMes(atual, -1)).forEach((comp, m) => {
+        garantirCompetencia(comp);
+        let premio = 0;
+        for (const c of colabs) {
+          if (!CU.ativoNoMes(c, comp)) continue;
+          const x = c.extras;
+          const l = lancamentoPadrao(c);
+          // mês de admissão ou de desligamento: salário proporcional aos dias
+          const ini = c.admissao > CU.primeiroDia(comp) ? Number(c.admissao.slice(8)) : 1;
+          const fim = c.desligamento && c.desligamento < CU.ultimoDia(comp) ? Number(c.desligamento.slice(8)) : 30;
+          const dias = Math.min(30, fim) - ini + 1;
+          l.salario = CU.centavos(c.salario * dias / 30);
+          if (c.setor === 2) l.adicionais = CU.centavos(l.salario * 0.3); // periculosidade dos vigilantes (CLT art. 193)
+          if (x.he50) l.he50 = entre(x.he50[0], x.he50[1]);
+          else if (sorteio() < 0.2) l.he50 = entre(1, 4);
+          if (x.he100 && sorteio() < 0.35) l.he100 = 12;
+          if (x.noturno) l.noturno = Math.round(x.noturno * dias / 30);
+          if (sorteio() < 0.1) l.faltas = c.jornada === '12x36' ? 12 : 7.33;
+          if (sorteio() < 0.25) l.atrasos = entre(1, 4) / 2;
+          if (sorteio() < 0.15) { l.atestadoDias = entre(1, 3); l.atestadoMotivo = motivos[entre(0, motivos.length - 1)]; }
+          if (c.nome === 'Diego Alves' && m === 4) { l.atestadoDias = 18; l.atestadoMotivo = 'osteomuscular'; }
+          if (c.nome === 'Eduarda Rocha' && m >= 3) { l.atestadoDias = entre(2, 4); l.atestadoMotivo = 'mental'; }
+          if (x.banco) { l.bhCredito = entre(x.banco[0], x.banco[1]); l.bhDebito = entre(x.banco[2], x.banco[3]); }
+          if (c.desligamento && c.desligamento.slice(0, 7) === comp) { l.vt = CU.centavos(l.vt * dias / 30); l.vr = CU.centavos(l.vr * dias / 30); }
+          premio += l.saude;
+          gravarLancamento(comp, c.id, normalizarLancamento(l, c.nome));
+        }
+        q('UPDATE folha_competencias SET dados = ? WHERE competencia = ?')
+          .run(JSON.stringify({ premioSaude: '', sinistrosSaude: CU.centavos(premio * fatores[m]) }), comp);
       });
     });
     auditar(ator, 'dados.exemplo', null);
@@ -839,19 +976,196 @@ function criarServico(db, opcoes = {}) {
     auditar(ator, 'distrato.documento', `${c.razao_social || ''}: ${formato === 'pdf' ? 'PDF' : 'Word'}`);
   }
 
+  // ------------------------------------------------------ custos de pessoal
+
+  function lerParametrosCustos() {
+    const l = q("SELECT valor FROM configuracoes WHERE chave = 'custos'").get();
+    return CU.parametros(l ? JSON.parse(l.valor) : {});
+  }
+
+  const competenciaDeLinha = (l) => ({ competencia: l.competencia, ...JSON.parse(l.dados), criadaEm: l.criada_em, atualizadaEm: l.atualizada_em });
+  const lancamentoDeLinha = (l) => ({ competencia: l.competencia, colaboradorId: l.colaborador_id, ...JSON.parse(l.dados) });
+
+  function custos(ator) {
+    exigir(ator, 'operador');
+    return {
+      parametros: lerParametrosCustos(),
+      competencias: q('SELECT * FROM folha_competencias ORDER BY competencia').all().map(competenciaDeLinha),
+      lancamentos: q('SELECT * FROM folha_lancamentos ORDER BY competencia').all().map(lancamentoDeLinha),
+    };
+  }
+
+  function salvarParametrosCustos(ator, d) {
+    exigir(ator, 'operador');
+    const faixa = (k, rotulo, min, max) => {
+      const v = CU.lerNumero(d[k]);
+      if (v == null || v < min || v > max) falhar(400, `${rotulo}: informe um valor de ${String(min).replace('.', ',')} a ${String(max).replace('.', ',')}.`);
+      return v;
+    };
+    if (!CU.REGIMES[d.regime]) falhar(400, 'Regime tributário inválido.');
+    const p = {
+      regime: d.regime, inss: faixa('inss', 'INSS patronal', 0, 30), rat: faixa('rat', 'RAT', 0, 3),
+      fap: faixa('fap', 'FAP', 0.5, 2), terceiros: faixa('terceiros', 'Terceiros', 0, 10), fgts: faixa('fgts', 'FGTS', 0, 10),
+      alertaSinistralidade: faixa('alertaSinistralidade', 'Alerta de sinistralidade', 1, 200),
+      limiteSinistralidade: faixa('limiteSinistralidade', 'Limite de sinistralidade', 1, 200),
+      alertaHorasExtras: faixa('alertaHorasExtras', 'Alerta de horas extras', 0, 300),
+      alertaBancoHoras: faixa('alertaBancoHoras', 'Alerta de banco de horas', 0, 1000),
+    };
+    if (p.limiteSinistralidade < p.alertaSinistralidade) falhar(400, 'O limite de sinistralidade deve ser maior ou igual ao alerta.');
+    q("INSERT INTO configuracoes (chave, valor) VALUES ('custos', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor")
+      .run(JSON.stringify(p));
+    const e = CU.encargos(p);
+    auditar(ator, 'custos.parametros', `${CU.REGIMES[p.regime]}; encargos de ${String(CU.centavos(e.total)).replace('.', ',')}% sobre a remuneração`);
+    return p;
+  }
+
+  function competenciaValida(comp) {
+    if (!CU.competenciaValida(comp)) falhar(400, 'Competência inválida (use AAAA-MM).');
+    return comp;
+  }
+
+  /** Lançamento com os valores do cadastro (salário e benefícios). */
+  function lancamentoPadrao(c) {
+    const l = {};
+    for (const campo of CU.CAMPOS) l[campo.id] = campo.tipo === 'motivo' ? '' : 0;
+    l.salario = Number(c.salario) || 0;
+    for (const b of CU.BENEFICIOS) l[b.id] = Number(c.beneficios[b.id]) || 0;
+    return l;
+  }
+
+  function normalizarLancamento(d, rotulo) {
+    const out = {};
+    const limites = { moeda: 10000000, horas: 744, dias: 31 };
+    for (const c of CU.CAMPOS) {
+      if (c.tipo === 'motivo') continue;
+      const v = CU.lerNumero(d[c.id]);
+      if (v == null) {
+        if (d[c.id] != null && String(d[c.id]).trim() !== '') falhar(400, `${rotulo}: ${c.nome} inválido.`);
+        out[c.id] = 0;
+        continue;
+      }
+      if (v < 0 || v > limites[c.tipo]) falhar(400, `${rotulo}: ${c.nome} inválido.`);
+      if (c.tipo === 'dias' && !Number.isInteger(v)) falhar(400, `${rotulo}: ${c.nome} deve ser um número inteiro de dias.`);
+      out[c.id] = c.tipo === 'moeda' ? CU.centavos(v) : Math.round(v * 100) / 100;
+    }
+    out.atestadoMotivo = out.atestadoDias ? (CU.MOTIVOS_ATESTADO[d.atestadoMotivo] ? d.atestadoMotivo : 'outros') : '';
+    return out;
+  }
+
+  const rotuloComp = (comp) => CU.rotuloComp(comp);
+  const gravarLancamento = (comp, colabId, l) => q(`INSERT INTO folha_lancamentos (competencia, colaborador_id, dados) VALUES (?, ?, ?)
+    ON CONFLICT(competencia, colaborador_id) DO UPDATE SET dados = excluded.dados`).run(comp, colabId, JSON.stringify(l));
+  const garantirCompetencia = (comp) => q(`INSERT INTO folha_competencias (competencia, dados, criada_em, atualizada_em)
+    VALUES (?, '{}', ?, ?) ON CONFLICT(competencia) DO NOTHING`).run(comp, iso(), iso());
+  const tocarCompetencia = (comp) => q('UPDATE folha_competencias SET atualizada_em = ? WHERE competencia = ?').run(iso(), comp);
+
+  /** Cria a competência com um lançamento para cada colaborador com vínculo no mês. */
+  function abrirCompetencia(ator, comp) {
+    exigir(ator, 'operador');
+    competenciaValida(comp);
+    let criados = 0;
+    db.transacao(() => {
+      garantirCompetencia(comp);
+      const existe = q('SELECT 1 FROM folha_lancamentos WHERE competencia = ? AND colaborador_id = ?');
+      for (const c of lerColaboradores()) {
+        if (!CU.ativoNoMes(c, comp) || existe.get(comp, c.id)) continue;
+        gravarLancamento(comp, c.id, lancamentoPadrao(c));
+        criados++;
+      }
+      tocarCompetencia(comp);
+    });
+    auditar(ator, 'folha.abrir', `${rotuloComp(comp)}: ${criados} lançamento(s) criado(s)`);
+    return custos(ator);
+  }
+
+  function salvarFolha(ator, comp, d) {
+    exigir(ator, 'operador');
+    competenciaValida(comp);
+    const linhaComp = q('SELECT * FROM folha_competencias WHERE competencia = ?').get(comp) ||
+      falhar(404, `A competência ${rotuloComp(comp)} não foi aberta.`);
+    const lista = Array.isArray(d.lancamentos) ? d.lancamentos : [];
+    if (lista.length > 5000) falhar(400, 'Envie no máximo 5000 lançamentos por vez.');
+    const dadosComp = JSON.parse(linhaComp.dados);
+    if ('premioSaude' in d) dadosComp.premioSaude = numeroOpcional(d.premioSaude, 'Fatura do plano de saúde', 100000000);
+    if ('sinistrosSaude' in d) dadosComp.sinistrosSaude = numeroOpcional(d.sinistrosSaude, 'Sinistros do plano de saúde', 100000000);
+    let salvos = 0;
+    let removidos = 0;
+    db.transacao(() => {
+      q('UPDATE folha_competencias SET dados = ?, atualizada_em = ? WHERE competencia = ?').run(JSON.stringify(dadosComp), iso(), comp);
+      for (const l of lista) {
+        const c = q('SELECT * FROM colaboradores WHERE id = ?').get(l && l.colaboradorId) || falhar(400, 'Colaborador do lançamento não encontrado.');
+        if (l.remover) {
+          removidos += q('DELETE FROM folha_lancamentos WHERE competencia = ? AND colaborador_id = ?').run(comp, c.id).changes;
+          continue;
+        }
+        gravarLancamento(comp, c.id, normalizarLancamento(l, `${c.nome} (${c.matricula})`));
+        salvos++;
+      }
+    });
+    auditar(ator, 'folha.salvar', `${rotuloComp(comp)}: ${salvos} lançamento(s) salvo(s)${removidos ? `, ${removidos} removido(s)` : ''}`);
+    return custos(ator);
+  }
+
+  /** Importa uma planilha: cada linha (pela matrícula) atualiza só as colunas informadas. */
+  function importarFolha(ator, comp, linhas) {
+    exigir(ator, 'operador');
+    competenciaValida(comp);
+    if (!Array.isArray(linhas) || !linhas.length) falhar(400, 'Nenhuma linha para importar.');
+    if (linhas.length > 5000) falhar(400, 'Importe no máximo 5000 linhas por vez.');
+    const ignorados = [];
+    let importados = 0;
+    db.transacao(() => {
+      garantirCompetencia(comp);
+      for (const [i, l] of linhas.entries()) {
+        const ref = `linha ${l.linha || i + 2}`;
+        const linhaColab = q('SELECT * FROM colaboradores WHERE matricula = ?').get(String(l.matricula || '').trim());
+        if (!linhaColab) { ignorados.push(`${ref} (matrícula ${l.matricula} não cadastrada)`); continue; }
+        const c = colabDeLinha(linhaColab);
+        const atual = q('SELECT dados FROM folha_lancamentos WHERE competencia = ? AND colaborador_id = ?').get(comp, c.id);
+        const base = atual ? JSON.parse(atual.dados) : lancamentoPadrao(c);
+        for (const campo of CU.CAMPOS) if (l[campo.id] != null && l[campo.id] !== '') base[campo.id] = l[campo.id];
+        try {
+          gravarLancamento(comp, c.id, normalizarLancamento(base, `${ref}, ${c.nome}`));
+          importados++;
+        } catch (e) {
+          if (!(e instanceof ErroApp)) throw e;
+          ignorados.push(e.message.replace(/\.$/, ''));
+        }
+      }
+      tocarCompetencia(comp);
+    });
+    auditar(ator, 'folha.importar', `${rotuloComp(comp)}: ${importados} linha(s) importada(s), ${ignorados.length} ignorada(s)`);
+    return { importados, ignorados, ...custos(ator) };
+  }
+
+  function removerCompetencia(ator, comp) {
+    exigir(ator, 'operador');
+    competenciaValida(comp);
+    const n = q('SELECT COUNT(*) AS n FROM folha_lancamentos WHERE competencia = ?').get(comp).n;
+    if (!q('DELETE FROM folha_competencias WHERE competencia = ?').run(comp).changes) falhar(404, 'Competência não encontrada.');
+    auditar(ator, 'folha.excluir', `${rotuloComp(comp)} (${n} lançamento(s))`);
+    return custos(ator);
+  }
+
   function backup(ator) {
     exigir(ator, 'admin');
     const d = dados(ator);
     const contratos = q('SELECT * FROM contratos_representante').all().map(contratoDeLinha);
     const distratos = q('SELECT * FROM distratos').all().map((l) => ({ ...JSON.parse(l.dados), criadoPor: l.criado_por, criadoEm: l.criado_em }));
     const indicesSalvos = q('SELECT serie, mes, valor, fonte FROM indices ORDER BY serie, mes').all().map((l) => ({ ...l }));
+    const folha = {
+      parametros: lerParametrosCustos(),
+      competencias: q('SELECT * FROM folha_competencias ORDER BY competencia').all().map(competenciaDeLinha),
+      lancamentos: q('SELECT * FROM folha_lancamentos ORDER BY competencia').all().map(lancamentoDeLinha),
+    };
     auditar(ator, 'dados.backup', null);
-    return { versao: 3, exportadoEm: iso(), ...d, contratos, distratos, indices: indicesSalvos };
+    return { versao: 4, exportadoEm: iso(), ...d, contratos, distratos, indices: indicesSalvos, folha };
   }
 
   function restaurar(ator, b) {
     exigir(ator, 'admin');
     if (!b || !Array.isArray(b.setores) || !Array.isArray(b.colaboradores)) falhar(400, 'Arquivo de backup inválido.');
+    const mapaColab = {};
     db.transacao(() => {
       limparTabelas();
       const mapaSetor = {};
@@ -862,7 +1176,6 @@ function criarServico(db, opcoes = {}) {
         q('INSERT INTO setores (id, nome, minimo_por_dia, dias_funcionamento, funciona_feriados) VALUES (?, ?, ?, ?, ?)')
           .run(id, n.nome, n.minimo, JSON.stringify(n.dias), n.feriados ? 1 : 0);
       }
-      const mapaColab = {};
       for (const c of b.colaboradores) {
         const n = normalizarColab({ ...c, setorId: mapaSetor[c.setorId] });
         mapaColab[c.id] = gravarColab(n, null);
@@ -887,6 +1200,25 @@ function criarServico(db, opcoes = {}) {
           if (mapaColab[idAntigo] && Array.isArray(lista) && lista.length === e.dias.length) celulas[mapaColab[idAntigo]] = lista;
         }
         gravarEscala(ator, { inicio: dataValida(e.inicio, 'Data'), fim: dataValida(e.fim, 'Data'), dias: e.dias, celulas }, true);
+      }
+      const f = b.folha;
+      if (f && typeof f === 'object') {
+        if (f.parametros) st.run('custos', JSON.stringify(CU.parametros(f.parametros)));
+        for (const c of Array.isArray(f.competencias) ? f.competencias : []) {
+          const comp = competenciaValida(c.competencia);
+          const dadosComp = {
+            premioSaude: numeroOpcional(c.premioSaude, 'Fatura do plano de saúde', 100000000),
+            sinistrosSaude: numeroOpcional(c.sinistrosSaude, 'Sinistros do plano de saúde', 100000000),
+          };
+          q('INSERT OR REPLACE INTO folha_competencias (competencia, dados, criada_em, atualizada_em) VALUES (?, ?, ?, ?)')
+            .run(comp, JSON.stringify(dadosComp), c.criadaEm || iso(), c.atualizadaEm || iso());
+        }
+        for (const l of Array.isArray(f.lancamentos) ? f.lancamentos : []) {
+          const novo = mapaColab[l.colaboradorId];
+          if (!novo || !CU.competenciaValida(l.competencia)) continue;
+          garantirCompetencia(l.competencia);
+          gravarLancamento(l.competencia, novo, normalizarLancamento(l, `Lançamento de ${rotuloComp(l.competencia)}`));
+        }
       }
     });
     if (Array.isArray(b.contratos)) {
@@ -925,7 +1257,8 @@ function criarServico(db, opcoes = {}) {
       });
     }
     auditar(ator, 'dados.restaurar', `${b.setores.length} setor(es), ${b.colaboradores.length} colaborador(es)` +
-      (Array.isArray(b.contratos) ? `, ${b.contratos.length} contrato(s)` : ''));
+      (Array.isArray(b.contratos) ? `, ${b.contratos.length} contrato(s)` : '') +
+      (b.folha && Array.isArray(b.folha.lancamentos) ? `, ${b.folha.lancamentos.length} lançamento(s) de folha` : ''));
   }
 
   return {
@@ -937,6 +1270,7 @@ function criarServico(db, opcoes = {}) {
     listarContratos, salvarContrato, removerContrato, registrarDocumento,
     indices, atualizarIndices, salvarIndice, removerIndice,
     listarDistratos, salvarDistrato, removerDistrato, registrarDocumentoDistrato,
+    custos, salvarParametrosCustos, abrirCompetencia, salvarFolha, importarFolha, removerCompetencia,
   };
 }
 

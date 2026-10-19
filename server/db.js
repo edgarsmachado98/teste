@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS colaboradores (
   sexo      TEXT NOT NULL CHECK (sexo IN ('F', 'M')),
   setor_id  TEXT NOT NULL REFERENCES setores(id),
   jornada   TEXT NOT NULL,
-  entrada   TEXT NOT NULL
+  entrada   TEXT NOT NULL,
+  rh        TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS feriados (
@@ -106,6 +107,21 @@ CREATE TABLE IF NOT EXISTS distratos (
   UNIQUE (contrato_id, representada)
 );
 
+CREATE TABLE IF NOT EXISTS folha_competencias (
+  competencia   TEXT PRIMARY KEY,
+  dados         TEXT NOT NULL DEFAULT '{}',
+  criada_em     TEXT NOT NULL,
+  atualizada_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS folha_lancamentos (
+  competencia    TEXT NOT NULL REFERENCES folha_competencias(competencia) ON DELETE CASCADE,
+  colaborador_id TEXT NOT NULL REFERENCES colaboradores(id),
+  dados          TEXT NOT NULL,
+  PRIMARY KEY (competencia, colaborador_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_folha_colaborador ON folha_lancamentos(colaborador_id);
 CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes(usuario_id);
 CREATE INDEX IF NOT EXISTS idx_contratos_cnpj ON contratos_representante(cnpj);
 CREATE INDEX IF NOT EXISTS idx_colaboradores_setor ON colaboradores(setor_id);
@@ -117,6 +133,10 @@ function abrirBanco(arquivo) {
   db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   if (arquivo !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
   db.exec(ESQUEMA);
+  // bancos criados antes do módulo de custos: dados contratuais do colaborador
+  if (!db.prepare('PRAGMA table_info(colaboradores)').all().some((c) => c.name === 'rh')) {
+    db.exec("ALTER TABLE colaboradores ADD COLUMN rh TEXT NOT NULL DEFAULT '{}'");
+  }
 
   /** Executa fn dentro de uma transação; desfaz tudo se lançar erro. */
   db.transacao = (fn) => {

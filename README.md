@@ -13,7 +13,7 @@ cada uma com seu login e perfil, e todas as alterações ficam registradas no hi
 |--------|----------|-----------|
 | Cadastros | Disponível | Colaboradores (nome, matrícula, sexo, setor, jornada e horário) e setores. Base de todos os módulos |
 | Escalas de trabalho | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
-| Custos de pessoal | Em breve | Custo por funcionário com INSS, FGTS e provisões de férias e 13º salário |
+| Custos de pessoal | Disponível | Folha mensal com encargos, provisões e benefícios, e 12 relatórios de custos, benefícios, turnover e produtividade |
 | Contratos de representantes | Disponível | Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, em PDF e Word |
 | Distratos | Disponível | Cálculo do distrato com correção pelo IGP-M e termo de distrato e aviso prévio em PDF e Word |
 
@@ -60,8 +60,8 @@ O administrador também pode exportar e restaurar um backup em JSON pela própri
 | Perfil | Pode fazer |
 |--------|-----------|
 | Administrador | Tudo: usuários, histórico de alterações, backup/restauração e apagar dados |
-| Operador | Cadastrar setores e colaboradores, ajustar regras e gerar/editar escalas |
-| Consulta | Apenas visualizar as escalas |
+| Operador | Cadastrar setores e colaboradores, ajustar regras, gerar/editar escalas, lançar a folha e ver os custos |
+| Consulta | Apenas visualizar as escalas (não vê salários, benefícios nem o módulo de custos) |
 
 Segurança:
 
@@ -73,6 +73,63 @@ Segurança:
 - Todas as permissões são verificadas no servidor; proteção contra CSRF e cabeçalhos de segurança (CSP, X-Frame-Options).
 - O sistema exige sempre ao menos um administrador ativo.
 - **Histórico de alterações**: quem fez o quê e quando (logins, cadastros, geração e ajustes de escala).
+
+## Custos de pessoal
+
+### Cadastro
+
+Na ficha do colaborador (Cadastros › Colaboradores), em **Contrato e custos**: cargo, salário, admissão,
+benefícios (custo mensal da empresa: vale-transporte, refeição, alimentação, plano de saúde, seguro
+de vida e outros), férias vencidas e **desligamento** (data, tipo, motivo da entrevista de desligamento e
+observação). Quem saiu da empresa deve ser **desligado**, não excluído: sai das próximas escalas e
+continua nos relatórios. Colaboradores com lançamentos de folha não podem ser excluídos.
+
+### Lançamentos (folha mensal)
+
+1. Escolha o mês e clique em **Abrir competência**: o sistema cria um lançamento para cada colaborador com
+   vínculo no mês, já com o salário e os benefícios do cadastro.
+2. Informe na grade: horas extras 50% e 100%, horas noturnas, outros adicionais (insalubridade,
+   periculosidade, comissões), faltas, atrasos e saídas antecipadas (horas), atestados (dias e motivo),
+   banco de horas (crédito e compensação) e benefícios do mês. Enter desce para a linha de baixo.
+3. Ou traga da planilha: **Colar da planilha** (copiar e colar do Excel) ou **Importar CSV**. A primeira linha
+   é o cabeçalho com a coluna `matricula`; só as colunas reconhecidas são alteradas. **Baixar modelo**
+   gera a planilha da competência com os nomes das colunas.
+4. Informe também a fatura e os **sinistros** do plano de saúde do mês (relatório da operadora).
+
+### Como o custo é calculado
+
+| Item | Regra |
+|------|-------|
+| Valor-hora | salário ÷ divisor da jornada (220 para 44h, 200 para 40h, 180 para 36h, 210 para 12x36) |
+| Horas extras | 50% e 100% (CF art. 7º, XVI), com reflexo no DSR proporcional a domingos e feriados do mês |
+| Adicional noturno | 20% da hora (CLT art. 73) |
+| Faltas e atrasos | descontados pelo valor-hora; atestados não descontam |
+| Encargos | INSS patronal 20%, RAT × FAP, terceiros 5,8% e FGTS 8% (Simples Nacional: só FGTS) |
+| Provisões | férias 1/12 + 1/3 e 13º 1/12, com os mesmos encargos |
+| Benefícios | valor informado no lançamento (custo da empresa) |
+
+Os percentuais (regime, RAT, FAP, terceiros) e os limites dos alertas ficam em **Encargos e alertas**.
+
+### Relatórios
+
+Todos com filtro de período e setor, impressão/PDF (A4 paisagem) e exportação CSV.
+
+| Grupo | Relatório | O que mostra |
+|-------|-----------|--------------|
+| Custos e orçamento | Headcount e massa salarial | evolução do número de colaboradores e da remuneração por setor |
+| | Horas extras e adicionais | horas e valores por setor e colaborador, horas extras recorrentes e equivalência em contratações |
+| | Provisão de férias e 13º | passivo acumulado na data (avos, férias vencidas e em dobro, encargos) e provisão mês a mês |
+| | Custo total por colaborador | salário, variáveis, encargos, provisões e benefícios; custo ÷ salário |
+| Benefícios | Sinistralidade do plano de saúde | sinistros ÷ prêmio no mês e acumulado de 12 meses, com faixas de alerta (70% e 75%) |
+| | Custo per capita de benefícios | custo de cada benefício por vida ativa e por beneficiário |
+| | Absenteísmo por motivo médico | dias de atestado por grupo de motivo e setor; afastamentos acima de 15 dias (INSS) |
+| Movimentação | Turnover | admissões, desligamentos e taxa ((admissões + desligamentos) ÷ 2 ÷ headcount médio) |
+| | Voluntário e involuntário | pedidos de demissão × dispensas, tempo de casa dos desligados |
+| | Motivos de desligamento | motivos da entrevista de desligamento e observações |
+| Produtividade | Absenteísmo geral | horas perdidas (faltas, atrasos, atestados) ÷ horas previstas |
+| | Banco de horas | saldos por colaborador e passivo se pagos como hora extra |
+
+**Carregar exemplo** traz seis meses de folha fictícia para conhecer os relatórios.
 
 ## Contratos de representantes
 
@@ -221,6 +278,9 @@ js/distrato-calculo.js  cálculo do distrato (IGP-M, indenização, aviso prévi
 js/distrato-modelo.js   termos de distrato e aviso prévio das duas empresas
 js/distratos.js      tela de distratos
 js/documento-html.js prévia, impressão (PDF) e Word compartilhados pelos documentos
+js/custos-calculo.js custo mensal, encargos, provisões e relatórios da folha (navegador e servidor)
+js/custos.js         tela de custos: lançamentos, relatórios e parâmetros
+js/tema.js           modo claro/escuro
 img/                 logotipos usados nos contratos
 server/server.js     servidor HTTP, rotas da API, sessão e segurança
 server/servico.js    regras de negócio e permissões

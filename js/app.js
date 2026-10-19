@@ -3,6 +3,7 @@
   'use strict';
 
   const M = window.EscalaMotor;
+  const CU = window.EscalaCustos;
   const api = window.EscalaApi;
   const $ = (sel) => document.querySelector(sel);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => (
@@ -89,6 +90,7 @@
       if (e.status !== 401) avisar(e.message);
     }
     render();
+    window.dispatchEvent(new CustomEvent('dados-atualizados'));
   }
 
   /**
@@ -107,9 +109,16 @@
     return ok;
   }
 
+  /** Colaboradores com vínculo em algum dia do período (sem período: os não desligados). */
+  function ativosNoPeriodo(inicio, fim) {
+    if (!inicio || !fim) return estado.colaboradores.filter((c) => !c.desligamento);
+    return estado.colaboradores.filter((c) => (!c.admissao || c.admissao <= fim) && (!c.desligamento || c.desligamento >= inicio));
+  }
+
   function configMotor() {
     return {
-      setores: estado.setores, colaboradores: estado.colaboradores,
+      setores: estado.setores,
+      colaboradores: ativosNoPeriodo(estado.escala && estado.escala.inicio, estado.escala && estado.escala.fim),
       feriadosExtras: estado.feriadosExtras, regras: estado.regras,
       incluirFacultativos: estado.incluirFacultativos,
       inicio: estado.escala && estado.escala.inicio, fim: estado.escala && estado.escala.fim,
@@ -175,8 +184,9 @@
     const cumprimento = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     $('#saudacao').textContent = `${cumprimento}, ${usuario.nome.split(' ')[0]}`;
 
-    const mulheres = estado.colaboradores.filter((c) => c.sexo === 'F').length;
-    const total = estado.colaboradores.length;
+    const ativos = estado.colaboradores.filter((c) => !c.desligamento || c.desligamento >= M.formatarData(new Date()));
+    const mulheres = ativos.filter((c) => c.sexo === 'F').length;
+    const total = ativos.length;
     let escalaValor = 'Nenhuma';
     let escalaDetalhe = podeEditar() ? 'Gere a primeira em Escalas de trabalho' : 'Ainda não há escala gerada';
     let escalaClasse = '';
@@ -276,6 +286,14 @@
   const formColab = $('#form-colab');
   $('#sel-jornada').innerHTML = Object.entries(M.JORNADAS)
     .map(([k, j]) => `<option value="${k}">${esc(j.nome)}</option>`).join('');
+  $('#colab-beneficios').innerHTML = CU.BENEFICIOS.map((b) =>
+    `<label>${esc(b.nome)} (R$)<input name="ben-${b.id}" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>`).join('');
+  $('#sel-tipo-deslig').innerHTML = '<option value="">Selecione</option>' +
+    Object.entries(CU.TIPOS_DESLIGAMENTO).map(([k, t]) => `<option value="${k}">${esc(t.nome)}</option>`).join('');
+  $('#sel-motivo-deslig').innerHTML = '<option value="">Não informado</option>' +
+    Object.entries(CU.MOTIVOS_DESLIGAMENTO).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('');
+  const moedaCampo = (v) => (v === '' || v == null ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const CAMPOS_RH = ['cargo', 'admissao', 'desligamento', 'tipoDesligamento', 'motivoDesligamento', 'obsDesligamento', 'inicioAquisitivo'];
 
   function atualizarDicaJornada() {
     const j = M.JORNADAS[formColab.elements.jornada.value];
@@ -298,7 +316,14 @@
     const dados = {
       nome: f.nome.value.trim(), matricula: f.matricula.value.trim(),
       sexo: f.sexo.value, setorId: f.setorId.value, jornada: f.jornada.value, entrada: f.entrada.value,
+      salario: f.salario.value, feriasVencidas: Number(f.feriasVencidas.value), beneficios: {},
     };
+    for (const k of CAMPOS_RH) dados[k] = f[k].value.trim();
+    for (const b of CU.BENEFICIOS) dados.beneficios[b.id] = f[`ben-${b.id}`].value;
+    if (dados.desligamento && !dados.tipoDesligamento) {
+      $('#colab-desligamento').open = true;
+      return avisar('Informe o tipo de desligamento.');
+    }
     const id = f.id.value;
     const ok = await executar(() => (id ? api.put(`/api/colaboradores/${id}`, dados) : api.post('/api/colaboradores', dados)));
     if (ok) formColab.reset();
@@ -307,6 +332,7 @@
   formColab.addEventListener('reset', () => setTimeout(() => {
     formColab.elements.id.value = '';
     $('#titulo-form-colab').textContent = 'Novo colaborador';
+    formColab.querySelectorAll('details').forEach((d) => { d.open = false; });
     atualizarDicaJornada();
   }));
 
@@ -318,34 +344,47 @@
     if (b.dataset.acao === 'editar') {
       const f = formColab.elements;
       for (const k of ['id', 'nome', 'matricula', 'sexo', 'setorId', 'jornada', 'entrada']) f[k].value = c[k];
+      for (const k of CAMPOS_RH) f[k].value = c[k] || '';
+      f.salario.value = moedaCampo(c.salario);
+      f.feriasVencidas.value = String(c.feriasVencidas || 0);
+      for (const b of CU.BENEFICIOS) f[`ben-${b.id}`].value = moedaCampo(c.beneficios && c.beneficios[b.id]);
+      $('#colab-desligamento').open = !!c.desligamento;
       $('#titulo-form-colab').textContent = 'Editar colaborador';
       atualizarDicaJornada();
       f.nome.focus();
     } else if (b.dataset.acao === 'excluir') {
-      if (!(await confirmar(`Excluir ${c.nome} (matrícula ${c.matricula})?`))) return;
+      if (!(await confirmar(`Excluir ${c.nome} (matrícula ${c.matricula})?\n\nSe a pessoa saiu da empresa, prefira registrar o ` +
+        'desligamento no cadastro: assim o histórico de custos e o turnover são mantidos.'))) return;
       await executar(() => api.del(`/api/colaboradores/${c.id}`));
     }
   });
 
   $('#filtro-setor-colab').addEventListener('change', renderColaboradores);
+  $('#filtro-situacao-colab').addEventListener('change', renderColaboradores);
 
   function renderColaboradores() {
     const filtro = $('#filtro-setor-colab').value;
+    const situacao = $('#filtro-situacao-colab').value;
+    const hoje = M.formatarData(new Date());
+    const desligado = (c) => !!c.desligamento && c.desligamento < hoje;
     const lista = estado.colaboradores
       .filter((c) => !filtro || c.setorId === filtro)
+      .filter((c) => !situacao || (situacao === 'desligados') === desligado(c))
       .sort((a, b) => nomeSetor(a.setorId).localeCompare(nomeSetor(b.setorId)) || a.nome.localeCompare(b.nome));
     $('#lista-colabs').innerHTML = lista.map((c) => {
       const t = M.turnoTrabalho(c);
       return `<tr>
-        <td>${esc(c.matricula)}</td><td>${esc(c.nome)}</td>
+        <td>${esc(c.matricula)}</td><td>${esc(c.nome)}${c.cargo ? `<br><small class="suave">${esc(c.cargo)}</small>` : ''}</td>
         <td>${c.sexo === 'F' ? 'Feminino' : 'Masculino'}</td>
         <td>${esc(nomeSetor(c.setorId))}</td><td>${esc(c.jornada)}</td>
         <td>${M.horaDeMinutos(t.inicio)}–${M.horaDeMinutos(t.fim)}</td>
+        <td>${c.desligamento ? `<span class="chip ${desligado(c) ? 'ruim' : 'breve'}">${desligado(c) ? 'Desligado' : 'Sai'} em ${dataBR(c.desligamento)}</span>`
+          : `<span class="chip bom">Ativo</span>${c.admissao ? `<br><small class="suave">desde ${dataBR(c.admissao)}</small>` : ''}`}</td>
         <td class="acoes">
           <button type="button" class="mini sec" data-acao="editar" data-id="${c.id}">Editar</button>
           <button type="button" class="mini perigo" data-acao="excluir" data-id="${c.id}">Excluir</button>
         </td></tr>`;
-    }).join('') || '<tr><td colspan="7" class="vazio">Nenhum colaborador cadastrado.</td></tr>';
+    }).join('') || `<tr><td colspan="8" class="vazio">${estado.colaboradores.length ? 'Nenhum colaborador neste filtro.' : 'Nenhum colaborador cadastrado.'}</td></tr>`;
   }
 
   $('#arq-csv').addEventListener('change', async (ev) => {
@@ -365,9 +404,11 @@
     const registros = linhas.slice(1).map((linha, n) => {
       const v = linha.split(sep).map((x) => x.trim());
       const pega = (nome) => (col(nome) >= 0 ? v[col(nome)] || '' : '');
+      const data = (txt) => (/^\d{2}\/\d{2}\/\d{4}$/.test(txt) ? txt.split('/').reverse().join('-') : txt);
       return {
         linha: n + 2, nome: pega('nome'), matricula: pega('matricula'), sexo: pega('sexo').toUpperCase(),
         setor: pega('setor'), jornada: pega('jornada'), entrada: pega('entrada'),
+        cargo: pega('cargo'), salario: pega('salario'), admissao: data(pega('admissao')),
       };
     });
     let r = null;
@@ -489,7 +530,7 @@
     for (const s of setores) {
       const membros = estado.colaboradores.filter((c) => c.setorId === s.id && e.celulas[c.id])
         .sort((a, b) => a.nome.localeCompare(b.nome));
-      const novos = estado.colaboradores.filter((c) => c.setorId === s.id && !e.celulas[c.id]).length;
+      const novos = cfg.colaboradores.filter((c) => c.setorId === s.id && !e.celulas[c.id]).length;
       if (!membros.length) continue;
       const linhas = membros.map((c) => {
         const r = M.resumirColaborador(e, c);
@@ -669,6 +710,7 @@
       render();
       document.body.classList.remove('perfil-consulta', 'perfil-admin');
     },
-    mostrarAba, mostrarModulo, avisar, confirmar, abrirDialogo, esc,
+    mostrarAba, mostrarModulo, avisar, confirmar, abrirDialogo, esc, baixar,
+    estado: () => estado, podeEditar,
   };
 })();
