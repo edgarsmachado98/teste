@@ -55,6 +55,7 @@
       <div class="subitens" data-modulo="cadastros">
         <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Colaboradores</button>
         <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="centros">Centros de custo</button>
       </div>
       <button type="button" class="modulo" data-modulo="escalas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/></svg><span class="rotulo">Escalas de trabalho</span></button>
       <div class="subitens" data-modulo="escalas">
@@ -191,7 +192,13 @@
         <label class="rl-tipo">Relatório<select id="rl-tipo"></select></label>
         <label>De<input type="month" id="rl-de"></label>
         <label>Até<input type="month" id="rl-ate"></label>
-        <label>Setor<select id="rl-setor"></select></label>
+        <label>Agrupar por<select id="rl-dimensao">
+          <option value="setor">Setor</option>
+          <option value="centroCusto">Centro de custo</option>
+          <option value="departamento">Departamento</option>
+          <option value="estabelecimento">Estabelecimento</option>
+        </select></label>
+        <label><span id="rl-filtro-rotulo">Setor</span><select id="rl-setor"></select></label>
         <div class="linha-botoes">
           <button type="button" id="rl-imprimir" class="sec">Imprimir / PDF</button>
           <button type="button" id="rl-csv" class="sec">Exportar CSV</button>
@@ -428,6 +435,34 @@
       </div>
     </section>
 
+    <!-- CENTROS DE CUSTO -->
+    <section id="aba-centros" class="painel" data-modulo="cadastros">
+      <form id="form-centro" class="cartao formulario so-edicao">
+        <h2 id="titulo-form-centro">Novo centro de custo</h2>
+        <label>Código<input name="codigo" required maxlength="20" placeholder="Ex.: 18"></label>
+        <label>Nome<input name="nome" required maxlength="80" placeholder="Ex.: ADMINISTRAÇÃO DA PRODUÇÃO"></label>
+        <div class="linha-botoes">
+          <button type="submit">Salvar centro de custo</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+        <p class="dica">Os centros de custo também são criados ou renomeados automaticamente ao importar a planilha de empregados.</p>
+      </form>
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Centros de custo</h2>
+          <div class="linha-botoes">
+            <input type="search" id="busca-centro" placeholder="Buscar por código ou nome" aria-label="Buscar centro de custo">
+            <label class="botao sec so-edicao">Importar planilha<input type="file" id="arq-centros" accept=".xls,.xlsx,.csv,.txt" hidden></label>
+          </div>
+        </div>
+        <p class="dica">Importe o relatório "Centros de Custos" do sistema de folha (.xls, .xlsx ou .csv com as colunas Código e Nome).</p>
+        <table class="tabela">
+          <thead><tr><th>Código</th><th>Nome</th><th class="num">Colaboradores ativos</th><th></th></tr></thead>
+          <tbody id="lista-centros"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- COLABORADORES -->
     <section id="aba-colaboradores" class="painel" data-modulo="cadastros">
       <form id="form-colab" class="cartao formulario so-edicao">
@@ -464,6 +499,22 @@
             </div>
             <p class="dica">Sem o início do período aquisitivo, conta-se a partir da admissão.</p>
           </details>
+          <details id="colab-folha">
+            <summary>Dados da folha (centro de custo, departamento, CBO…)</summary>
+            <label>Centro de custo<select name="centroCustoCodigo" id="sel-centro-colab"></select></label>
+            <div class="duas-colunas">
+              <label>Cód. eSocial<input name="codigoESocial" maxlength="30"></label>
+              <label>CBO<input name="cbo" maxlength="10" inputmode="numeric"></label>
+              <label>Cód. departamento<input name="departamentoCodigo" maxlength="20"></label>
+              <label>Departamento<input name="departamento" maxlength="80"></label>
+              <label>Cód. estabelecimento<input name="estabelecimentoCodigo" maxlength="20"></label>
+              <label>Estabelecimento<input name="estabelecimento" maxlength="120"></label>
+              <label>Cód. sindicato<input name="sindicatoCodigo" maxlength="20"></label>
+              <label>Sindicato<input name="sindicato" maxlength="150"></label>
+              <label>Nascimento<input name="nascimento" type="date"></label>
+            </div>
+            <label class="check"><input type="checkbox" name="pcd"> Pessoa com deficiência (PcD)</label>
+          </details>
           <details id="colab-desligamento">
             <summary>Desligamento</summary>
             <label>Data do desligamento<input name="desligamento" type="date"></label>
@@ -487,15 +538,18 @@
               <option value="desligados">Desligados</option>
               <option value="">Todos</option>
             </select>
+            <input type="search" id="busca-colab" placeholder="Buscar nome ou matrícula" aria-label="Buscar colaborador">
             <select id="filtro-setor-colab" aria-label="Filtrar por setor"></select>
-            <label class="botao sec so-edicao">Importar CSV<input type="file" id="arq-csv" accept=".csv,.txt" hidden></label>
+            <select id="filtro-centro-colab" aria-label="Filtrar por centro de custo"></select>
+            <label class="botao sec so-edicao">Importar planilha<input type="file" id="arq-csv" accept=".xls,.xlsx,.csv,.txt" hidden></label>
           </div>
         </div>
-        <p class="dica">CSV com cabeçalho: <code>nome;matricula;sexo;setor;jornada;entrada</code> (sexo F/M; jornada 6x1, 5x2, 5x2-40, 6x1-6h ou 12x36) e, se quiser,
-          <code>cargo;salario;admissao</code> (data em dd/mm/aaaa). Setores inexistentes são criados. Ao importar, você escolhe se
-          cadastra as matrículas novas e quais dados atualizar nas já cadastradas (para preencher salários, basta <code>matricula;cargo;salario;admissao</code>).</p>
+        <p class="dica">Importe a planilha de empregados do sistema de folha (.xls, .xlsx ou .csv), como o relatório
+          "Empregados em Excel": matrícula (Cód Epr), nome, admissão, salário, cargo, CBO, centro de custo, departamento,
+          estabelecimento, sindicato, nascimento, sexo e PcD são reconhecidos pelo cabeçalho. Antes de importar você escolhe
+          se cadastra as matrículas novas e quais dados atualizar nas já cadastradas.</p>
         <table class="tabela">
-          <thead><tr><th>Matrícula</th><th>Nome</th><th>Sexo</th><th>Setor</th><th>Jornada</th><th>Horário</th><th>Situação</th><th></th></tr></thead>
+          <thead><tr><th>Matrícula</th><th>Nome</th><th>Sexo</th><th>Setor / centro de custo</th><th>Jornada</th><th>Horário</th><th>Situação</th><th></th></tr></thead>
           <tbody id="lista-colabs"></tbody>
         </table>
       </div>
@@ -659,6 +713,12 @@
       <label class="check"><input type="checkbox" id="imp-cadastrar"> <span id="imp-cadastrar-rotulo">Cadastrar as matrículas novas</span></label>
       <p class="dica" id="imp-cadastrar-dica" hidden></p>
       <label class="check"><input type="checkbox" id="imp-atualizar"> <span id="imp-atualizar-rotulo">Atualizar os dados das matrículas já cadastradas</span></label>
+      <label id="imp-setor-rotulo">Setor das escalas, para quem não tem setor
+        <select id="imp-setor">
+          <option value="departamento">Departamento da planilha</option>
+          <option value="centroCusto">Centro de custo da planilha</option>
+        </select>
+      </label>
       <fieldset id="imp-campos">
         <legend>Dados a atualizar</legend>
         <div class="imp-campos" id="imp-lista-campos"></div>
@@ -674,6 +734,7 @@
   <div id="impressao" aria-hidden="true"></div>
 
   <script src="js/motor.js"></script>
+  <script src="js/planilha.js"></script>
   <script src="js/custos-calculo.js"></script>
   <script src="js/api.js"></script>
   <script src="js/contrato-modelo.js"></script>

@@ -162,9 +162,13 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   rota('PUT', '/api/setores/:id', ({ usuario, corpo, p }) => servico.salvarSetor(usuario, { ...corpo, id: p.id }));
   rota('DELETE', '/api/setores/:id', ({ usuario, p }) => servico.removerSetor(usuario, p.id));
   rota('POST', '/api/colaboradores', ({ usuario, corpo }) => servico.salvarColaborador(usuario, { ...corpo, id: null }));
-  rota('POST', '/api/colaboradores/importar', ({ usuario, corpo }) => servico.importarColaboradores(usuario, corpo.linhas, corpo.opcoes));
+  rota('POST', '/api/colaboradores/importar', ({ usuario, corpo }) => servico.importarColaboradores(usuario, corpo.linhas, corpo.opcoes),
+    { limiteCorpo: LIMITE_CORPO_BACKUP });
   rota('PUT', '/api/colaboradores/:id', ({ usuario, corpo, p }) => servico.salvarColaborador(usuario, { ...corpo, id: p.id }));
   rota('DELETE', '/api/colaboradores/:id', ({ usuario, p }) => servico.removerColaborador(usuario, p.id));
+  rota('POST', '/api/centros-custo', ({ usuario, corpo }) => servico.salvarCentroCusto(usuario, corpo));
+  rota('POST', '/api/centros-custo/importar', ({ usuario, corpo }) => servico.importarCentrosCusto(usuario, corpo.linhas));
+  rota('DELETE', '/api/centros-custo/:codigo', ({ usuario, p }) => servico.removerCentroCusto(usuario, p.codigo));
   rota('PUT', '/api/regras', ({ usuario, corpo }) => servico.salvarConfig(usuario, corpo));
   rota('POST', '/api/feriados', ({ usuario, corpo }) => servico.salvarFeriado(usuario, corpo));
   rota('DELETE', '/api/feriados/:data', ({ usuario, p }) => servico.removerFeriado(usuario, p.data));

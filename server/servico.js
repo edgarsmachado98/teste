@@ -78,6 +78,12 @@ const setorDeLinha = (s) => ({
   diasFuncionamento: JSON.parse(s.dias_funcionamento), funcionaFeriados: !!s.funciona_feriados,
 });
 
+/** Dados vindos do sistema de folha (planilha de empregados) e tamanho máximo de cada um. */
+const TEXTOS_FOLHA = {
+  codigoESocial: 30, cbo: 10, centroCustoCodigo: 20, departamentoCodigo: 20, departamento: 80,
+  estabelecimentoCodigo: 20, estabelecimento: 120, sindicatoCodigo: 20, sindicato: 150,
+};
+
 /** Dados contratuais do colaborador usados nos custos (coluna rh, em JSON). */
 function rhPadrao(rh) {
   const r = rh || {};
@@ -88,6 +94,8 @@ function rhPadrao(rh) {
     desligamento: r.desligamento || '', tipoDesligamento: r.tipoDesligamento || '',
     motivoDesligamento: r.motivoDesligamento || '', obsDesligamento: r.obsDesligamento || '',
     feriasVencidas: r.feriasVencidas || 0, inicioAquisitivo: r.inicioAquisitivo || '', beneficios,
+    ...Object.fromEntries(Object.keys(TEXTOS_FOLHA).map((k) => [k, r[k] || ''])),
+    nascimento: r.nascimento || '', pcd: !!r.pcd,
   };
 }
 
@@ -101,6 +109,7 @@ const colabDeLinha = (c) => ({
 const colabSemCustos = (c) => ({
   id: c.id, nome: c.nome, matricula: c.matricula, sexo: c.sexo, setorId: c.setorId, jornada: c.jornada,
   entrada: c.entrada, cargo: c.cargo, admissao: c.admissao, desligamento: c.desligamento,
+  centroCustoCodigo: c.centroCustoCodigo, departamento: c.departamento, estabelecimento: c.estabelecimento,
 });
 
 // ---------------------------------------------------------------- serviço
@@ -330,6 +339,7 @@ function criarServico(db, opcoes = {}) {
     const verCustos = NIVEL[ator.perfil] >= NIVEL.operador;
     return {
       setores: lerSetores(),
+      centrosCusto: lerCentrosCusto(),
       colaboradores: verCustos ? lerColaboradores() : lerColaboradores().map(colabSemCustos),
       feriadosExtras: q('SELECT data, nome FROM feriados ORDER BY data').all().map((f) => ({ ...f })),
       ...config(),
@@ -426,8 +436,83 @@ function criarServico(db, opcoes = {}) {
       motivoDesligamento: desligamento && CU.MOTIVOS_DESLIGAMENTO[d.motivoDesligamento] ? d.motivoDesligamento : '',
       obsDesligamento: obs, feriasVencidas: vencidas,
       inicioAquisitivo: d.inicioAquisitivo ? dataValida(d.inicioAquisitivo, 'Início do período aquisitivo') : '',
-      beneficios,
+      beneficios, ...dadosFolha(d),
     };
+  }
+
+  const simNao = (v) => (typeof v === 'boolean' ? v : /^(s|sim|true|1|x)$/i.test(String(v || '').trim()));
+
+  function dadosFolha(d) {
+    const out = {};
+    for (const [k, max] of Object.entries(TEXTOS_FOLHA)) {
+      const v = String(d[k] == null ? '' : d[k]).trim();
+      if (v.length > max) falhar(400, `${k === 'cbo' ? 'CBO' : k}: no máximo ${max} caracteres.`);
+      out[k] = v;
+    }
+    if (out.cbo && !/^\d{4,6}(-\d)?$/.test(out.cbo)) falhar(400, `CBO inválido: ${out.cbo}.`);
+    if (out.centroCustoCodigo && !q('SELECT 1 FROM centros_custo WHERE codigo = ?').get(out.centroCustoCodigo)) {
+      falhar(400, `Centro de custo ${out.centroCustoCodigo} não cadastrado.`);
+    }
+    out.nascimento = d.nascimento ? dataValida(d.nascimento, 'Data de nascimento') : '';
+    out.pcd = simNao(d.pcd);
+    return out;
+  }
+
+  // ------------------------------------------------------- centros de custo
+
+  const lerCentrosCusto = () => q('SELECT codigo, nome FROM centros_custo').all()
+    .map((c) => ({ ...c })).sort((a, b) => a.codigo.localeCompare(b.codigo, 'pt-BR', { numeric: true }));
+
+  function normalizarCentro(d) {
+    const codigo = texto(d.codigo, 'o código do centro de custo', 20);
+    return { codigo, nome: texto(d.nome, 'o nome do centro de custo', 80) };
+  }
+  const gravarCentro = (c) => q(`INSERT INTO centros_custo (codigo, nome, atualizado_em) VALUES (?, ?, ?)
+    ON CONFLICT(codigo) DO UPDATE SET nome = excluded.nome, atualizado_em = excluded.atualizado_em`).run(c.codigo, c.nome, iso());
+
+  function salvarCentroCusto(ator, d) {
+    exigir(ator, 'operador');
+    const c = normalizarCentro(d);
+    const existia = q('SELECT 1 FROM centros_custo WHERE codigo = ?').get(c.codigo);
+    gravarCentro(c);
+    auditar(ator, existia ? 'centro.alterar' : 'centro.criar', `${c.codigo} ${c.nome}`);
+    return lerCentrosCusto();
+  }
+
+  function removerCentroCusto(ator, codigo) {
+    exigir(ator, 'operador');
+    const c = q('SELECT * FROM centros_custo WHERE codigo = ?').get(String(codigo)) || falhar(404, 'Centro de custo não encontrado.');
+    const n = lerColaboradores().filter((x) => x.centroCustoCodigo === c.codigo).length;
+    if (n) falhar(409, `O centro de custo tem ${n} colaborador(es). Altere-os antes de excluir.`);
+    q('DELETE FROM centros_custo WHERE codigo = ?').run(c.codigo);
+    auditar(ator, 'centro.excluir', `${c.codigo} ${c.nome}`);
+    return lerCentrosCusto();
+  }
+
+  /** Importa a lista de centros de custo (código e nome): cria os novos e atualiza o nome dos existentes. */
+  function importarCentrosCusto(ator, linhas) {
+    exigir(ator, 'operador');
+    if (!Array.isArray(linhas) || !linhas.length) falhar(400, 'Nenhum centro de custo para importar.');
+    if (linhas.length > 5000) falhar(400, 'Importe no máximo 5000 centros de custo por vez.');
+    let novos = 0;
+    let atualizados = 0;
+    const ignorados = [];
+    db.transacao(() => {
+      for (const [i, l] of linhas.entries()) {
+        try {
+          const c = normalizarCentro(l);
+          const atual = q('SELECT nome FROM centros_custo WHERE codigo = ?').get(c.codigo);
+          if (atual && atual.nome === c.nome) continue;
+          gravarCentro(c);
+          if (atual) atualizados++; else novos++;
+        } catch (e) {
+          if (!(e instanceof ErroApp)) throw e;
+          ignorados.push(`linha ${l.linha || i + 1} (${e.message.replace(/\.$/, '')})`);
+        }
+      }
+    });
+    auditar(ator, 'centro.importar', `${novos} novo(s), ${atualizados} atualizado(s)`);
+    return { novos, atualizados, ignorados, centrosCusto: lerCentrosCusto() };
   }
 
   function gravarColab(c, id) {
@@ -468,7 +553,13 @@ function criarServico(db, opcoes = {}) {
     auditar(ator, 'colaborador.excluir', `${c.matricula} ${c.nome}`);
   }
 
-  const CAMPOS_ATUALIZAVEIS = ['nome', 'sexo', 'setor', 'jornada', 'entrada', 'cargo', 'salario', 'admissao'];
+  /** Grupos de dados que a importação pode atualizar, com os campos de cada um. */
+  const GRUPOS_IMPORTACAO = {
+    nome: ['nome'], sexo: ['sexo'], setor: ['setor'], jornada: ['jornada'], entrada: ['entrada'],
+    cargo: ['cargo', 'cbo'], salario: ['salario'], admissao: ['admissao'], centroCusto: ['centroCustoCodigo'],
+    departamento: ['departamentoCodigo', 'departamento'], estabelecimento: ['estabelecimentoCodigo', 'estabelecimento'],
+    sindicato: ['sindicatoCodigo', 'sindicato'], nascimento: ['nascimento'], pcd: ['pcd'], codigoESocial: ['codigoESocial'],
+  };
 
   /** Setor pelo nome; se não existir, é criado (seg a sáb). */
   function setorPorNome(nome) {
@@ -493,13 +584,24 @@ function criarServico(db, opcoes = {}) {
     exigir(ator, 'operador');
     const cadastrar = opcoes.cadastrar !== false;
     const atualizar = Array.isArray(opcoes.atualizar)
-      ? opcoes.atualizar.filter((k) => CAMPOS_ATUALIZAVEIS.includes(k)) : ['cargo', 'salario', 'admissao'];
+      ? opcoes.atualizar.filter((k) => GRUPOS_IMPORTACAO[k]) : ['cargo', 'salario', 'admissao'];
+    const preenchido = (v) => v != null && String(v).trim() !== '';
     if (!Array.isArray(linhas) || !linhas.length) falhar(400, 'Nenhuma linha para importar.');
     if (linhas.length > 5000) falhar(400, 'Importe no máximo 5000 colaboradores por vez.');
     const ignorados = [];
     let importados = 0;
     let atualizados = 0;
+    let centros = 0;
     db.transacao(() => {
+      // centros de custo citados na planilha de empregados entram no cadastro de centros
+      const vistos = new Set();
+      for (const l of linhas) {
+        if (!preenchido(l.centroCustoCodigo) || !preenchido(l.centroCustoNome) || vistos.has(String(l.centroCustoCodigo))) continue;
+        vistos.add(String(l.centroCustoCodigo));
+        const c = { codigo: String(l.centroCustoCodigo).trim().slice(0, 20), nome: String(l.centroCustoNome).trim().slice(0, 80) };
+        const atual = q('SELECT nome FROM centros_custo WHERE codigo = ?').get(c.codigo);
+        if (!atual || atual.nome !== c.nome) { gravarCentro(c); centros++; }
+      }
       linhas.forEach((l, i) => {
         const ref = `linha ${l.linha || i + 2}`;
         try {
@@ -507,13 +609,14 @@ function criarServico(db, opcoes = {}) {
           if (existente) {
             if (!atualizar.length) throw new ErroApp(409, 'matrícula já cadastrada');
             const atual = colabDeLinha(existente);
-            const campos = atualizar.filter((k) => String(l[k] == null ? '' : l[k]).trim() !== '');
+            const campos = atualizar.flatMap((g) => GRUPOS_IMPORTACAO[g]).filter((k) => preenchido(l[k]));
             if (!campos.length) throw new ErroApp(409, 'matrícula já cadastrada, sem dados para atualizar');
             for (const k of campos) {
               const v = String(l[k]).trim();
               if (k === 'setor') atual.setorId = setorPorNome(v);
               else if (k === 'sexo') atual.sexo = v.charAt(0).toUpperCase();
               else if (k === 'entrada') atual.entrada = horaCSV(v) || v;
+              else if (k === 'pcd') atual.pcd = simNao(v);
               else atual[k] = v;
             }
             gravarColab(normalizarColab(atual), atual.id);
@@ -536,8 +639,9 @@ function criarServico(db, opcoes = {}) {
         }
       });
     });
-    auditar(ator, 'colaborador.importar', `${importados} cadastrado(s), ${atualizados} atualizado(s), ${ignorados.length} ignorado(s)`);
-    return { importados, atualizados, ignorados };
+    auditar(ator, 'colaborador.importar', `${importados} cadastrado(s), ${atualizados} atualizado(s), ${ignorados.length} ignorado(s)` +
+      (centros ? `; ${centros} centro(s) de custo novo(s) ou renomeado(s)` : ''));
+    return { importados, atualizados, ignorados, centros };
   }
 
   // ------------------------------------------------- regras e feriados
@@ -636,7 +740,7 @@ function criarServico(db, opcoes = {}) {
   // ------------------------------------------- exemplo, limpeza, backup
 
   function limparTabelas() {
-    db.exec('DELETE FROM folha_lancamentos; DELETE FROM folha_competencias; DELETE FROM escala; DELETE FROM colaboradores; DELETE FROM setores; DELETE FROM feriados; DELETE FROM configuracoes;');
+    db.exec('DELETE FROM folha_lancamentos; DELETE FROM folha_competencias; DELETE FROM escala; DELETE FROM colaboradores; DELETE FROM centros_custo; DELETE FROM setores; DELETE FROM feriados; DELETE FROM configuracoes;');
   }
 
   function carregarExemplo(ator) {
@@ -689,8 +793,13 @@ function criarServico(db, opcoes = {}) {
           .run(id, nome, minimo, JSON.stringify(dias), fer ? 1 : 0);
         return id;
       });
+      const centros = [['1', 'ADMINISTRATIVO'], ['3', 'COMERCIAL'], ['42', 'PORTARIA']];
+      for (const [codigo, nome] of centros) gravarCentro({ codigo, nome });
       const colabs = pessoas.map(([nome, sexo, s, jornada, entrada, cargo, salario, admissao, x], k) => {
         const c = {
+          centroCustoCodigo: [centros[1], centros[0], centros[2]][s][0], departamento: setores[s][0].toUpperCase(),
+          estabelecimento: 'MATRIZ', nascimento: `${1970 + ((k * 7) % 33)}-${String((k % 12) + 1).padStart(2, '0')}-15`,
+          pcd: nome === 'Henrique Dias',
           id: novoId(), nome, matricula: String(10001 + k), sexo, setorId: ids[s], jornada, entrada, cargo, salario, admissao,
           desligamento: x.desligamento || '', tipoDesligamento: x.tipoDesligamento || '', motivoDesligamento: x.motivoDesligamento || '',
           obsDesligamento: x.obsDesligamento || '', feriasVencidas: x.feriasVencidas || 0, inicioAquisitivo: '',
@@ -1198,7 +1307,7 @@ function criarServico(db, opcoes = {}) {
       lancamentos: q('SELECT * FROM folha_lancamentos ORDER BY competencia').all().map(lancamentoDeLinha),
     };
     auditar(ator, 'dados.backup', null);
-    return { versao: 4, exportadoEm: iso(), ...d, contratos, distratos, indices: indicesSalvos, folha };
+    return { versao: 5, exportadoEm: iso(), ...d, contratos, distratos, indices: indicesSalvos, folha };
   }
 
   function restaurar(ator, b) {
@@ -1207,6 +1316,7 @@ function criarServico(db, opcoes = {}) {
     const mapaColab = {};
     db.transacao(() => {
       limparTabelas();
+      for (const c of Array.isArray(b.centrosCusto) ? b.centrosCusto : []) gravarCentro(normalizarCentro(c));
       const mapaSetor = {};
       for (const s of b.setores) {
         const n = normalizarSetor(s);
@@ -1310,6 +1420,7 @@ function criarServico(db, opcoes = {}) {
     indices, atualizarIndices, salvarIndice, removerIndice,
     listarDistratos, salvarDistrato, removerDistrato, registrarDocumentoDistrato,
     custos, salvarParametrosCustos, abrirCompetencia, salvarFolha, importarFolha, removerCompetencia,
+    salvarCentroCusto, removerCentroCusto, importarCentrosCusto,
   };
 }
 

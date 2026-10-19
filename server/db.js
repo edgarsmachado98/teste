@@ -107,6 +107,12 @@ CREATE TABLE IF NOT EXISTS distratos (
   UNIQUE (contrato_id, representada)
 );
 
+CREATE TABLE IF NOT EXISTS centros_custo (
+  codigo        TEXT PRIMARY KEY,
+  nome          TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS folha_competencias (
   competencia   TEXT PRIMARY KEY,
   dados         TEXT NOT NULL DEFAULT '{}',

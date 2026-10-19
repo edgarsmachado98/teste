@@ -129,6 +129,7 @@
     const hm = /^(-?)(\d+):([0-5]\d)$/.exec(t);
     if (hm) return (hm[1] ? -1 : 1) * (Number(hm[2]) + Number(hm[3]) / 60);
     if (/,\d+$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^-?\d{1,3}(\.\d{3})+\.\d{1,2}$/.test(t)) t = t.replace(/\.(?=.*\.)/g, ''); // 7.265.69 (digitado à mão)
     else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
     else t = t.replace(/,/g, '');
     const n = Number(t);
@@ -767,6 +768,57 @@
     };
   }
 
+  // ------------------------------------------ 11. perfil do quadro de pessoal
+
+  /** Percentual mínimo de PcD/reabilitados conforme o total de empregados (Lei 8.213/1991, art. 93). */
+  function cotaPcd(total) {
+    const pct = total >= 1001 ? 5 : total >= 501 ? 4 : total >= 201 ? 3 : total >= 100 ? 2 : 0;
+    return { pct, exigidos: Math.ceil(total * pct / 100) };
+  }
+
+  const FAIXAS_IDADE = [['Até 24 anos', 0, 25], ['25 a 34', 25, 35], ['35 a 44', 35, 45], ['45 a 54', 45, 55], ['55 ou mais', 55, 200]];
+  const FAIXAS_CASA = [['Menos de 1 ano', 0, 1], ['1 a 3 anos', 1, 3], ['3 a 5 anos', 3, 5], ['5 a 10 anos', 5, 10], ['10 anos ou mais', 10, 200]];
+  const anosEntre = (ini, fim) => {
+    const [a1, m1, d1] = ini.split('-').map(Number);
+    const [a2, m2, d2] = fim.split('-').map(Number);
+    return a2 - a1 - (m2 < m1 || (m2 === m1 && d2 < d1) ? 1 : 0);
+  };
+
+  function perfilQuadro(dados, ref, setorId) {
+    const b = base(dados);
+    const data = ultimoDia(ref);
+    const todos = [...b.colabs.values()].filter((c) => ativoEm(c, data));
+    const ativos = todos.filter(doSetor(setorId));
+    const aprendiz = (c) => /aprendi/i.test(c.cargo || '');
+    const resumo = (lista) => {
+      const sal = lista.map((c) => num(c.salario)).filter((v) => v > 0);
+      const idades = lista.filter((c) => c.nascimento).map((c) => anosEntre(c.nascimento, data));
+      const casa = lista.filter((c) => c.admissao).map((c) => anosEntre(c.admissao, data) + (avosEntre(c.admissao, data) % 12) / 12);
+      return {
+        total: lista.length, mulheres: lista.filter((c) => c.sexo === 'F').length, homens: lista.filter((c) => c.sexo === 'M').length,
+        pcd: lista.filter((c) => c.pcd).length, aprendizes: lista.filter(aprendiz).length,
+        salarioMedio: sal.length ? soma(sal, (v) => v) / sal.length : 0, folhaContratual: centavos(soma(sal, (v) => v)),
+        idadeMedia: idades.length ? soma(idades, (v) => v) / idades.length : null,
+        tempoCasaMedio: casa.length ? soma(casa, (v) => v) / casa.length : null,
+      };
+    };
+    const grupos = {};
+    for (const c of ativos) (grupos[c.setorId] = grupos[c.setorId] || []).push(c);
+    const faixas = (defs, valor) => defs.map(([nome, min, max]) => ({
+      nome, total: ativos.filter((c) => { const v = valor(c); return v != null && v >= min && v < max; }).length,
+    })).concat([{ nome: 'Sem data', total: ativos.filter((c) => valor(c) == null).length }]).filter((f) => f.total || f.nome !== 'Sem data');
+    // a cota de PcD vale para a empresa toda (todos os estabelecimentos), não para o grupo filtrado
+    const cota = cotaPcd(todos.length);
+    const pcdEmpresa = todos.filter((c) => c.pcd).length;
+    return {
+      referencia: ref, geral: resumo(ativos),
+      grupos: Object.entries(grupos).map(([id, lista]) => ({ id, nome: nomeSetor(b, id), ...resumo(lista) })).sort((x, y) => y.total - x.total),
+      idade: faixas(FAIXAS_IDADE, (c) => (c.nascimento ? anosEntre(c.nascimento, data) : null)),
+      tempoCasa: faixas(FAIXAS_CASA, (c) => (c.admissao ? anosEntre(c.admissao, data) : null)),
+      cota: { ...cota, totalEmpresa: todos.length, pcd: pcdEmpresa, deficit: Math.max(0, cota.exigidos - pcdEmpresa) },
+    };
+  }
+
   return {
     PARAMETROS_PADRAO, REGIMES, JORNADA_HORAS, BENEFICIOS, CAMPOS,
     TIPOS_DESLIGAMENTO, GRUPOS_DESLIGAMENTO, MOTIVOS_DESLIGAMENTO, MOTIVOS_ATESTADO,
@@ -775,6 +827,6 @@
     calendario, ativoEm, ativoNoMes, avosEntre, avos13Ate, inicioAquisitivo, divisor, horasDaJornada,
     parametros, encargos, calcularLancamento,
     headcountMassa, horasExtras, provisoes, custoColaborador, sinistralidade,
-    beneficiosPerCapita, absenteismoMedico, turnover, absenteismoGeral, bancoHoras,
+    beneficiosPerCapita, absenteismoMedico, turnover, absenteismoGeral, bancoHoras, perfilQuadro, cotaPcd,
   };
 });

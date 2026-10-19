@@ -44,12 +44,42 @@
   }
   const anosDe = (comps) => [...new Set(comps.map((c) => Number(c.slice(0, 4))))];
 
+  // dimensão de agrupamento dos relatórios: o cálculo agrupa por "setorId", então cada colaborador
+  // recebe a chave da dimensão escolhida (setor, centro de custo, departamento ou estabelecimento)
+  const DIMENSOES = {
+    setor: ['Setor', 'todos os setores'], centroCusto: ['Centro de custo', 'todos os centros de custo'],
+    departamento: ['Departamento', 'todos os departamentos'], estabelecimento: ['Estabelecimento', 'todos os estabelecimentos'],
+  };
+  let rot = 'Setor';
+
+  function agrupar(dim) {
+    const e = estado();
+    if (dim === 'setor') return { colaboradores: e.colaboradores, grupos: e.setores.map((s) => ({ id: s.id, nome: s.nome })) };
+    const chave = {
+      centroCusto: (c) => [c.centroCustoCodigo, c.centroCustoCodigo ? `${c.centroCustoCodigo} · ${App.nomeCentro(c.centroCustoCodigo)}` : 'Sem centro de custo'],
+      departamento: (c) => [c.departamento, c.departamento || 'Sem departamento'],
+      estabelecimento: (c) => [c.estabelecimento, c.estabelecimento || 'Sem estabelecimento'],
+    }[dim];
+    const grupos = new Map();
+    const colaboradores = e.colaboradores.map((c) => {
+      const [id, nome] = chave(c);
+      const k = `${dim}:${id || ''}`;
+      grupos.set(k, nome);
+      return { ...c, setorId: k };
+    });
+    return {
+      colaboradores,
+      grupos: [...grupos].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true })),
+    };
+  }
+
   /** Dados para os relatórios (lançamentos já salvos). */
   function baseRelatorios() {
     const e = estado();
     const comps = dados.competencias.map((c) => c.competencia);
+    const g = agrupar($('#rl-dimensao').value);
     return {
-      colaboradores: e.colaboradores, setores: e.setores, lancamentos: dados.lancamentos,
+      colaboradores: g.colaboradores, setores: g.grupos, lancamentos: dados.lancamentos,
       competencias: dados.competencias, parametros: dados.parametros,
       feriados: feriados(anosDe(comps.length ? comps : [mesAtual()])),
     };
@@ -461,6 +491,9 @@
   // ------------------------------------------------------------ relatórios
 
   const RELATORIOS = [
+    { grupo: 'Quadro de pessoal', itens: [
+      ['quadro', 'Perfil do quadro de pessoal'],
+    ] },
     { grupo: 'Custos e orçamento', itens: [
       ['headcount', 'Headcount e massa salarial'],
       ['horas-extras', 'Horas extras e adicionais'],
@@ -490,17 +523,22 @@
   function prepararFiltros() {
     const sel = $('#rl-setor');
     const v = sel.value;
-    sel.innerHTML = '<option value="">Todos os setores</option>' +
-      estado().setores.map((s) => `<option value="${s.id}">${esc(s.nome)}</option>`).join('');
-    sel.value = estado().setores.some((s) => s.id === v) ? v : '';
+    const dim = $('#rl-dimensao').value;
+    const grupos = agrupar(dim).grupos;
+    rot = DIMENSOES[dim][0];
+    $('#rl-filtro-rotulo').textContent = rot;
+    sel.innerHTML = `<option value="">${DIMENSOES[dim][1][0].toUpperCase() + DIMENSOES[dim][1].slice(1)}</option>` +
+      grupos.map((s) => `<option value="${esc(s.id)}">${esc(s.nome)}</option>`).join('');
+    sel.value = grupos.some((s) => s.id === v) ? v : '';
     if (!periodoDefinido) {
       const comps = dados.competencias.map((c) => c.competencia);
-      const ate = comps.length ? comps[comps.length - 1] : CU.somarMes(mesAtual(), -1);
+      const ate = comps.length ? comps[comps.length - 1] : mesAtual();
       $('#rl-ate').value = ate;
       $('#rl-de').value = CU.somarMes(ate, -5);
       if (comps.length) periodoDefinido = true;
     }
   }
+  $('#rl-dimensao').addEventListener('change', () => { prepararFiltros(); renderRelatorio(); });
   for (const id of ['#rl-tipo', '#rl-de', '#rl-ate', '#rl-setor']) {
     $(id).addEventListener('change', () => { if (id !== '#rl-setor' && id !== '#rl-tipo') periodoDefinido = true; renderRelatorio(); });
   }
@@ -516,6 +554,48 @@
 
   /** Cada relatório devolve { tiles, avisos, tabelas: [{ titulo, cab, linhas, rodape }], notas }. */
   const GERADORES = {
+    quadro(d, de, ate, setor) {
+      const r = CU.perfilQuadro(d, ate, setor);
+      const g = r.geral;
+      const pctDe = (n, t) => (t ? `${fmt(n / t * 100, 1)}%` : '—');
+      const avisos = [];
+      if (r.cota.pct) {
+        avisos.push(r.cota.deficit
+          ? `<b>Cota de PcD:</b> com ${r.cota.totalEmpresa} empregados a empresa deve ter ${r.cota.pct}% (${r.cota.exigidos}) de pessoas com deficiência ou reabilitadas; há ${r.cota.pcd}, faltam ${r.cota.deficit} (Lei 8.213/1991, art. 93).`
+          : `Cota de PcD cumprida: ${r.cota.pcd} de ${r.cota.exigidos} exigidos (${r.cota.pct}% de ${r.cota.totalEmpresa} empregados).`);
+      }
+      const semDados = d.colaboradores.filter((c) => CU.ativoEm(c, CU.ultimoDia(ate)) && (!c.admissao || !c.nascimento)).length;
+      if (semDados) avisos.push(`${semDados} colaborador(es) sem data de admissão ou de nascimento: importe a planilha de empregados para completar.`);
+      const faixa = (lista) => lista.map((f) => [f.nome, num(String(f.total)), barra(f.total, g.total, pctDe(f.total, g.total))]);
+      const anos = (v) => (v == null ? '—' : `${fmt(v, 1)} anos`);
+      const maiorGrupo = Math.max(1, ...r.grupos.map((x) => x.total));
+      return {
+        tiles: [
+          ['Colaboradores ativos', String(g.total), `${g.mulheres} mulheres, ${g.homens} homens`],
+          ['Salário médio', moeda(g.salarioMedio), `folha contratual ${moeda(g.folhaContratual)}`],
+          ['Idade média', anos(g.idadeMedia), `tempo de casa médio: ${anos(g.tempoCasaMedio)}`],
+          ['PcD na empresa', `${r.cota.pcd} de ${r.cota.exigidos}`, r.cota.pct ? `cota de ${r.cota.pct}%` : 'menos de 100 empregados: sem cota', r.cota.deficit ? 'ruim' : 'bom'],
+        ],
+        avisos,
+        tabelas: [{
+          titulo: `Por ${rot.toLowerCase()}`,
+          cab: [rot, { t: 'Ativos', c: 'num' }, { t: 'Mulheres', c: 'num' }, { t: 'Homens', c: 'num' }, { t: 'PcD', c: 'num' }, { t: 'Aprendizes', c: 'num' },
+            { t: 'Salário médio', c: 'num' }, { t: 'Folha contratual', c: 'num' }, { t: 'Idade média', c: 'num' }, { t: 'Tempo de casa', c: 'num' }],
+          linhas: r.grupos.map((x) => [x.nome, barra(x.total, maiorGrupo, String(x.total)), num(String(x.mulheres)), num(String(x.homens)), num(String(x.pcd)),
+            num(String(x.aprendizes)), num(fmt(x.salarioMedio)), num(fmt(x.folhaContratual)), num(anos(x.idadeMedia)), num(anos(x.tempoCasaMedio))]),
+          rodape: ['Total', num(String(g.total)), num(String(g.mulheres)), num(String(g.homens)), num(String(g.pcd)), num(String(g.aprendizes)),
+            num(fmt(g.salarioMedio)), num(fmt(g.folhaContratual)), num(anos(g.idadeMedia)), num(anos(g.tempoCasaMedio))],
+        }, {
+          titulo: 'Faixa etária', cab: ['Faixa', { t: 'Colaboradores', c: 'num' }, { t: '%', c: 'num' }], linhas: faixa(r.idade),
+        }, {
+          titulo: 'Tempo de casa', cab: ['Faixa', { t: 'Colaboradores', c: 'num' }, { t: '%', c: 'num' }], linhas: faixa(r.tempoCasa),
+        }],
+        notas: [`Posição no último dia de ${CU.rotuloComp(ate)}, pelos dados do cadastro (salário contratual da ficha). ` +
+          'A cota de PcD considera todos os empregados ativos. Aprendizes: cargos com "aprendiz" no nome; a cota de 5% a 15% (CLT art. 429) ' +
+          'incide sobre as funções que exigem formação profissional, conforme a CBO.'],
+      };
+    },
+
     headcount(d, de, ate, setor) {
       const r = CU.headcountMassa(d, de, ate, setor);
       const ult = r.meses[r.meses.length - 1];
@@ -534,8 +614,8 @@
           linhas: r.meses.map((m) => [CU.rotuloComp(m.competencia), ...r.setores.map((s) => num(String(m.porSetor[s.id].hc))),
             num(String(m.total.hc)), m.temLancamentos ? barra(m.total.massa, maxMassa, fmt(m.total.massa)) : num('sem lançamentos'), num(m.temLancamentos ? fmt(m.total.custo) : '—')]),
         }, {
-          titulo: 'Por setor no período',
-          cab: ['Setor', { t: 'HC inicial', c: 'num' }, { t: 'HC final', c: 'num' }, { t: 'Variação', c: 'num' }, { t: 'Massa salarial', c: 'num' }, { t: '% da massa', c: 'num' }, { t: 'Custo total', c: 'num' }],
+          titulo: `Por ${rot.toLowerCase()} no período`,
+          cab: [rot, { t: 'HC inicial', c: 'num' }, { t: 'HC final', c: 'num' }, { t: 'Variação', c: 'num' }, { t: 'Massa salarial', c: 'num' }, { t: '% da massa', c: 'num' }, { t: 'Custo total', c: 'num' }],
           linhas: r.setores.map((s) => {
             const massa = r.meses.reduce((t, m) => t + m.porSetor[s.id].massa, 0);
             const custo = r.meses.reduce((t, m) => t + m.porSetor[s.id].custo, 0);
@@ -564,8 +644,8 @@
         ],
         avisos,
         tabelas: [{
-          titulo: 'Por setor',
-          cab: ['Setor', { t: 'Colaboradores', c: 'num' }, { t: 'Horas extras', c: 'num' }, { t: 'Valor total', c: 'num' }, { t: 'Equivale a (colaboradores)', c: 'num' }],
+          titulo: `Por ${rot.toLowerCase()}`,
+          cab: [rot, { t: 'Colaboradores', c: 'num' }, { t: 'Horas extras', c: 'num' }, { t: 'Valor total', c: 'num' }, { t: 'Equivale a (colaboradores)', c: 'num' }],
           linhas: r.setores.map((s) => [s.setor, num(String(s.colaboradores)), num(horas(s.horas)), num(fmt(s.valor)), num(fmt(s.equivalente, 2))]),
         }, {
           titulo: 'Por colaborador',
@@ -631,8 +711,8 @@
           rodape: ['Total', '', num(fmt(t.salario)), num(fmt(t.variaveis)), num(fmt(t.descontos)), num(fmt(t.encargos)), num(fmt(t.provisoes)),
             num(fmt(t.beneficios)), num(fmt(t.custoTotal)), '', num(`${fmt(t.multiplicador)}×`)],
         }, {
-          titulo: 'Por setor',
-          cab: ['Setor', { t: 'Colaboradores', c: 'num' }, { t: 'Remuneração', c: 'num' }, { t: 'Encargos', c: 'num' }, { t: 'Provisões', c: 'num' },
+          titulo: `Por ${rot.toLowerCase()}`,
+          cab: [rot, { t: 'Colaboradores', c: 'num' }, { t: 'Remuneração', c: 'num' }, { t: 'Encargos', c: 'num' }, { t: 'Provisões', c: 'num' },
             { t: 'Benefícios', c: 'num' }, { t: 'Custo total', c: 'num' }, { t: '% do custo', c: 'num' }],
           linhas: r.setores.map((s) => [s.setor, num(String(s.colaboradores)), num(fmt(s.remuneracao)), num(fmt(s.encargos)), num(fmt(s.provisoes)),
             num(fmt(s.beneficios)), barra(s.custoTotal, t.custoTotal, fmt(s.custoTotal)), num(pct(t.custoTotal ? s.custoTotal / t.custoTotal * 100 : 0))]),
@@ -709,8 +789,8 @@
           cab: ['Motivo', { t: 'Dias', c: 'num' }, { t: 'Atestados', c: 'num' }, { t: 'Colaboradores', c: 'num' }, { t: '% dos dias', c: 'num' }],
           linhas: r.motivos.map((m) => [m.nome, num(String(m.dias)), num(String(m.atestados)), num(String(m.colaboradores)), barra(m.pct, 100, pct(m.pct))]),
         }, {
-          titulo: 'Por setor',
-          cab: ['Setor', { t: 'Dias', c: 'num' }, { t: 'Atestados', c: 'num' }],
+          titulo: `Por ${rot.toLowerCase()}`,
+          cab: [rot, { t: 'Dias', c: 'num' }, { t: 'Atestados', c: 'num' }],
           linhas: r.setores.map((s) => [s.setor, num(String(s.dias)), num(String(s.atestados))]),
         }, ...(r.afastamentos.length ? [{
           titulo: 'Afastamentos acima de 15 dias',
@@ -809,7 +889,7 @@
           ['Faltas injustificadas', horas(t.faltas), `atrasos e saídas: ${horas(t.atrasos)}`],
         ],
         tabelas: [
-          { titulo: 'Por setor', cab: cab('Setor'), linhas: r.setores.map((x) => linha(x, x.setor)) },
+          { titulo: `Por ${rot.toLowerCase()}`, cab: cab(rot), linhas: r.setores.map((x) => linha(x, x.setor)) },
           { titulo: 'Mês a mês', cab: cab('Mês'), linhas: r.meses.map((x) => linha(x, CU.rotuloComp(x.competencia))) },
           { titulo: 'Colaboradores com mais horas perdidas', cab: cab('Colaborador'), linhas: r.colaboradores.slice(0, 15).map((x) => linha(x, colabCel(x.colab, x.setor))) },
         ],
@@ -875,7 +955,7 @@
       return;
     }
     if (de > ate) [de, ate] = [ate, de];
-    if (!dados.lancamentos.length && !['turnover', 'turnover-tipo', 'motivos'].includes(tipo)) {
+    if (!dados.lancamentos.length && !['turnover', 'turnover-tipo', 'motivos', 'quadro'].includes(tipo)) {
       saida.innerHTML = `<div class="cartao vazio">Ainda não há lançamentos de folha. Abra uma competência em <b>Lançamentos</b>${
         App.podeEditar() ? ' ou use <b>Carregar exemplo</b> para conhecer os relatórios' : ''}.</div>`;
       ultimoRelatorio = null;
@@ -895,8 +975,10 @@
 
   function descricaoFiltro() {
     const r = ultimoRelatorio;
-    const periodo = ['provisoes', 'banco-horas'].includes(r.tipo) ? `posição em ${CU.rotuloComp(r.ate)}` : `${CU.rotuloComp(r.de)} a ${CU.rotuloComp(r.ate)}`;
-    return `${periodo} · ${r.setor ? nomeSetor(r.setor) : 'todos os setores'}`;
+    const periodo = ['provisoes', 'banco-horas', 'quadro'].includes(r.tipo) ? `posição em ${CU.rotuloComp(r.ate)}` : `${CU.rotuloComp(r.de)} a ${CU.rotuloComp(r.ate)}`;
+    const dim = $('#rl-dimensao').value;
+    const grupo = r.setor && agrupar(dim).grupos.find((g) => g.id === r.setor);
+    return `${periodo} · ${grupo ? `${DIMENSOES[dim][0]}: ${grupo.nome}` : DIMENSOES[dim][1]}`;
   }
 
   $('#rl-csv').addEventListener('click', () => {

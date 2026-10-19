@@ -90,6 +90,29 @@ quantas matrículas são novas e quantas já existem, e você marca se quer **ca
 **atualizar as já cadastradas**, escolhendo os campos (cargo, salário, admissão, nome, sexo, setor, jornada,
 horário). Células vazias na planilha mantêm o valor atual.
 
+### Integração com o sistema de folha (planilhas)
+
+Os cadastros podem ser alimentados e atualizados direto pelos relatórios exportados do sistema de folha,
+em **.xls** (Excel 97-2003), **.xlsx** ou **.csv**, sem conversão:
+
+- **Cadastros › Centros de custo › Importar planilha**: relatório "Centros de Custos" (colunas Código e Nome).
+  Centros novos são cadastrados e os existentes têm o nome atualizado.
+- **Cadastros › Colaboradores › Importar planilha**: relatório "Empregados em Excel". As colunas são
+  reconhecidas pelo cabeçalho: Cód Epr (matrícula), Cód eSocial, Nome, Admissão, Salário, Descrição cargo,
+  CBO, Cód/Descrição Ccusto, Cód/Descrição Serviço (estabelecimento), Cód/Descrição Dpto, Cód Sind/Sindicato,
+  Data nascimento, Sexo e Possui deficiência. O CPF não é importado.
+  - Uma caixa de diálogo mostra quantas matrículas são novas e quantas já existem; marque se quer cadastrar
+    as novas e quais dados atualizar nas existentes. Para as novas, o setor das escalas vem do departamento
+    (ou do centro de custo, à escolha) e a jornada começa em 6x1, 08:00 — ajuste depois na ficha.
+  - Centros de custo citados na planilha são criados automaticamente.
+  - Ao final, o sistema lista os colaboradores ativos que **não constam na planilha** (possíveis desligamentos).
+- Repita a importação sempre que houver admissões, reajustes ou mudanças de centro de custo: é a forma de
+  manter os relatórios atualizados.
+
+Os relatórios podem ser **agrupados por setor, centro de custo, departamento ou estabelecimento**, e o
+relatório **Perfil do quadro de pessoal** mostra ativos, sexo, PcD (com a cota da Lei 8.213/1991, art. 93),
+aprendizes, salário médio, folha contratual, idade média, faixas etárias e tempo de casa.
+
 ### Lançamentos (folha mensal)
 
 1. Escolha o mês e clique em **Abrir competência**: o sistema cria um lançamento para cada colaborador com
@@ -284,6 +307,7 @@ js/distrato-calculo.js  cálculo do distrato (IGP-M, indenização, aviso prévi
 js/distrato-modelo.js   termos de distrato e aviso prévio das duas empresas
 js/distratos.js      tela de distratos
 js/documento-html.js prévia, impressão (PDF) e Word compartilhados pelos documentos
+js/planilha.js       leitura de planilhas .xls, .xlsx e .csv (sem dependências)
 js/custos-calculo.js custo mensal, encargos, provisões e relatórios da folha (navegador e servidor)
 js/custos.js         tela de custos: lançamentos, relatórios e parâmetros
 js/tema.js           modo claro/escuro

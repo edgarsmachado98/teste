@@ -3,6 +3,7 @@
   'use strict';
 
   const M = window.EscalaMotor;
+  const P = window.EscalaPlanilha;
   const CU = window.EscalaCustos;
   const api = window.EscalaApi;
   const $ = (sel) => document.querySelector(sel);
@@ -74,7 +75,7 @@
 
   function estadoVazio() {
     return {
-      setores: [], colaboradores: [], feriadosExtras: [],
+      setores: [], colaboradores: [], feriadosExtras: [], centrosCusto: [],
       regras: { domingoHomensSemanas: 3, domingoMulheresSemanas: 2 },
       incluirFacultativos: false, escala: null, periodo: null,
     };
@@ -279,7 +280,106 @@
       sel.innerHTML = '<option value="">Todos os setores</option>' + opcoes;
       sel.value = estado.setores.some((s) => s.id === v) ? v : '';
     }
+    const opcoesCentro = estado.centrosCusto.map((c) => `<option value="${esc(c.codigo)}">${esc(c.codigo)} · ${esc(c.nome)}</option>`).join('');
+    const selCentro = $('#sel-centro-colab');
+    const centroAtual = selCentro.value;
+    selCentro.innerHTML = '<option value="">Sem centro de custo</option>' + opcoesCentro;
+    selCentro.value = centroAtual;
+    const filtroCentro = $('#filtro-centro-colab');
+    const fc = filtroCentro.value;
+    filtroCentro.innerHTML = '<option value="">Todos os centros de custo</option>' + opcoesCentro;
+    filtroCentro.value = estado.centrosCusto.some((c) => c.codigo === fc) ? fc : '';
   }
+
+  // -------------------------------------------------------- centros de custo
+
+  const nomeCentro = (cod) => (estado.centrosCusto.find((c) => c.codigo === cod) || {}).nome || '';
+  const formCentro = $('#form-centro');
+
+  function renderCentros() {
+    const busca = $('#busca-centro').value.trim().toLowerCase();
+    const hoje = M.formatarData(new Date());
+    const ativos = {};
+    for (const c of estado.colaboradores) {
+      if (c.centroCustoCodigo && (!c.desligamento || c.desligamento >= hoje)) ativos[c.centroCustoCodigo] = (ativos[c.centroCustoCodigo] || 0) + 1;
+    }
+    $('#lista-centros').innerHTML = estado.centrosCusto
+      .filter((c) => !busca || c.codigo.toLowerCase().includes(busca) || c.nome.toLowerCase().includes(busca))
+      .map((c) => `<tr><td>${esc(c.codigo)}</td><td>${esc(c.nome)}</td><td class="num">${ativos[c.codigo] || 0}</td>
+        <td class="acoes so-edicao">
+          <button type="button" class="mini sec" data-acao="editar" data-codigo="${esc(c.codigo)}">Editar</button>
+          <button type="button" class="mini perigo" data-acao="excluir" data-codigo="${esc(c.codigo)}">Excluir</button>
+        </td></tr>`).join('') ||
+      `<tr><td colspan="4" class="vazio">${estado.centrosCusto.length ? 'Nenhum centro de custo encontrado.' : 'Nenhum centro de custo cadastrado. Importe a planilha do sistema de folha.'}</td></tr>`;
+  }
+  $('#busca-centro').addEventListener('input', renderCentros);
+
+  formCentro.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if (!exigirEdicao()) return;
+    const f = formCentro.elements;
+    const ok = await executar(() => api.post('/api/centros-custo', { codigo: f.codigo.value.trim(), nome: f.nome.value.trim() }));
+    if (ok) formCentro.reset();
+  });
+  formCentro.addEventListener('reset', () => setTimeout(() => {
+    formCentro.elements.codigo.readOnly = false;
+    $('#titulo-form-centro').textContent = 'Novo centro de custo';
+  }));
+  $('#lista-centros').addEventListener('click', async (ev) => {
+    const b = ev.target.closest('button[data-codigo]');
+    if (!b || !exigirEdicao()) return;
+    const c = estado.centrosCusto.find((x) => x.codigo === b.dataset.codigo);
+    if (!c) return;
+    if (b.dataset.acao === 'editar') {
+      formCentro.elements.codigo.value = c.codigo;
+      formCentro.elements.codigo.readOnly = true;
+      formCentro.elements.nome.value = c.nome;
+      $('#titulo-form-centro').textContent = 'Editar centro de custo';
+      formCentro.elements.nome.focus();
+    } else if (await confirmar(`Excluir o centro de custo ${c.codigo} · ${c.nome}?`)) {
+      await executar(() => api.del(`/api/centros-custo/${encodeURIComponent(c.codigo)}`));
+    }
+  });
+
+  const chaveCab = (v) => P.texto(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+
+  /** Relatório "Centros de Custos": linha de cabeçalho com Código e Nome; para em "Total". */
+  function lerCentrosDaPlanilha(linhas) {
+    const iCab = linhas.findIndex((l) => l.some((v) => /^cod(igo)?$/.test(chaveCab(v))) && l.some((v) => ['nome', 'descricao'].includes(chaveCab(v))));
+    if (iCab < 0) throw new Error('Não encontrei as colunas Código e Nome na planilha.');
+    const cab = linhas[iCab].map(chaveCab);
+    const iCod = cab.findIndex((h) => /^cod(igo)?$/.test(h));
+    const iNome = cab.findIndex((h) => ['nome', 'descricao'].includes(h));
+    const out = [];
+    for (let r = iCab + 1; r < linhas.length; r++) {
+      const l = linhas[r];
+      if (l.some((v) => /^total/.test(chaveCab(v)))) break;
+      const codigo = P.texto(l[iCod]);
+      const nome = P.texto(l[iNome]);
+      if (codigo && nome) out.push({ linha: r + 1, codigo, nome });
+    }
+    return out;
+  }
+
+  $('#arq-centros').addEventListener('change', async (ev) => {
+    const arq = ev.target.files[0];
+    ev.target.value = '';
+    if (!arq || !exigirEdicao()) return;
+    let linhas;
+    try {
+      linhas = lerCentrosDaPlanilha(await P.ler(new Uint8Array(await arq.arrayBuffer())));
+    } catch (e) {
+      return avisar(`Não foi possível ler a planilha: ${e.message}`);
+    }
+    if (!linhas.length) return avisar('Nenhum centro de custo encontrado na planilha.');
+    if (!(await confirmar(`Importar ${linhas.length} centro(s) de custo? Os novos serão cadastrados e os existentes terão o nome atualizado.`))) return;
+    let r = null;
+    await executar(async () => { r = await api.post('/api/centros-custo/importar', { linhas }); });
+    if (r) {
+      avisar(`${r.novos} centro(s) de custo novo(s) e ${r.atualizados} atualizado(s); ${linhas.length - r.novos - r.atualizados - r.ignorados.length} sem alteração.` +
+        (r.ignorados.length ? `\nIgnorados: ${r.ignorados.join('; ')}` : ''));
+    }
+  });
 
   // ---------------------------------------------------------- colaboradores
 
@@ -293,7 +393,9 @@
   $('#sel-motivo-deslig').innerHTML = '<option value="">Não informado</option>' +
     Object.entries(CU.MOTIVOS_DESLIGAMENTO).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('');
   const moedaCampo = (v) => (v === '' || v == null ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-  const CAMPOS_RH = ['cargo', 'admissao', 'desligamento', 'tipoDesligamento', 'motivoDesligamento', 'obsDesligamento', 'inicioAquisitivo'];
+  const CAMPOS_RH = ['cargo', 'admissao', 'desligamento', 'tipoDesligamento', 'motivoDesligamento', 'obsDesligamento', 'inicioAquisitivo',
+    'centroCustoCodigo', 'codigoESocial', 'cbo', 'departamentoCodigo', 'departamento', 'estabelecimentoCodigo', 'estabelecimento',
+    'sindicatoCodigo', 'sindicato', 'nascimento'];
 
   function atualizarDicaJornada() {
     const j = M.JORNADAS[formColab.elements.jornada.value];
@@ -316,7 +418,7 @@
     const dados = {
       nome: f.nome.value.trim(), matricula: f.matricula.value.trim(),
       sexo: f.sexo.value, setorId: f.setorId.value, jornada: f.jornada.value, entrada: f.entrada.value,
-      salario: f.salario.value, feriasVencidas: Number(f.feriasVencidas.value), beneficios: {},
+      salario: f.salario.value, feriasVencidas: Number(f.feriasVencidas.value), beneficios: {}, pcd: f.pcd.checked,
     };
     for (const k of CAMPOS_RH) dados[k] = f[k].value.trim();
     for (const b of CU.BENEFICIOS) dados.beneficios[b.id] = f[`ben-${b.id}`].value;
@@ -347,6 +449,7 @@
       for (const k of CAMPOS_RH) f[k].value = c[k] || '';
       f.salario.value = moedaCampo(c.salario);
       f.feriasVencidas.value = String(c.feriasVencidas || 0);
+      f.pcd.checked = !!c.pcd;
       for (const b of CU.BENEFICIOS) f[`ben-${b.id}`].value = moedaCampo(c.beneficios && c.beneficios[b.id]);
       $('#colab-desligamento').open = !!c.desligamento;
       $('#titulo-form-colab').textContent = 'Editar colaborador';
@@ -361,14 +464,20 @@
 
   $('#filtro-setor-colab').addEventListener('change', renderColaboradores);
   $('#filtro-situacao-colab').addEventListener('change', renderColaboradores);
+  $('#filtro-centro-colab').addEventListener('change', renderColaboradores);
+  $('#busca-colab').addEventListener('input', renderColaboradores);
 
   function renderColaboradores() {
     const filtro = $('#filtro-setor-colab').value;
+    const centro = $('#filtro-centro-colab').value;
+    const busca = $('#busca-colab').value.trim().toLowerCase();
     const situacao = $('#filtro-situacao-colab').value;
     const hoje = M.formatarData(new Date());
     const desligado = (c) => !!c.desligamento && c.desligamento < hoje;
     const lista = estado.colaboradores
       .filter((c) => !filtro || c.setorId === filtro)
+      .filter((c) => !centro || c.centroCustoCodigo === centro)
+      .filter((c) => !busca || c.nome.toLowerCase().includes(busca) || c.matricula.toLowerCase().includes(busca))
       .filter((c) => !situacao || (situacao === 'desligados') === desligado(c))
       .sort((a, b) => nomeSetor(a.setorId).localeCompare(nomeSetor(b.setorId)) || a.nome.localeCompare(b.nome));
     $('#lista-colabs').innerHTML = lista.map((c) => {
@@ -376,7 +485,8 @@
       return `<tr>
         <td>${esc(c.matricula)}</td><td>${esc(c.nome)}${c.cargo ? `<br><small class="suave">${esc(c.cargo)}</small>` : ''}</td>
         <td>${c.sexo === 'F' ? 'Feminino' : 'Masculino'}</td>
-        <td>${esc(nomeSetor(c.setorId))}</td><td>${esc(c.jornada)}</td>
+        <td>${esc(nomeSetor(c.setorId))}${c.centroCustoCodigo ? `<br><small class="suave">CC ${esc(c.centroCustoCodigo)} · ${esc(nomeCentro(c.centroCustoCodigo))}</small>` : ''}</td>
+        <td>${esc(c.jornada)}</td>
         <td>${M.horaDeMinutos(t.inicio)}–${M.horaDeMinutos(t.fim)}</td>
         <td>${c.desligamento ? `<span class="chip ${desligado(c) ? 'ruim' : 'breve'}">${desligado(c) ? 'Desligado' : 'Sai'} em ${dataBR(c.desligamento)}</span>`
           : `<span class="chip bom">Ativo</span>${c.admissao ? `<br><small class="suave">desde ${dataBR(c.admissao)}</small>` : ''}`}</td>
@@ -387,46 +497,105 @@
     }).join('') || `<tr><td colspan="8" class="vazio">${estado.colaboradores.length ? 'Nenhum colaborador neste filtro.' : 'Nenhum colaborador cadastrado.'}</td></tr>`;
   }
 
+  // [campo da linha, apelidos do cabeçalho (sem acento, só letras e números)]
+  const COLUNAS_EMPREGADOS = [
+    ['matricula', ['matricula', 'codepr', 'codempregado', 'codigoempregado', 'registro', 'chapa']],
+    ['codigoESocial', ['codesocial', 'matriculaesocial', 'codigoesocial']],
+    ['nome', ['nome', 'nomeempregado', 'nomecolaborador', 'empregado', 'colaborador']],
+    ['admissao', ['admissao', 'dataadmissao', 'dataadmissao']],
+    ['salario', ['salario', 'salariobase', 'salariocontratual']],
+    ['cargo', ['cargo', 'descricaocargo', 'funcao', 'descricaofuncao']],
+    ['cbo', ['cbo']],
+    ['centroCustoCodigo', ['codccusto', 'codcentrocusto', 'codcentrodecusto', 'codigoccusto', 'codigocentrodecusto', 'centrocustocodigo']],
+    ['centroCustoNome', ['descricaoccusto', 'centrodecusto', 'centrocusto', 'descricaocentrodecusto', 'ccusto']],
+    ['estabelecimentoCodigo', ['codservico', 'codestabelecimento', 'codfilial']],
+    ['estabelecimento', ['descricaoservico', 'estabelecimento', 'filial', 'descricaoestabelecimento']],
+    ['departamentoCodigo', ['coddpto', 'coddepartamento', 'codigodepartamento']],
+    ['departamento', ['descricaodpto', 'departamento', 'dpto', 'descricaodepartamento']],
+    ['sindicatoCodigo', ['codsind', 'codsindicato']],
+    ['sindicato', ['sindicato', 'descricaosindicato']],
+    ['nascimento', ['datanascimento', 'nascimento', 'datadenascimento']],
+    ['sexo', ['sexo']],
+    ['pcd', ['possuideficiencia', 'deficiencia', 'pcd', 'deficiente']],
+    ['setor', ['setor']],
+    ['jornada', ['jornada']],
+    ['entrada', ['entrada', 'horarioentrada', 'horariodeentrada']],
+  ];
+
+  /** Acha a linha de cabeçalho (com matrícula e nome) e converte as linhas seguintes em registros. */
+  function lerEmpregados(linhas) {
+    const temMatricula = (l) => l.some((v) => COLUNAS_EMPREGADOS[0][1].includes(chaveCab(v)));
+    const iCab = linhas.slice(0, 30).findIndex((l) => temMatricula(l));
+    if (iCab < 0) throw new Error('Não encontrei a coluna de matrícula (ex.: "Cód Epr" ou "matricula") no cabeçalho.');
+    const cab = linhas[iCab].map(chaveCab);
+    const indice = {};
+    for (const [campo, apelidos] of COLUNAS_EMPREGADOS) {
+      const i = cab.findIndex((h) => apelidos.includes(h));
+      if (i >= 0) indice[campo] = i;
+    }
+    const registros = [];
+    for (let r = iCab + 1; r < linhas.length; r++) {
+      const l = linhas[r];
+      const pega = (campo) => (indice[campo] == null ? '' : P.texto(l[indice[campo]]));
+      const matricula = pega('matricula');
+      if (!matricula || /^total/i.test(matricula)) continue;
+      const reg = { linha: r + 1, matricula };
+      for (const campo of Object.keys(indice)) {
+        if (campo === 'matricula') continue;
+        const bruto = l[indice[campo]];
+        if (campo === 'admissao' || campo === 'nascimento') reg[campo] = P.lerData(bruto);
+        else if (campo === 'sexo') reg[campo] = pega(campo).charAt(0).toUpperCase();
+        else reg[campo] = pega(campo);
+      }
+      registros.push(reg);
+    }
+    return { registros, colunas: Object.keys(indice) };
+  }
+
   $('#arq-csv').addEventListener('change', async (ev) => {
     const arq = ev.target.files[0];
     ev.target.value = '';
     if (!arq) return;
     if (!exigirEdicao()) return;
-    const texto = (await arq.text()).replace(/^﻿/, '');
-    const linhas = texto.split(/\r?\n/).filter((l) => l.trim());
-    if (linhas.length < 2) return avisar('Arquivo vazio.');
-    const sep = linhas[0].includes(';') ? ';' : ',';
-    const cab = linhas[0].split(sep).map((h) => h.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-    const col = (nome) => cab.indexOf(nome);
-    if (col('matricula') < 0) return avisar('O cabeçalho precisa ter a coluna matricula.');
-    const registros = linhas.slice(1).map((linha, n) => {
-      const v = linha.split(sep).map((x) => x.trim());
-      const pega = (nome) => (col(nome) >= 0 ? v[col(nome)] || '' : '');
-      const data = (txt) => (/^\d{2}\/\d{2}\/\d{4}$/.test(txt) ? txt.split('/').reverse().join('-') : txt);
-      return {
-        linha: n + 2, nome: pega('nome'), matricula: pega('matricula'), sexo: pega('sexo').toUpperCase(),
-        setor: pega('setor'), jornada: pega('jornada'), entrada: pega('entrada'),
-        cargo: pega('cargo'), salario: pega('salario'), admissao: data(pega('admissao')),
-      };
-    }).filter((r) => r.matricula);
-    if (!registros.length) return avisar('Nenhuma linha com matrícula encontrada.');
-    const colunas = CAMPOS_IMPORTACAO.filter(([k]) => col(k) >= 0);
-    const opcoes = await opcoesImportacao(registros, colunas);
+    let lido;
+    try {
+      lido = lerEmpregados(await P.ler(new Uint8Array(await arq.arrayBuffer())));
+    } catch (e) {
+      return avisar(`Não foi possível ler a planilha: ${e.message}`);
+    }
+    if (!lido.registros.length) return avisar('Nenhuma linha com matrícula encontrada.');
+    const opcoes = await opcoesImportacao(lido.registros, lido.colunas);
     if (!opcoes) return;
+    // setor das escalas: coluna "setor" da planilha ou, na falta dela, departamento ou centro de custo
+    const registros = lido.registros.map((l) => ({
+      ...l, setor: l.setor || (opcoes.setorDe === 'centroCusto' ? l.centroCustoNome : l.departamento) || '',
+    }));
+    const naPlanilha = new Set(registros.map((l) => l.matricula));
+    const hoje = M.formatarData(new Date());
+    const ausentes = estado.colaboradores.filter((c) => !naPlanilha.has(c.matricula) && (!c.desligamento || c.desligamento >= hoje));
     let r = null;
     await executar(async () => { r = await api.post('/api/colaboradores/importar', { linhas: registros, opcoes }); });
     if (r) {
       avisar(`${r.importados} colaborador(es) cadastrado(s) e ${r.atualizados || 0} atualizado(s).` +
+        (r.centros ? `\n${r.centros} centro(s) de custo novo(s) ou renomeado(s).` : '') +
         (r.ignorados.length ? `\n\nIgnorados:\n${r.ignorados.slice(0, 20).join('\n')}` +
-          (r.ignorados.length > 20 ? `\n… e mais ${r.ignorados.length - 20}` : '') : ''));
+          (r.ignorados.length > 20 ? `\n… e mais ${r.ignorados.length - 20}` : '') : '') +
+        (ausentes.length ? `\n\n${ausentes.length} colaborador(es) ativo(s) no sistema não constam na planilha. Se a planilha traz todos os ` +
+          `ativos, registre o desligamento deles: ${ausentes.slice(0, 10).map((c) => `${c.matricula} ${c.nome}`).join('; ')}` +
+          (ausentes.length > 10 ? '…' : '') + '.' : ''));
     }
   });
 
-  // [coluna, nome, marcado por padrão ao atualizar]
+  // [grupo, nome, colunas que o compõem, marcado por padrão ao atualizar]
   const CAMPOS_IMPORTACAO = [
-    ['cargo', 'Cargo', true], ['salario', 'Salário', true], ['admissao', 'Admissão', true],
-    ['nome', 'Nome', false], ['sexo', 'Sexo', false], ['setor', 'Setor', false],
-    ['jornada', 'Jornada', false], ['entrada', 'Horário de entrada', false],
+    ['cargo', 'Cargo e CBO', ['cargo', 'cbo'], true], ['salario', 'Salário', ['salario'], true],
+    ['admissao', 'Admissão', ['admissao'], true], ['centroCusto', 'Centro de custo', ['centroCustoCodigo'], true],
+    ['departamento', 'Departamento', ['departamento', 'departamentoCodigo'], true],
+    ['estabelecimento', 'Estabelecimento', ['estabelecimento', 'estabelecimentoCodigo'], true],
+    ['sindicato', 'Sindicato', ['sindicato', 'sindicatoCodigo'], true], ['nascimento', 'Nascimento', ['nascimento'], true],
+    ['pcd', 'PcD', ['pcd'], true], ['codigoESocial', 'Cód. eSocial', ['codigoESocial'], true],
+    ['nome', 'Nome', ['nome'], false], ['sexo', 'Sexo', ['sexo'], false], ['setor', 'Setor das escalas', ['setor'], false],
+    ['jornada', 'Jornada', ['jornada'], false], ['entrada', 'Horário de entrada', ['entrada'], false],
   ];
 
   /** Caixa de diálogo: cadastrar matrículas novas e/ou atualizar as já cadastradas, escolhendo os campos. */
@@ -435,7 +604,11 @@
     const cadastradas = new Set(estado.colaboradores.map((c) => c.matricula));
     const existentes = registros.filter((r) => cadastradas.has(r.matricula)).length;
     const novas = registros.length - existentes;
-    const podeCadastrar = colunas.some(([k]) => k === 'nome') && colunas.some(([k]) => k === 'setor') && colunas.some(([k]) => k === 'sexo');
+    const temSetor = colunas.includes('setor') || colunas.includes('departamento') || colunas.includes('centroCustoNome');
+    const podeCadastrar = colunas.includes('nome') && colunas.includes('sexo') && temSetor;
+    // grupos de campos presentes na planilha ("setor" também vem do departamento ou do centro de custo)
+    const grupos = CAMPOS_IMPORTACAO.filter(([g, , cols]) => cols.some((c) => colunas.includes(c)) || (g === 'setor' && temSetor));
+    $('#imp-setor-rotulo').hidden = colunas.includes('setor') || !temSetor;
     $('#imp-resumo').textContent = `O arquivo tem ${registros.length} linha(s): ${novas} matrícula(s) nova(s) e ${existentes} já cadastrada(s).`;
     const cad = $('#imp-cadastrar');
     const atu = $('#imp-atualizar');
@@ -444,11 +617,11 @@
     cad.checked = podeCadastrar && novas > 0;
     cad.disabled = !podeCadastrar || !novas;
     $('#imp-cadastrar-dica').hidden = podeCadastrar || !novas;
-    $('#imp-cadastrar-dica').textContent = 'Para cadastrar, o arquivo precisa das colunas nome, sexo e setor.';
-    atu.checked = existentes > 0 && colunas.length > 0;
-    atu.disabled = !existentes || !colunas.length;
-    $('#imp-lista-campos').innerHTML = colunas.length
-      ? colunas.map(([k, nome, padrao]) => `<label class="check"><input type="checkbox" name="imp-campo" value="${k}" ${padrao ? 'checked' : ''}> ${nome}</label>`).join('')
+    $('#imp-cadastrar-dica').textContent = 'Para cadastrar, o arquivo precisa das colunas nome, sexo e setor (ou departamento ou centro de custo).';
+    atu.checked = existentes > 0 && grupos.length > 0;
+    atu.disabled = !existentes || !grupos.length;
+    $('#imp-lista-campos').innerHTML = grupos.length
+      ? grupos.map(([k, nome, , padrao]) => `<label class="check"><input type="checkbox" name="imp-campo" value="${k}" ${padrao ? 'checked' : ''}> ${nome}</label>`).join('')
       : '<p class="dica">O arquivo não tem colunas que possam ser atualizadas.</p>';
     const atualizarEstado = () => {
       $('#imp-campos').disabled = !atu.checked;
@@ -461,6 +634,7 @@
       dlg.onclose = () => {
         if (dlg.returnValue !== 'ok') return resolve(null);
         resolve({
+          setorDe: $('#imp-setor').value,
           cadastrar: cad.checked,
           atualizar: atu.checked ? [...dlg.querySelectorAll('input[name=imp-campo]:checked')].map((x) => x.value) : [],
         });
@@ -736,6 +910,7 @@
   function render() {
     renderInicio();
     renderSetores();
+    renderCentros();
     renderColaboradores();
     renderRegras();
     renderEscala();
@@ -763,6 +938,6 @@
       document.body.classList.remove('perfil-consulta', 'perfil-admin');
     },
     mostrarAba, mostrarModulo, avisar, confirmar, abrirDialogo, esc, baixar,
-    estado: () => estado, podeEditar,
+    estado: () => estado, podeEditar, nomeCentro,
   };
 })();

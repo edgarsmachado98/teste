@@ -427,7 +427,7 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .fl-rodape { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; align-items: center; }
 .fl-rodape .dica { margin: 0; flex: 1 1 20rem; }
 
-.rl-filtros { display: grid; grid-template-columns: minmax(14rem, 2fr) repeat(3, minmax(9rem, 1fr)) auto; gap: .6rem; align-items: end; margin-bottom: 1rem; }
+.rl-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; align-items: end; margin-bottom: 1rem; }
 .rl-saida { display: grid; gap: 1rem; }
 .rl-saida > .cartao h3, .rl-impressao .cartao h3 { margin-top: 0; }
 .rl-rolagem { overflow-x: auto; }
@@ -476,3 +476,6 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .imp-campos { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: .35rem .75rem; }
 #dialogo-importar h2 { margin: 0; }
 #imp-campos:disabled { opacity: .55; }
+.rl-filtros .rl-tipo { grid-column: span 2; }
+.rl-filtros .linha-botoes { grid-column: 1 / -1; justify-content: flex-end; }
+#busca-colab { width: 14rem; }
