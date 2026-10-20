@@ -11,7 +11,7 @@ const REP = {
   razao: '62.557.133 Marcos Antonio Carraro', cnpj: '62557133000110', fantasia: '',
   endereco: 'R Arlindo Rett Primo, 100 Sala 01', bairro: 'Jardim Sempre Verde', cidade: 'Jau', uf: 'SP', cep: '17211600',
   responsavel: 'Marcos Antonio Carraro', sexo: 'M', nacionalidade: 'brasileiro', nascimento: '1963-10-20',
-  rg: '16435595', rgOrgao: 'SSP/SP', cpf: '05503031890', mesmoEndereco: true, zona: 'Jau e regiao', dataContrato: '2026-05-08',
+  rg: '16435595', rgOrgao: 'SSP/SP', cpf: '05503031890', mesmoEndereco: true, zona: 'Jau e regiao', dataContrato: '2026-05-08', estados: 'SP',
 };
 
 /** Texto puro de um documento montado (sem marcações). */
@@ -144,4 +144,42 @@ test('API de contratos: cadastro, permissões, duplicidade e backup', async (t) 
   assert.strictEqual((await fetch(base + '/img/logo-moinho.png')).headers.get('content-type'), 'image/png');
   assert.strictEqual((await fetch(base + '/favicon.ico')).status, 200);
   assert.strictEqual((await fetch(base + '/img/../server/db.js')).status, 404);
+});
+
+test('estado de atuação: SP usa o pacote atual; RS e SC usam o modelo só da Antoniazzi & Cia', () => {
+  assert.deepStrictEqual([C.regiao({ estados: 'SP' }), C.regiao({ estados: 'RS' }), C.regiao({ estados: 'SC,RS' }),
+    C.regiao({ estados: 'RS,SP' }), C.regiao({})], ['sp', 'rssc', 'rssc', 'conflito', '']);
+  assert.deepStrictEqual(C.documentosDaRegiao({ estados: 'RS,SC' }).map((x) => x.id), ['contratoCia', 'politica', 'aditivo', 'termo']);
+  assert.ok(C.documentosDaRegiao({ estados: 'SP' }).some((x) => x.id === 'contratoAlimentos'));
+  assert.match(C.pendencias({ ...REP, estados: 'RS,SP' }).map((p) => p.mensagem).join(' '), /modelo de contrato e RS\/SC usam outro/);
+  assert.match(C.pendencias({ ...REP, estados: '' }).map((p) => p.mensagem).join(' '), /Estado de atuação/);
+
+  const rs = { ...REP, estados: 'RS,SC', zona: 'RIO GRANDE DO SUL E SANTA CATARINA', documentos: [] };
+  const docs = C.montar(rs);
+  assert.deepStrictEqual(docs.map((x) => x.id), ['contratoCia', 'politica', 'aditivo', 'termo']); // sem o contrato da Alimentos
+  const v = C.valores(rs);
+  const [contrato, politica, aditivo, termo] = docs.map((x) => textoDe(x, v));
+  assert.match(contrato, /2% Vendas de Farinha de Trigo/);
+  assert.doesNotMatch(contrato, /Guarulhos|Clientes especiais/);
+  assert.doesNotMatch(politica, /ALIMENTOS/);
+  assert.match(politica, /Santa Maria\/RS, disponibiliza a presente/);
+  assert.match(politica, /a ANTONIAZZI & CIA LTDA poderá realizar o compartilhamento/);
+  assert.deepStrictEqual(docs[1].blocos.find((b) => b[0] === 'versoes')[1].length, 1);
+  assert.match(aditivo, /Estados do Rio Grande do Sul e Santa Catarina: comissão total de 4% \(quatro por cento\)/);
+  assert.match(termo, /Política de Privacidade Geral da empresa Antoniazzi & Cia Ltda\./);
+  assert.strictEqual(docs[3].cabecalho, 'logo');
+  // o estado de atuação não aparece em nenhum documento
+  assert.doesNotMatch([contrato, politica, aditivo, termo].join(' '), /Estado de atuação/);
+
+  // São Paulo continua com o pacote anterior
+  const sp = C.montar({ ...REP, documentos: [] }).map((x) => textoDe(x, C.valores(REP)));
+  assert.match(sp[0], /CD \(Guarulhos\/SP\)/);
+  assert.match(sp.join(' '), /ANTONIAZZI INDÚSTRIA E COMÉRCIO DE ALIMENTOS LTDA/);
+  assert.match(sp.join(' '), /Estado de São Paulo: comissão total de 5%/);
+
+  // o Word sai com o mesmo pacote
+  const img = (f, w, h) => ({ bytes: new Uint8Array(fs.readFileSync(f)), largura: w, altura: h });
+  const zip = Buffer.from(D.gerar(docs, v, { moinho: img('img/logo-moinho.png', 261, 111), antoniazzi: img('img/logo-antoniazzi.png', 286, 244) }));
+  assert.ok(zip.toString('latin1').includes('word/document.xml'));
+  assert.doesNotMatch(zip.toString('utf8'), /ALIMENTOS/);
 });

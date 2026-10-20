@@ -77,12 +77,12 @@
       case 'assPilha': return `<div class="ct-assinaturas um esquerda">${linhaAss(a1)}</div>`;
       case 'testNum': return '<p class="ct-test-rotulo">Testemunhas:</p><div class="ct-test-num">' +
         '<p>1.<span class="ct-linha"></span></p><p>2.<span class="ct-linha"></span></p></div>';
-      case 'assPolitica': return '<div class="ct-ass-pol">' + [['ANTONIAZZI & CIA LTDA'],
+      case 'assPolitica': return '<div class="ct-ass-pol">' + (a1 || [['ANTONIAZZI & CIA LTDA'],
         ['ANTONIAZZI INDÚSTRIA E COMÉRCIO', 'DE ALIMENTOS LTDA'],
-        ['⟦razao⟧', 'CNPJ: ⟦cnpj⟧', 'Representante: ⟦responsavel⟧']].map((l) => linhaAss(l)).join('') + '</div>';
+        ['⟦razao⟧', 'CNPJ: ⟦cnpj⟧', 'Representante: ⟦responsavel⟧']]).map((l) => linhaAss(l)).join('') + '</div>';
       case 'assTermo': return `<div class="ct-ass-termo">${linhaAss(['REPRESENTANTE COMERCIAL', '⟦razao⟧', 'CNPJ: ⟦cnpj⟧', '__⟦responsavel⟧__'], 'centro')}</div>`;
       case 'versoes': return '<table class="ct-versoes"><thead><tr><th>Data</th><th>Versão</th><th>Descrição</th><th>Autor</th></tr></thead><tbody>' +
-        C.VERSOES.map((l) => `<tr>${l.map((x) => `<td>${esc(x)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
+        (a1 || C.VERSOES).map((l) => `<tr>${l.map((x) => `<td>${esc(x)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
       default: return '';
     }
   }

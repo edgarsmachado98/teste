@@ -69,18 +69,46 @@
     { id: 'resUf', grupo: 'residencia', rotulo: 'UF', obrigSe: 'residencia', tipo: 'uf' },
     { id: 'resCep', grupo: 'residencia', rotulo: 'CEP', obrigSe: 'residencia', tipo: 'cep' },
 
+    // só para o cadastro (não aparece no contrato): define o modelo do pacote de documentos
+    { id: 'estados', grupo: 'contrato', rotulo: 'Estado de atuação do representante', obrig: true, tipo: 'estados' },
     { id: 'zona', grupo: 'contrato', rotulo: 'Zona de influência/clientes (Anexo I)', obrig: true, tipo: 'texto', max: 2000 },
     { id: 'dataContrato', grupo: 'contrato', rotulo: 'Data do contrato', obrig: true, tipo: 'data' },
   ];
 
   /** Documentos do pacote, na ordem do modelo. */
   const DOCUMENTOS = [
-    { id: 'contratoCia', nome: 'Contrato de representação — Antoniazzi & Cia Ltda (com Anexos I a IV)' },
-    { id: 'contratoAlimentos', nome: 'Contrato de representação — Antoniazzi Ind. e Com. de Alimentos Ltda (com Anexos I a IV)' },
-    { id: 'politica', nome: 'Política de Privacidade Geral' },
-    { id: 'aditivo', nome: 'Termo Aditivo (comissão diferenciada)' },
-    { id: 'termo', nome: 'Termo de Ciência e Adesão à Política de Privacidade' },
+    { id: 'contratoCia', nome: 'Contrato de representação — Antoniazzi & Cia Ltda (com Anexos I a IV)', regioes: ['sp', 'rssc'] },
+    { id: 'contratoAlimentos', nome: 'Contrato de representação — Antoniazzi Ind. e Com. de Alimentos Ltda (com Anexos I a IV)', regioes: ['sp'] },
+    { id: 'politica', nome: 'Política de Privacidade Geral', regioes: ['sp', 'rssc'] },
+    { id: 'aditivo', nome: 'Termo Aditivo (comissão diferenciada)', regioes: ['sp', 'rssc'] },
+    { id: 'termo', nome: 'Termo de Ciência e Adesão à Política de Privacidade', regioes: ['sp', 'rssc'] },
   ];
+
+  /** Estados de atuação possíveis e o modelo de contrato de cada um. */
+  const ESTADOS_ATUACAO = [
+    { uf: 'RS', nome: 'Rio Grande do Sul' }, { uf: 'SC', nome: 'Santa Catarina' }, { uf: 'SP', nome: 'São Paulo' },
+  ];
+  const REGIOES = {
+    sp: 'Modelo São Paulo (Antoniazzi & Cia e Antoniazzi Alimentos)',
+    rssc: 'Modelo Rio Grande do Sul e Santa Catarina (Antoniazzi & Cia)',
+  };
+  const listaEstados = (v) => String(v || '').split(/[,;\s]+/).map((x) => x.toUpperCase())
+    .filter((x, i, a) => ESTADOS_ATUACAO.some((e) => e.uf === x) && a.indexOf(x) === i);
+
+  /** 'sp', 'rssc', 'conflito' (SP junto com RS/SC) ou '' (nenhum estado). */
+  function regiao(d) {
+    const e = listaEstados(d && d.estados);
+    const sul = e.includes('RS') || e.includes('SC');
+    if (e.includes('SP') && sul) return 'conflito';
+    if (e.includes('SP')) return 'sp';
+    return sul ? 'rssc' : '';
+  }
+
+  /** Documentos do pacote disponíveis para o estado de atuação (sem estado: os do modelo São Paulo). */
+  const documentosDaRegiao = (d) => {
+    const r = regiao(d);
+    return DOCUMENTOS.filter((x) => x.regioes.includes(r === 'rssc' ? 'rssc' : 'sp'));
+  };
 
   // ------------------------------------------------------------ utilidades
 
@@ -177,6 +205,10 @@
       const obrig = c.obrig || (c.obrigSe === 'residencia' && d.mesmoEndereco === false);
       if (obrig && (v == null || String(v).trim() === '')) out.push({ campo: c.id, mensagem: `Preencha: ${c.rotulo}.` });
     }
+    if (regiao(d) === 'conflito') {
+      out.push({ campo: 'estados', mensagem: 'Estado de atuação: São Paulo usa um modelo de contrato e RS/SC usam outro. ' +
+        'Marque São Paulo ou Rio Grande do Sul/Santa Catarina (para os dois, cadastre contratos separados).' });
+    }
     if (d.cpf && !validarCPF(d.cpf)) out.push({ campo: 'cpf', mensagem: 'CPF inválido (confira os dígitos).' });
     if (d.cnpj && !validarCNPJ(d.cnpj)) out.push({ campo: 'cnpj', mensagem: 'CNPJ inválido (confira os dígitos).' });
     for (const id of ['cep', 'resCep']) {
@@ -237,7 +269,20 @@
       'e alterações introduzidas pela Lei nº 8.420/92, tem entre si justo e contratado o seguinte:';
   }
 
-  function contrato(rd, g) {
+  /** Percentuais de comissão do Anexo II conforme o modelo (São Paulo ou RS/SC). */
+  function comissoesAnexoII(reg) {
+    if (reg === 'rssc') return [['pc', '{v}**2% Vendas de Farinha de Trigo**{/v}']];
+    return [
+      ['pc', '{v}**1% Clientes especiais – desde que especificadamente citado sua razão social neste anexo ou adendo ' +
+        'comercial deste contrato.**{/v}'],
+      ['pc', '{v}**2% Padarias Indústrias e Supermercados – e demais clientes desde que saia para entrega da cidade ' +
+        'de Santa Maria e/ou Canoas RS**{/v}'],
+      ['pc', '{v}**3% Padarias, Indústrias e Supermercados – e demais clientes desde que saia do CD ' +
+        '(Guarulhos/SP).**{/v}'],
+    ];
+  }
+
+  function contrato(rd, g, reg) {
     const R = '**REPRESENTANTE**';
     const D = '**REPRESENTADA**';
     return [
@@ -370,12 +415,7 @@
       ['rotulo', 'PRODUTOS COMISSÃO'],
       ['p', '**O CONTRATADO a título de prestação de serviços, vindo a promover vendas por seu intermédio/indicação, ' +
         'receberá sua contraprestação financeira de modo variável, conforme abaixo descrito:**'],
-      ['pc', '{v}**1% Clientes especiais – desde que especificadamente citado sua razão social neste anexo ou adendo ' +
-        'comercial deste contrato.**{/v}'],
-      ['pc', '{v}**2% Padarias Indústrias e Supermercados – e demais clientes desde que saia para entrega da cidade ' +
-        'de Santa Maria e/ou Canoas RS**{/v}'],
-      ['pc', '{v}**3% Padarias, Indústrias e Supermercados – e demais clientes desde que saia do CD ' +
-        '(Guarulhos/SP).**{/v}'],
+      ...comissoesAnexoII(reg),
       ['p', '**Clausula1:** A análise do potencial do cliente é feita primeiramente na abertura do mesmo, baseada na ' +
         'análise comercial de compra total do cliente no mês (supervisor de vendas) e pelo departamento financeiro ' +
         'que analisa o serasa do mesmo. Da mesma forma, periodicamente poderá ser reavaliado o cliente pelo setor ' +
@@ -477,7 +517,26 @@
     ];
   }
 
-  function politica() {
+  /** Política só da Antoniazzi & Cia (modelo RS/SC): tira a Antoniazzi Alimentos do texto. */
+  const SO_CIA = [
+    [/, em Santa Maria\/RS, e a \*\*ANTONIAZZI INDÚSTRIA E COMÉRCIO DE ALIMENTOS LTDA\*\*.*?em Canoas\/RS, disponibilizam/, ', em Santa Maria/RS, disponibiliza'],
+    [/ e a ANTONIAZZI INDÚSTRIA E COMÉRCIO DE ALIMENTOS LTDA poderão/g, ' poderá'],
+    [/, da ANTONIAZZI INDÚSTRIA E COMÉRCIO DE ALIMENTOS LTDA e do/g, ' e do'],
+    [/ (e|ou) (da|pela) ANTONIAZZI INDÚSTRIA E COMÉRCIO DE ALIMENTOS LTDA/g, ''],
+  ];
+  const soCia = (t) => SO_CIA.reduce((x, [de, para]) => x.replace(de, para), t);
+
+  function politica(reg) {
+    const blocos = politicaBlocos();
+    if (reg !== 'rssc') return blocos;
+    return blocos.map((b) => {
+      if (b[0] === 'versoes') return ['versoes', VERSOES.slice(0, 1)];
+      if (b[0] === 'assPolitica') return ['assPolitica', [['ANTONIAZZI & CIA LTDA'], ['⟦razao⟧', 'CNPJ: ⟦cnpj⟧', 'Representante: ⟦responsavel⟧']]];
+      return b.map((x) => (typeof x === 'string' ? soCia(x) : x));
+    });
+  }
+
+  function politicaBlocos() {
     return [
       ['tituloCentro', 'POLÍTICA DE PRIVACIDADE GERAL'],
       ['versoes'],
@@ -592,7 +651,7 @@
     ];
   }
 
-  function aditivo(g) {
+  function aditivo(g, reg) {
     const rd = REPRESENTADAS.cia;
     return [
       ['titulo', 'TERMO ADITIVO AO CONTRATO DE REPRESENTAÇÃO COMERCIAL', { centro: true }],
@@ -623,8 +682,11 @@
       ['secao', 'CLÁUSULA TERCEIRA – DOS PERCENTUAIS DE COMISSÃO'],
       ['n', '4.', 'Para os produtos descritos na cláusula anterior, ficam estabelecidos os seguintes percentuais de ' +
         'comissão:'],
-      ['item', 'Para representantes com atuação no Estado de São Paulo: comissão total de 5% sobre o valor líquido ' +
-        'efetivamente recebido pela REPRESENTADA.'],
+      ['item', reg === 'rssc'
+        ? 'Para representantes com atuação nos Estados do Rio Grande do Sul e Santa Catarina: comissão total de 4% ' +
+          '(quatro por cento) sobre o valor líquido efetivamente recebido pela REPRESENTADA.'
+        : 'Para representantes com atuação no Estado de São Paulo: comissão total de 5% sobre o valor líquido ' +
+          'efetivamente recebido pela REPRESENTADA.'],
       ['item', 'Para os produtos “Montagner Pequenas Produções” e “Mistura Montagner Pequenas Produções”: comissão ' +
         'total de 3% sobre o valor líquido efetivamente recebido, aplicável a todas as regiões.'],
       ['secao', 'CLÁUSULA QUARTA – DA FORMA DE APURAÇÃO E PAGAMENTO COMPLEMENTAR'],
@@ -660,12 +722,13 @@
     ];
   }
 
-  function termo() {
+  function termo(reg) {
+    const empresas = reg === 'rssc' ? 'da empresa __Antoniazzi & Cia Ltda__'
+      : 'das empresas __Antoniazzi & Cia Ltda__ e __Antoniazzi Indústria e Comércio de Alimentos Ltda__';
     return [
       ['tituloCentro', '__TERMO DE CIÊNCIA E ADESÃO À POLÍTICA DE PRIVACIDADE GERAL__'],
       ['pt', `Por meio deste Termo, Eu, **__${c('responsavel')}__**, inscrito(a) no CPF sob nº **${c('cpf')}**, ` +
-        'declaro que **li, compreendi e me comprometo a cumprir integralmente a Política de Privacidade Geral** das ' +
-        'empresas __Antoniazzi & Cia Ltda__ e __Antoniazzi Indústria e Comércio de Alimentos Ltda__. Declaro que fui ' +
+        `declaro que **li, compreendi e me comprometo a cumprir integralmente a Política de Privacidade Geral** ${empresas}. Declaro que fui ` +
         'devidamente orientado sobre as regras, deveres, requisitos e responsabilidades decorrentes da Lei nº 13.709, ' +
         'de 14 de agosto de 2018, Lei Geral de Proteção de Dados Pessoais – LGPD, sobre as operações de coleta, ' +
         'armazenamento, compartilhamento e tratamento em geral de dados pessoais a que tiver acesso, bem como ' +
@@ -687,15 +750,19 @@
   function montar(d) {
     d = d || {};
     const g = generos(d);
-    const escolhidos = Array.isArray(d.documentos) && d.documentos.length ? d.documentos : DOCUMENTOS.map((x) => x.id);
+    // modelo pelo estado de atuação: RS/SC usa o pacote só da Antoniazzi & Cia; os demais casos, o de São Paulo
+    const reg = regiao(d) === 'rssc' ? 'rssc' : 'sp';
+    const disponiveis = documentosDaRegiao(d);
+    const escolhidos = Array.isArray(d.documentos) && d.documentos.length ? d.documentos : disponiveis.map((x) => x.id);
     const todos = {
-      contratoCia: { cabecalho: 'logo', fonte: 'contrato', blocos: () => contrato(REPRESENTADAS.cia, g) },
-      contratoAlimentos: { cabecalho: 'logo', fonte: 'contrato', blocos: () => contrato(REPRESENTADAS.alimentos, g) },
-      politica: { cabecalho: 'dados', fonte: 'politica', blocos: politica },
-      aditivo: { cabecalho: 'nenhum', fonte: 'contrato', blocos: () => aditivo(g) },
-      termo: { cabecalho: 'logos', fonte: 'termo', blocos: termo },
+      contratoCia: { cabecalho: 'logo', fonte: 'contrato', blocos: () => contrato(REPRESENTADAS.cia, g, reg) },
+      contratoAlimentos: { cabecalho: 'logo', fonte: 'contrato', blocos: () => contrato(REPRESENTADAS.alimentos, g, reg) },
+      politica: { cabecalho: 'dados', fonte: 'politica', blocos: () => politica(reg) },
+      aditivo: { cabecalho: 'nenhum', fonte: 'contrato', blocos: () => aditivo(g, reg) },
+      // no modelo RS/SC o termo leva só o logotipo do Moinho (sem o da Antoniazzi Alimentos)
+      termo: { cabecalho: reg === 'rssc' ? 'logo' : 'logos', fonte: 'termo', blocos: () => termo(reg) },
     };
-    return DOCUMENTOS.filter((x) => escolhidos.includes(x.id)).map((x) => ({
+    return disponiveis.filter((x) => escolhidos.includes(x.id)).map((x) => ({
       id: x.id, nome: x.nome, cabecalho: todos[x.id].cabecalho, fonte: todos[x.id].fonte, blocos: todos[x.id].blocos(),
     }));
   }
@@ -724,7 +791,7 @@
   }
 
   return {
-    REPRESENTADAS, CAMPOS, DOCUMENTOS, UFS, CABECALHO, VERSOES, ALVO,
+    REPRESENTADAS, CAMPOS, DOCUMENTOS, ESTADOS_ATUACAO, REGIOES, regiao, documentosDaRegiao, listaEstados, UFS, CABECALHO, VERSOES, ALVO,
     validarCPF, validarCNPJ, formatarCPF, formatarCNPJ, formatarCEP, soDigitos, dataExtenso, dataBR,
     valores, pendencias, trechos, montar, nomeArquivo,
   };

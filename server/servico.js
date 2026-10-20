@@ -911,6 +911,7 @@ function criarServico(db, opcoes = {}) {
     const out = {};
     for (const c of CT.CAMPOS) {
       if (c.tipo === 'check') { out[c.id] = d[c.id] !== false; continue; }
+      if (c.tipo === 'estados') { out[c.id] = CT.listaEstados(Array.isArray(d[c.id]) ? d[c.id].join(',') : d[c.id]).join(','); continue; }
       let v = d[c.id] == null ? '' : String(d[c.id]).trim();
       if (c.max && v.length > c.max) falhar(400, `${c.rotulo}: no máximo ${c.max} caracteres.`);
       if (c.tipo === 'cpf') v = v ? CT.formatarCPF(v) : '';
@@ -921,8 +922,10 @@ function criarServico(db, opcoes = {}) {
       if (c.tipo === 'data' && v) dataValida(v, c.rotulo);
       out[c.id] = v;
     }
-    const docs = Array.isArray(d.documentos) ? d.documentos.filter((x) => CT.DOCUMENTOS.some((y) => y.id === x)) : [];
-    out.documentos = docs.length ? [...new Set(docs)] : CT.DOCUMENTOS.map((x) => x.id);
+    // só os documentos do modelo do estado de atuação (RS/SC não tem o contrato da Antoniazzi Alimentos)
+    const disponiveis = CT.documentosDaRegiao(out);
+    const docs = Array.isArray(d.documentos) ? d.documentos.filter((x) => disponiveis.some((y) => y.id === x)) : [];
+    out.documentos = docs.length ? [...new Set(docs)] : disponiveis.map((x) => x.id);
     out.situacao = SITUACOES.includes(d.situacao) ? d.situacao : 'ativo';
     // para salvar basta identificar o representante; o restante pode ser completado depois
     if (!out.razao) falhar(400, 'Informe a razão social do representante.');

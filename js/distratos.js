@@ -159,7 +159,7 @@
       box.hidden = !msg;
       return;
     }
-    const pend = C.pendencias(contrato);
+    const pend = C.pendencias(contrato).filter((p) => p.campo !== 'estados');
     box.innerHTML = `<dl class="dt-dados">
         ${contrato.codigo ? `<dt>Código</dt><dd>${esc(contrato.codigo)}</dd>` : ''}
         <dt>Razão social</dt><dd>${esc(contrato.razao)}</dd>
@@ -439,7 +439,7 @@
   function pendencias(d, r) {
     const out = [];
     if (!contrato) out.push({ campo: 'dt-cnpj', mensagem: 'Busque o representante pelo CNPJ.' });
-    else if (C.pendencias(contrato).length) out.push({ campo: 'dt-cnpj', mensagem: 'Complete o cadastro do contrato do representante.' });
+    else if (C.pendencias(contrato).filter((p) => p.campo !== 'estados').length) out.push({ campo: 'dt-cnpj', mensagem: 'Complete o cadastro do contrato do representante.' });
     if (!d.representada) out.push({ campo: 'dt-representada', mensagem: 'Escolha a empresa representada.' });
     if (!d.dataInicio) out.push({ campo: 'dt-inicio', mensagem: 'Informe o início do contrato.' });
     if (!d.dataDistrato) out.push({ campo: 'dt-data', mensagem: 'Informe a data do distrato.' });

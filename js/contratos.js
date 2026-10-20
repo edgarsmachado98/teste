@@ -39,7 +39,7 @@
     $('#ct-lista').innerHTML = lista.map((c) => `<tr>
         <td><b>${esc(c.razao)}</b><br><small class="suave">${c.codigo ? `Cód. ${esc(c.codigo)} · ` : ''}${esc(c.responsavel || '')}</small></td>
         <td>${esc(c.cnpj)}</td>
-        <td>${esc([c.cidade, c.uf].filter(Boolean).join('-'))}</td>
+        <td>${esc([c.cidade, c.uf].filter(Boolean).join('-'))}${c.estados ? `<br><small class="suave">atuação: ${esc(C.listaEstados(c.estados).join(', '))}</small>` : ''}</td>
         <td>${esc((c.zona || '').split('\n')[0])}</td>
         <td>${esc(C.dataBR(c.dataContrato))}</td>
         <td>${c.situacao === 'encerrado' ? '<span class="chip">Encerrado</span>' : '<span class="chip bom">Ativo</span>'}
@@ -84,6 +84,11 @@
     const dica = c.dica ? `<small class="dica">${esc(c.dica)}</small>` : '';
     const largo = ['endereco', 'resEndereco', 'razao', 'responsavel', 'zona'].includes(c.id) ? ' largo' : '';
     switch (c.tipo) {
+      case 'estados':
+        return `<fieldset class="largo ct-estados" id="${id}"><legend>${esc(c.rotulo)}${obrig}</legend>` +
+          C.ESTADOS_ATUACAO.map((e) => `<label class="check"><input type="checkbox" data-estado="${e.uf}"> ${esc(e.nome)} (${e.uf})</label>`).join('') +
+          '<small class="dica largo" id="ct-modelo-regiao">Fica só no cadastro (não aparece no contrato). São Paulo usa o modelo com a ' +
+          'Antoniazzi Alimentos; Rio Grande do Sul e Santa Catarina usam o modelo só da Antoniazzi &amp; Cia.</small></fieldset>';
       case 'check':
         return `<label class="check largo"><input type="checkbox" id="${id}" data-campo="${c.id}"> ${esc(c.rotulo)}</label>`;
       case 'uf':
@@ -107,8 +112,27 @@
   for (const [grupo, sel] of Object.entries(GRUPOS)) {
     $(sel).innerHTML = C.CAMPOS.filter((c) => c.grupo === grupo).map(campoHTML).join('');
   }
-  $('#ct-documentos').innerHTML = C.DOCUMENTOS.map((d) =>
-    `<label class="check"><input type="checkbox" name="documento" value="${d.id}"> ${esc(d.nome)}</label>`).join('');
+  const estadosMarcados = () => [...form.querySelectorAll('#ct-estados input[data-estado]:checked')].map((x) => x.dataset.estado).join(',');
+
+  /** Lista de documentos do pacote conforme o estado de atuação, mantendo o que estava marcado. */
+  function renderDocumentos(marcados) {
+    const d = { estados: estadosMarcados() };
+    const reg = C.regiao(d);
+    const atuais = marcados || [...form.querySelectorAll('input[name=documento]')].filter((x) => x.checked).map((x) => x.value);
+    const antes = [...form.querySelectorAll('input[name=documento]')].map((x) => x.value);
+    const lista = C.documentosDaRegiao(d);
+    $('#ct-documentos').innerHTML = lista.map((x) => {
+      // documento que aparece agora (ex.: contrato da Alimentos ao marcar SP) já vem marcado
+      const marcado = atuais.includes(x.id) || (!marcados && !antes.includes(x.id));
+      return `<label class="check"><input type="checkbox" name="documento" value="${x.id}"${marcado ? ' checked' : ''}> ${esc(x.nome)}</label>`;
+    }).join('');
+    $('#ct-modelo-regiao').innerHTML = reg === 'conflito'
+      ? '<b class="ruim">Marque São Paulo ou Rio Grande do Sul/Santa Catarina: os modelos de contrato são diferentes.</b>'
+      : `Fica só no cadastro (não aparece no contrato). ${reg ? `Modelo usado: <b>${esc(C.REGIOES[reg])}</b>.`
+        : 'São Paulo usa o modelo com a Antoniazzi Alimentos; Rio Grande do Sul e Santa Catarina usam o modelo só da Antoniazzi &amp; Cia.'}`;
+  }
+
+  renderDocumentos(C.DOCUMENTOS.map((x) => x.id));
 
   const MASCARAS = { cpf: C.formatarCPF, cnpj: C.formatarCNPJ, cep: C.formatarCEP };
 
@@ -116,7 +140,7 @@
     const d = {};
     for (const c of C.CAMPOS) {
       const el = $(`#ct-${c.id}`);
-      d[c.id] = c.tipo === 'check' ? el.checked : el.value;
+      d[c.id] = c.tipo === 'check' ? el.checked : c.tipo === 'estados' ? estadosMarcados() : el.value;
     }
     d.documentos = [...form.querySelectorAll('input[name=documento]:checked')].map((x) => x.value);
     d.situacao = $('#ct-situacao').value;
@@ -127,11 +151,14 @@
     for (const c of C.CAMPOS) {
       const el = $(`#ct-${c.id}`);
       if (c.tipo === 'check') el.checked = d[c.id] !== false;
-      else el.value = d[c.id] == null ? '' : d[c.id];
+      else if (c.tipo === 'estados') {
+        const lista = C.listaEstados(d[c.id]);
+        el.querySelectorAll('input[data-estado]').forEach((x) => { x.checked = lista.includes(x.dataset.estado); });
+      } else el.value = d[c.id] == null ? '' : d[c.id];
       el.classList.remove('invalido');
     }
     const docs = Array.isArray(d.documentos) && d.documentos.length ? d.documentos : C.DOCUMENTOS.map((x) => x.id);
-    form.querySelectorAll('input[name=documento]').forEach((x) => { x.checked = docs.includes(x.value); });
+    renderDocumentos(docs);
     $('#ct-situacao').value = d.situacao || 'ativo';
   }
 
@@ -186,6 +213,7 @@
       if (fim) ev.target.setSelectionRange(ev.target.value.length, ev.target.value.length);
     }
     if (campo) ev.target.classList.remove('invalido');
+    if (ev.target.dataset && ev.target.dataset.estado) renderDocumentos();
     atualizar();
   });
   form.addEventListener('change', (ev) => {

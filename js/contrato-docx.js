@@ -237,7 +237,7 @@
           testemunhas('abaixo');
           break;
         case 'assPolitica':
-          for (const linhas of [['ANTONIAZZI & CIA LTDA'], ['ANTONIAZZI INDÚSTRIA E COMÉRCIO', 'DE ALIMENTOS LTDA'],
+          for (const linhas of a1 || [['ANTONIAZZI & CIA LTDA'], ['ANTONIAZZI INDÚSTRIA E COMÉRCIO', 'DE ALIMENTOS LTDA'],
             ['⟦razao⟧', 'CNPJ: ⟦cnpj⟧', 'Representante: ⟦responsavel⟧']]) {
             out.push(par(run(linhaAss(36), f, { b: true }), { esq: 3600, antes: 720 }));
             for (const l of linhas) out.push(par(runs(l, vals, f, { b: true }), { esq: 3600 }));
@@ -256,7 +256,7 @@
           const celula = (t, i, neg) => `<w:tc><w:tcPr><w:tcW w:w="${cols[i]}" w:type="dxa"/>` +
             `${neg ? '<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>' : ''}<w:vAlign w:val="center"/></w:tcPr>` +
             par(run(t, f, { b: neg, tam: 16 }), { alinhar: i === 2 ? 'left' : 'center' }) + '</w:tc>';
-          const linhas = [['Data', 'Versão', 'Descrição', 'Autor']].concat(C.VERSOES);
+          const linhas = [['Data', 'Versão', 'Descrição', 'Autor']].concat(a1 || C.VERSOES);
           out.push(`<w:tbl><w:tblPr><w:tblW w:w="${cols.reduce((s, x) => s + x, 0)}" w:type="dxa"/><w:jc w:val="center"/>` +
             `<w:tblBorders>${bordas}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>` +
             cols.map((w) => `<w:gridCol w:w="${w}"/>`).join('') + '</w:tblGrid>' +
