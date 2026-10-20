@@ -124,7 +124,10 @@
 
   function configMotor(escopo = escopoAtual()) {
     const e = escalaDe(escopo);
-    const colaboradores = ativosNoPeriodo(e && e.inicio, e && e.fim).filter((c) => !escopo || c.centroCustoCodigo === escopo);
+    // escala já gerada guarda se excluiu quem não tem controle de jornada; para gerar, vale a caixa da tela
+    const excluir = e ? e.excluirSemControle !== false : $('#excluir-sem-controle').checked;
+    const colaboradores = ativosNoPeriodo(e && e.inicio, e && e.fim)
+      .filter((c) => (!escopo || c.centroCustoCodigo === escopo) && (!excluir || !c.semControleJornada));
     // com centro de custo, a cobertura mínima considera só os setores dos colaboradores dele
     const usados = new Set(colaboradores.map((c) => c.setorId));
     return {
@@ -416,6 +419,10 @@
     Object.entries(CU.TIPOS_DESLIGAMENTO).map(([k, t]) => `<option value="${k}">${esc(t.nome)}</option>`).join('');
   $('#sel-motivo-deslig').innerHTML = '<option value="">Não informado</option>' +
     Object.entries(CU.MOTIVOS_DESLIGAMENTO).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('');
+  $('#sel-sem-controle').innerHTML = Object.entries(CU.SEM_CONTROLE_JORNADA).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('');
+  const caixaSemControle = $('#colab-sem-controle');
+  const mostrarMotivoControle = () => { $('#colab-motivo-controle').hidden = !caixaSemControle.checked; };
+  caixaSemControle.addEventListener('change', mostrarMotivoControle);
   const moedaCampo = (v) => (v === '' || v == null ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const CAMPOS_RH = ['cargo', 'admissao', 'desligamento', 'tipoDesligamento', 'motivoDesligamento', 'obsDesligamento', 'inicioAquisitivo',
     'centroCustoCodigo', 'codigoESocial', 'cbo', 'departamentoCodigo', 'departamento', 'estabelecimentoCodigo', 'estabelecimento',
@@ -443,6 +450,7 @@
       nome: f.nome.value.trim(), matricula: f.matricula.value.trim(),
       sexo: f.sexo.value, setorId: f.setorId.value, jornada: f.jornada.value, entrada: f.entrada.value,
       salario: f.salario.value, feriasVencidas: Number(f.feriasVencidas.value), beneficios: {}, pcd: f.pcd.checked,
+      semControleJornada: caixaSemControle.checked ? f.semControleJornada.value : '',
     };
     for (const k of CAMPOS_RH) dados[k] = f[k].value.trim();
     for (const b of CU.BENEFICIOS) dados.beneficios[b.id] = f[`ben-${b.id}`].value;
@@ -459,6 +467,8 @@
     formColab.elements.id.value = '';
     $('#titulo-form-colab').textContent = 'Novo colaborador';
     formColab.querySelectorAll('details').forEach((d) => { d.open = false; });
+    caixaSemControle.checked = false;
+    mostrarMotivoControle();
     atualizarDicaJornada();
   }));
 
@@ -474,6 +484,9 @@
       f.salario.value = moedaCampo(c.salario);
       f.feriasVencidas.value = String(c.feriasVencidas || 0);
       f.pcd.checked = !!c.pcd;
+      caixaSemControle.checked = !!c.semControleJornada;
+      f.semControleJornada.value = c.semControleJornada || 'gestao';
+      mostrarMotivoControle();
       for (const b of CU.BENEFICIOS) f[`ben-${b.id}`].value = moedaCampo(c.beneficios && c.beneficios[b.id]);
       $('#colab-desligamento').open = !!c.desligamento;
       $('#titulo-form-colab').textContent = 'Editar colaborador';
@@ -502,7 +515,8 @@
       .filter((c) => !filtro || c.setorId === filtro)
       .filter((c) => !centro || c.centroCustoCodigo === centro)
       .filter((c) => !busca || c.nome.toLowerCase().includes(busca) || c.matricula.toLowerCase().includes(busca))
-      .filter((c) => !situacao || (situacao === 'desligados') === desligado(c))
+      .filter((c) => (situacao === 'sem-controle' ? !!c.semControleJornada && !desligado(c)
+        : !situacao || (situacao === 'desligados') === desligado(c)))
       .sort((a, b) => nomeSetor(a.setorId).localeCompare(nomeSetor(b.setorId)) || a.nome.localeCompare(b.nome));
     $('#lista-colabs').innerHTML = lista.map((c) => {
       const t = M.turnoTrabalho(c);
@@ -510,7 +524,8 @@
         <td>${esc(c.matricula)}</td><td>${esc(c.nome)}${c.cargo ? `<br><small class="suave">${esc(c.cargo)}</small>` : ''}</td>
         <td>${c.sexo === 'F' ? 'Feminino' : 'Masculino'}</td>
         <td>${esc(nomeSetor(c.setorId))}${c.centroCustoCodigo ? `<br><small class="suave">CC ${esc(c.centroCustoCodigo)} · ${esc(nomeCentro(c.centroCustoCodigo))}</small>` : ''}</td>
-        <td>${esc(c.jornada)}</td>
+        <td>${c.semControleJornada ? `<span class="chip breve" title="${esc(CU.SEM_CONTROLE_JORNADA[c.semControleJornada])}">Sem controle</span>`
+          : esc(c.jornada)}</td>
         <td>${M.horaDeMinutos(t.inicio)}–${M.horaDeMinutos(t.fim)}</td>
         <td>${c.desligamento ? `<span class="chip ${desligado(c) ? 'ruim' : 'breve'}">${desligado(c) ? 'Desligado' : 'Sai'} em ${dataBR(c.desligamento)}</span>`
           : `<span class="chip bom">Ativo</span>${c.admissao ? `<br><small class="suave">desde ${dataBR(c.admissao)}</small>` : ''}`}</td>
@@ -720,6 +735,7 @@
   const formGerar = $('#form-gerar');
   function periodoPadrao() {
     const p = escalaAtual();
+    if (p) $('#excluir-sem-controle').checked = p.excluirSemControle !== false;
     if (p) { formGerar.elements.inicio.value = p.inicio; formGerar.elements.fim.value = p.fim; return; }
     const h = new Date();
     const ini = new Date(Date.UTC(h.getFullYear(), h.getMonth() + 1, 1));
@@ -741,10 +757,11 @@
     }
     if (escalaAtual() && !(await confirmar(`Gerar uma nova escala substitui a atual de "${nomeEscopo(escopo)}" (incluindo ajustes manuais). ` +
       'As escalas dos outros centros de custo não mudam. Continuar?'))) return;
-    await executar(() => api.post('/api/escala/gerar', { inicio, fim, centroCusto: escopo }));
+    await executar(() => api.post('/api/escala/gerar', { inicio, fim, centroCusto: escopo, excluirSemControle: $('#excluir-sem-controle').checked }));
   });
 
   $('#escopo-escala').addEventListener('change', () => { periodoPadrao(); renderEscala(); });
+  $('#excluir-sem-controle').addEventListener('change', renderEscala);
 
   $('#btn-excluir-escala').addEventListener('click', async () => {
     if (!exigirEdicao() || !escalaAtual()) return;
@@ -779,6 +796,10 @@
         (e.atualizadaEm !== e.geradaEm ? `; último ajuste em ${quando(e.atualizadaEm)}.` : '.')
       : '');
     const cfg = configMotor();
+    if (e.excluirSemControle !== false) {
+      const fora = ativosNoPeriodo(e.inicio, e.fim).filter((c) => c.semControleJornada && (!escopo || c.centroCustoCodigo === escopo)).length;
+      if (fora) $('#info-escala').textContent += ` ${fora} colaborador(es) sem controle de jornada (CLT art. 62) ficaram fora da escala.`;
+    }
     const ocorrencias = M.validarEscala(cfg, e);
     const filtro = '';
     const setores = cfg.setores;

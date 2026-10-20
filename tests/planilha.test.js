@@ -136,3 +136,25 @@ test('banco antigo: a escala única vira a escala de todos os colaboradores', ()
   fs.rmSync(arquivo, { force: true });
   for (const ext of ['-wal', '-shm']) fs.rmSync(arquivo + ext, { force: true });
 });
+
+test('colaboradores sem controle de jornada (CLT art. 62) ficam fora da escala, se marcado', () => {
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  const A = { id: 'a', login: 'a', perfil: 'admin' };
+  const setor = s.salvarSetor(A, { nome: 'Comercial', minimoPorDia: 0, diasFuncionamento: [false, true, true, true, true, true, true] });
+  const base = { sexo: 'M', setorId: setor.id, jornada: '5x2', entrada: '08:00' };
+  const vendedor = s.salvarColaborador(A, { ...base, nome: 'Vendedor', matricula: '1' });
+  const gerente = s.salvarColaborador(A, { ...base, nome: 'Gerente', matricula: '2', semControleJornada: 'gestao' });
+  assert.strictEqual(gerente.semControleJornada, 'gestao');
+  assert.throws(() => s.salvarColaborador(A, { ...base, nome: 'X', matricula: '3', semControleJornada: 'qualquer' }), /controle de jornada/);
+
+  let e = s.gerarEscala(A, { inicio: '2026-11-01', fim: '2026-11-30' });
+  assert.deepStrictEqual(Object.keys(e.celulas), [vendedor.id]);
+  assert.strictEqual(e.excluirSemControle, true);
+  e = s.gerarEscala(A, { inicio: '2026-11-01', fim: '2026-11-30', excluirSemControle: false });
+  assert.deepStrictEqual(Object.keys(e.celulas).sort(), [vendedor.id, gerente.id].sort());
+  assert.strictEqual(e.excluirSemControle, false);
+  // o perfil Consulta também vê a marcação, para entender quem não está na escala
+  const visto = s.dados({ id: 'c', login: 'c', perfil: 'consulta' }).colaboradores.find((c) => c.matricula === '2');
+  assert.strictEqual(visto.semControleJornada, 'gestao');
+});

@@ -235,6 +235,9 @@ O botão **Conferir no Cálculo Exato** abre o site para conferência.
    as dos outros, e a lista indica quais já têm escala gerada. Dentro da escala, os colaboradores aparecem por setor,
    com a cobertura mínima de cada um. Clique em qualquer célula para trocar trabalho ↔ folga; a validação é refeita
    na hora. Exporte em CSV (Excel), imprima ou exclua a escala do centro de custo.
+   Colaboradores **sem controle de jornada** (CLT art. 62: cargos de gestão, atividade externa ou teletrabalho por
+   produção) são marcados na ficha e ficam fora da escala enquanto a caixa *Excluir colaboradores sem controle de
+   jornada* estiver marcada; desmarque para incluí-los. A lista de colaboradores tem o filtro *Sem controle de jornada*.
 
 Clique em **Carregar exemplo** para ver o sistema funcionando com dados fictícios (substitui os dados atuais).
 

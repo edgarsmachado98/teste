@@ -95,7 +95,7 @@ function rhPadrao(rh) {
     motivoDesligamento: r.motivoDesligamento || '', obsDesligamento: r.obsDesligamento || '',
     feriasVencidas: r.feriasVencidas || 0, inicioAquisitivo: r.inicioAquisitivo || '', beneficios,
     ...Object.fromEntries(Object.keys(TEXTOS_FOLHA).map((k) => [k, r[k] || ''])),
-    nascimento: r.nascimento || '', pcd: !!r.pcd,
+    nascimento: r.nascimento || '', pcd: !!r.pcd, semControleJornada: r.semControleJornada || '',
   };
 }
 
@@ -110,6 +110,7 @@ const colabSemCustos = (c) => ({
   id: c.id, nome: c.nome, matricula: c.matricula, sexo: c.sexo, setorId: c.setorId, jornada: c.jornada,
   entrada: c.entrada, cargo: c.cargo, admissao: c.admissao, desligamento: c.desligamento,
   centroCustoCodigo: c.centroCustoCodigo, departamento: c.departamento, estabelecimento: c.estabelecimento,
+  semControleJornada: c.semControleJornada,
 });
 
 // ---------------------------------------------------------------- serviço
@@ -457,7 +458,14 @@ function criarServico(db, opcoes = {}) {
       obsDesligamento: obs, feriasVencidas: vencidas,
       inicioAquisitivo: d.inicioAquisitivo ? dataValida(d.inicioAquisitivo, 'Início do período aquisitivo') : '',
       beneficios, ...dadosFolha(d),
+      semControleJornada: semControle(d.semControleJornada),
     };
+  }
+
+  function semControle(v) {
+    const k = String(v || '').trim();
+    if (k && !CU.SEM_CONTROLE_JORNADA[k]) falhar(400, 'Motivo de ausência de controle de jornada inválido.');
+    return k;
   }
 
   const simNao = (v) => (typeof v === 'boolean' ? v : /^(s|sim|true|1|x)$/i.test(String(v || '').trim()));
@@ -705,11 +713,12 @@ function criarServico(db, opcoes = {}) {
 
   // ------------------------------------------------------------ escala
 
-  function configMotor(inicio, fim, escopo = '') {
+  function configMotor(inicio, fim, escopo = '', excluirSemControle = true) {
     const c = config();
-    // desligados antes do período ou admitidos depois dele ficam fora da escala; com centro de custo, só os dele
+    // desligados antes do período ou admitidos depois dele ficam fora da escala; com centro de custo, só os dele;
+    // quem não tem controle de jornada (CLT art. 62) fica fora, a menos que se peça para incluir
     const ativos = lerColaboradores().filter((c) => (!c.admissao || c.admissao <= fim) && (!c.desligamento || c.desligamento >= inicio) &&
-      (!escopo || c.centroCustoCodigo === escopo));
+      (!escopo || c.centroCustoCodigo === escopo) && (!excluirSemControle || !c.semControleJornada));
     // só os setores dos colaboradores da escala entram na cobertura mínima
     const setoresUsados = new Set(ativos.map((x) => x.setorId));
     return {
@@ -720,7 +729,9 @@ function criarServico(db, opcoes = {}) {
   }
 
   function gravarEscala(ator, e, nova, escopo = '') {
-    const dadosJson = JSON.stringify({ inicio: e.inicio, fim: e.fim, dias: e.dias, celulas: e.celulas });
+    const dadosJson = JSON.stringify({
+      inicio: e.inicio, fim: e.fim, dias: e.dias, celulas: e.celulas, excluirSemControle: e.excluirSemControle !== false,
+    });
     if (nova) {
       q(`INSERT INTO escalas (escopo, inicio, fim, dados, gerada_por, gerada_em, atualizada_em) VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(escopo) DO UPDATE SET inicio = excluded.inicio, fim = excluded.fim, dados = excluded.dados,
@@ -738,11 +749,12 @@ function criarServico(db, opcoes = {}) {
     if (inicio > fim) falhar(400, 'A data final deve ser posterior à inicial.');
     if ((M.parseData(fim) - M.parseData(inicio)) / 86400000 + 1 > MAX_DIAS_ESCALA) falhar(400, 'Gere no máximo 3 meses por vez.');
     const escopo = escopoValido(d.centroCusto);
-    const cfg = configMotor(inicio, fim, escopo);
+    const excluirSemControle = d.excluirSemControle !== false;
+    const cfg = configMotor(inicio, fim, escopo, excluirSemControle);
     if (!cfg.colaboradores.length) {
-      falhar(400, escopo ? 'Nenhum colaborador ativo neste centro de custo no período.' : 'Cadastre colaboradores primeiro.');
+      falhar(400, escopo ? 'Nenhum colaborador ativo com controle de jornada neste centro de custo no período.' : 'Cadastre colaboradores primeiro.');
     }
-    const e = M.gerarEscala(cfg);
+    const e = { ...M.gerarEscala(cfg), excluirSemControle };
     gravarEscala(ator, e, true, escopo);
     const erros = M.validarEscala(cfg, e).filter((o) => o.nivel === 'erro').length;
     auditar(ator, 'escala.gerar', `${nomeEscopo(escopo)}: ${dataBR(inicio)} a ${dataBR(fim)}${erros ? `, ${erros} violação(ões)` : ''}`);
@@ -1386,7 +1398,8 @@ function criarServico(db, opcoes = {}) {
         for (const [idAntigo, lista] of Object.entries(e.celulas)) {
           if (mapaColab[idAntigo] && Array.isArray(lista) && lista.length === e.dias.length) celulas[mapaColab[idAntigo]] = lista;
         }
-        gravarEscala(ator, { inicio: dataValida(e.inicio, 'Data'), fim: dataValida(e.fim, 'Data'), dias: e.dias, celulas }, true, escopo);
+        gravarEscala(ator, { inicio: dataValida(e.inicio, 'Data'), fim: dataValida(e.fim, 'Data'), dias: e.dias, celulas,
+          excluirSemControle: e.excluirSemControle }, true, escopo);
       }
       const f = b.folha;
       if (f && typeof f === 'object') {

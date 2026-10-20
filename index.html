@@ -480,6 +480,8 @@
         <label>Jornada<select name="jornada" required id="sel-jornada"></select></label>
         <label>Horário de entrada<input name="entrada" type="time" value="08:00" required></label>
         <p class="dica" id="dica-jornada"></p>
+        <label class="check"><input type="checkbox" id="colab-sem-controle"> Sem controle de jornada (CLT art. 62)</label>
+        <label id="colab-motivo-controle" hidden>Motivo<select name="semControleJornada" id="sel-sem-controle"></select></label>
         <fieldset class="ficha-rh"><legend>Contrato e custos</legend>
           <label>Cargo<input name="cargo" maxlength="60"></label>
           <div class="duas-colunas">
@@ -536,6 +538,7 @@
             <select id="filtro-situacao-colab" aria-label="Filtrar por situação">
               <option value="ativos">Ativos</option>
               <option value="desligados">Desligados</option>
+              <option value="sem-controle">Sem controle de jornada</option>
               <option value="">Todos</option>
             </select>
             <input type="search" id="busca-colab" placeholder="Buscar nome ou matrícula" aria-label="Buscar colaborador">
@@ -621,6 +624,7 @@
           <label>Início<input type="date" name="inicio" required></label>
           <label>Fim<input type="date" name="fim" required></label>
           <label>Centro de custo<select name="centroCusto" id="escopo-escala"></select></label>
+          <label class="check"><input type="checkbox" name="excluirSemControle" id="excluir-sem-controle" checked> Excluir colaboradores sem controle de jornada</label>
           <button type="submit" class="so-edicao">Gerar escala</button>
           <button type="button" id="btn-excluir-escala" class="perigo so-edicao" hidden>Excluir escala</button>
           <button type="button" id="btn-csv" class="sec">Exportar CSV</button>

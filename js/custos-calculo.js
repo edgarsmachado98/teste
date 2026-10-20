@@ -61,6 +61,12 @@
     acordo: { nome: 'Acordo entre as partes (art. 484-A)', grupo: 'acordo' },
     outros: { nome: 'Aposentadoria, falecimento ou outros', grupo: 'outros' },
   };
+  /** Empregados sem controle de jornada (CLT art. 62): fora das regras de duração do trabalho e das escalas. */
+  const SEM_CONTROLE_JORNADA = {
+    gestao: 'Cargo de gestão (art. 62, II)',
+    externo: 'Atividade externa incompatível com controle (art. 62, I)',
+    teletrabalho: 'Teletrabalho por produção ou tarefa (art. 62, III)',
+  };
   const GRUPOS_DESLIGAMENTO = { voluntario: 'Voluntário', involuntario: 'Involuntário', acordo: 'Acordo', outros: 'Outros' };
 
   /** Motivos apontados na entrevista de desligamento. */
@@ -821,7 +827,7 @@
 
   return {
     PARAMETROS_PADRAO, REGIMES, JORNADA_HORAS, BENEFICIOS, CAMPOS,
-    TIPOS_DESLIGAMENTO, GRUPOS_DESLIGAMENTO, MOTIVOS_DESLIGAMENTO, MOTIVOS_ATESTADO,
+    TIPOS_DESLIGAMENTO, GRUPOS_DESLIGAMENTO, SEM_CONTROLE_JORNADA, MOTIVOS_DESLIGAMENTO, MOTIVOS_ATESTADO,
     centavos, lerNumero, lerTabela, lerPlanilhaLancamentos, lerMotivoAtestado,
     somarMes, diasNoMes, primeiroDia, ultimoDia, competenciaValida, listarCompetencias, rotuloComp,
     calendario, ativoEm, ativoNoMes, avosEntre, avos13Ate, inicioAquisitivo, divisor, horasDaJornada,
