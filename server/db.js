@@ -65,6 +65,17 @@ CREATE TABLE IF NOT EXISTS escala (
   atualizada_em TEXT NOT NULL
 );
 
+-- uma escala por escopo: '' = todos os colaboradores; senão, o código do centro de custo
+CREATE TABLE IF NOT EXISTS escalas (
+  escopo        TEXT PRIMARY KEY,
+  inicio        TEXT NOT NULL,
+  fim           TEXT NOT NULL,
+  dados         TEXT NOT NULL,
+  gerada_por    TEXT,
+  gerada_em     TEXT NOT NULL,
+  atualizada_em TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS auditoria (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   em            TEXT NOT NULL,
@@ -143,6 +154,10 @@ function abrirBanco(arquivo) {
   if (!db.prepare('PRAGMA table_info(colaboradores)').all().some((c) => c.name === 'rh')) {
     db.exec("ALTER TABLE colaboradores ADD COLUMN rh TEXT NOT NULL DEFAULT '{}'");
   }
+  // bancos anteriores à escala por centro de custo: a escala única vira a escala de "todos"
+  db.exec(`INSERT OR IGNORE INTO escalas (escopo, inicio, fim, dados, gerada_por, gerada_em, atualizada_em)
+    SELECT '', inicio, fim, dados, gerada_por, gerada_em, atualizada_em FROM escala WHERE id = 1;
+    DELETE FROM escala;`);
 
   /** Executa fn dentro de uma transação; desfaz tudo se lançar erro. */
   db.transacao = (fn) => {

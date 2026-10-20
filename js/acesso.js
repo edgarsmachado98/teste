@@ -42,6 +42,7 @@
     'feriado.excluir': 'Excluiu feriado',
     'escala.gerar': 'Gerou escala',
     'escala.ajuste': 'Ajustou escala',
+    'escala.excluir': 'Excluiu escala',
     'dados.exemplo': 'Carregou dados de exemplo',
     'dados.limpar': 'Apagou todos os dados',
     'dados.backup': 'Exportou backup',

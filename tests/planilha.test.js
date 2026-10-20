@@ -76,3 +76,63 @@ test('centros de custo, importação de empregados e perfil do quadro', () => {
   assert.deepStrictEqual(CU.cotaPcd(363), { pct: 3, exigidos: 11 });
   assert.deepStrictEqual(CU.cotaPcd(1001), { pct: 5, exigidos: 51 });
 });
+
+test('escala por centro de custo: uma escala por centro, sem apagar as outras', () => {
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  const A = { id: 'a', login: 'a', perfil: 'admin' };
+  s.importarCentrosCusto(A, [{ codigo: '5', nome: 'MOAGEM' }, { codigo: '23', nome: 'ENVASE' }]);
+  const todos = [true, true, true, true, true, true, true];
+  const prod = s.salvarSetor(A, { nome: 'Produção', minimoPorDia: 1, diasFuncionamento: todos });
+  s.salvarSetor(A, { nome: 'Escritório', minimoPorDia: 1, diasFuncionamento: todos });
+  const novo = (matricula, cc) => s.salvarColaborador(A, { nome: `P${matricula}`, matricula, sexo: 'M', setorId: prod.id, jornada: '6x1', entrada: '08:00', centroCustoCodigo: cc });
+  const a = novo('1', '5'); const b = novo('2', '5'); const c = novo('3', '23');
+
+  const moagem = s.gerarEscala(A, { inicio: '2026-11-01', fim: '2026-11-30', centroCusto: '5' });
+  assert.deepStrictEqual(Object.keys(moagem.celulas).sort(), [a.id, b.id].sort());
+  const envase = s.gerarEscala(A, { inicio: '2026-12-01', fim: '2026-12-31', centroCusto: '23' });
+  assert.deepStrictEqual(Object.keys(envase.celulas), [c.id]);
+  const geral = s.gerarEscala(A, { inicio: '2026-11-01', fim: '2026-11-30' });
+  assert.strictEqual(Object.keys(geral.celulas).length, 3);
+
+  let d = s.dados(A);
+  assert.deepStrictEqual(Object.keys(d.escalas).sort(), ['', '23', '5']);
+  assert.strictEqual(d.escalas['5'].inicio, '2026-11-01');
+  assert.strictEqual(d.escala.escopo, ''); // "escala" continua sendo a de todos
+
+  // ajuste manual só na escala do centro de custo
+  const antes = d.escalas['5'].celulas[a.id][2].tipo;
+  s.alterarCelula(A, { colaboradorId: a.id, indice: 2, centroCusto: '5' });
+  d = s.dados(A);
+  assert.notStrictEqual(d.escalas['5'].celulas[a.id][2].tipo, antes);
+  assert.throws(() => s.alterarCelula(A, { colaboradorId: a.id, indice: 0, centroCusto: '23' }), /não faz parte/);
+  assert.throws(() => s.gerarEscala(A, { inicio: '2026-11-01', fim: '2026-11-30', centroCusto: '99' }), /não cadastrado/);
+
+  // backup e restauração mantêm as escalas por centro de custo
+  const bk = JSON.parse(JSON.stringify(s.backup(A)));
+  s.restaurar(A, bk);
+  d = s.dados(A);
+  assert.deepStrictEqual(Object.keys(d.escalas).sort(), ['', '23', '5']);
+  assert.strictEqual(Object.keys(d.escalas['23'].celulas).length, 1);
+
+  s.removerEscala(A, '23');
+  assert.deepStrictEqual(Object.keys(s.dados(A).escalas).sort(), ['', '5']);
+});
+
+test('banco antigo: a escala única vira a escala de todos os colaboradores', () => {
+  const { DatabaseSync } = require('node:sqlite');
+  const arquivo = path.join(require('node:os').tmpdir(), `escala-antiga-${process.pid}.db`);
+  fs.rmSync(arquivo, { force: true });
+  const velho = new DatabaseSync(arquivo);
+  velho.exec(`CREATE TABLE escala (id INTEGER PRIMARY KEY CHECK (id = 1), inicio TEXT NOT NULL, fim TEXT NOT NULL, dados TEXT NOT NULL,
+    gerada_por TEXT, gerada_em TEXT NOT NULL, atualizada_em TEXT NOT NULL);
+    INSERT INTO escala VALUES (1, '2026-11-01', '2026-11-30', '{"inicio":"2026-11-01","fim":"2026-11-30","dias":[],"celulas":{}}', 'x', 'g', 'a');`);
+  velho.close();
+  const db = abrirBanco(arquivo);
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  const d = s.dados({ id: 'a', login: 'a', perfil: 'admin' });
+  assert.strictEqual(d.escalas[''].inicio, '2026-11-01');
+  db.close();
+  fs.rmSync(arquivo, { force: true });
+  for (const ext of ['-wal', '-shm']) fs.rmSync(arquivo + ext, { force: true });
+});

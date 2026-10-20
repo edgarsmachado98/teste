@@ -77,7 +77,7 @@
     return {
       setores: [], colaboradores: [], feriadosExtras: [], centrosCusto: [],
       regras: { domingoHomensSemanas: 3, domingoMulheresSemanas: 2 },
-      incluirFacultativos: false, escala: null, periodo: null,
+      incluirFacultativos: false, escala: null, escalas: {}, periodo: null,
     };
   }
 
@@ -116,13 +116,23 @@
     return estado.colaboradores.filter((c) => (!c.admissao || c.admissao <= fim) && (!c.desligamento || c.desligamento >= inicio));
   }
 
-  function configMotor() {
+  // Escala por centro de custo: '' = todos os colaboradores; senão, o código do centro de custo
+  const escopoAtual = () => $('#escopo-escala').value;
+  const escalaDe = (escopo) => (estado.escalas || {})[escopo] || null;
+  const escalaAtual = () => escalaDe(escopoAtual());
+  const nomeEscopo = (escopo) => (escopo ? `Centro de custo ${escopo} · ${nomeCentro(escopo)}` : 'Todos os colaboradores');
+
+  function configMotor(escopo = escopoAtual()) {
+    const e = escalaDe(escopo);
+    const colaboradores = ativosNoPeriodo(e && e.inicio, e && e.fim).filter((c) => !escopo || c.centroCustoCodigo === escopo);
+    // com centro de custo, a cobertura mínima considera só os setores dos colaboradores dele
+    const usados = new Set(colaboradores.map((c) => c.setorId));
     return {
-      setores: estado.setores,
-      colaboradores: ativosNoPeriodo(estado.escala && estado.escala.inicio, estado.escala && estado.escala.fim),
+      setores: escopo ? estado.setores.filter((s) => usados.has(s.id)) : estado.setores,
+      colaboradores,
       feriadosExtras: estado.feriadosExtras, regras: estado.regras,
       incluirFacultativos: estado.incluirFacultativos,
-      inicio: estado.escala && estado.escala.inicio, fim: estado.escala && estado.escala.fim,
+      inicio: e && e.inicio, fim: e && e.fim,
     };
   }
 
@@ -191,11 +201,14 @@
     let escalaValor = 'Nenhuma';
     let escalaDetalhe = podeEditar() ? 'Gere a primeira em Escalas de trabalho' : 'Ainda não há escala gerada';
     let escalaClasse = '';
-    if (estado.escala) {
-      const e = estado.escala;
+    const geradas = Object.entries(estado.escalas || {});
+    if (geradas.length) {
+      // a escala mais recente; violações somadas de todas
+      const [, e] = geradas.reduce((a, b) => (a[1].atualizadaEm >= b[1].atualizadaEm ? a : b));
       escalaValor = `${dataBR(e.inicio).slice(0, 5)} a ${dataBR(e.fim)}`;
-      const erros = M.validarEscala(configMotor(), e).filter((o) => o.nivel === 'erro').length;
-      escalaDetalhe = erros ? `${erros} violação(ões) da legislação` : 'Sem violações da legislação';
+      const erros = geradas.reduce((t, [escopo, x]) => t + M.validarEscala(configMotor(escopo), x).filter((o) => o.nivel === 'erro').length, 0);
+      escalaDetalhe = (geradas.length > 1 ? `${geradas.length} escalas por centro de custo; ` : '') +
+        (erros ? `${erros} violação(ões) da legislação` : 'sem violações da legislação');
       escalaClasse = erros ? 'ruim' : 'bom';
     }
     const tile = (rotulo, valor, detalhe, classe = '') => `<div class="tile">
@@ -275,7 +288,7 @@
     const atual = selColab.value;
     selColab.innerHTML = opcoes;
     if (atual) selColab.value = atual;
-    for (const sel of [$('#filtro-setor-colab'), $('#filtro-setor-escala')]) {
+    for (const sel of [$('#filtro-setor-colab')]) {
       const v = sel.value;
       sel.innerHTML = '<option value="">Todos os setores</option>' + opcoes;
       sel.value = estado.setores.some((s) => s.id === v) ? v : '';
@@ -289,6 +302,17 @@
     const fc = filtroCentro.value;
     filtroCentro.innerHTML = '<option value="">Todos os centros de custo</option>' + opcoesCentro;
     filtroCentro.value = estado.centrosCusto.some((c) => c.codigo === fc) ? fc : '';
+    // centros de custo da escala, com a quantidade de colaboradores ativos e se já há escala gerada
+    const selEscopo = $('#escopo-escala');
+    const escopo = selEscopo.value;
+    const hoje = M.formatarData(new Date());
+    const ativos = estado.colaboradores.filter((c) => !c.desligamento || c.desligamento >= hoje);
+    const marca = (k) => (escalaDe(k) ? ' · escala gerada' : '');
+    selEscopo.innerHTML = `<option value="">Todos os colaboradores (${ativos.length})${marca('')}</option>` +
+      estado.centrosCusto.map((c) => [c, ativos.filter((x) => x.centroCustoCodigo === c.codigo).length])
+        .filter(([c, n]) => n || escalaDe(c.codigo))
+        .map(([c, n]) => `<option value="${esc(c.codigo)}">${esc(c.codigo)} · ${esc(c.nome)} (${n})${marca(c.codigo)}</option>`).join('');
+    selEscopo.value = [...selEscopo.options].some((o) => o.value === escopo) ? escopo : '';
   }
 
   // -------------------------------------------------------- centros de custo
@@ -695,7 +719,7 @@
 
   const formGerar = $('#form-gerar');
   function periodoPadrao() {
-    const p = estado.periodo;
+    const p = escalaAtual();
     if (p) { formGerar.elements.inicio.value = p.inicio; formGerar.elements.fim.value = p.fim; return; }
     const h = new Date();
     const ini = new Date(Date.UTC(h.getFullYear(), h.getMonth() + 1, 1));
@@ -711,39 +735,53 @@
     const fim = formGerar.elements.fim.value;
     if (!inicio || !fim || inicio > fim) return avisar('Período inválido.');
     if ((M.parseData(fim) - M.parseData(inicio)) / 86400000 > 92) return avisar('Gere no máximo 3 meses por vez.');
-    if (!estado.colaboradores.length) return avisar('Cadastre colaboradores primeiro.');
-    if (estado.escala && !(await confirmar('Gerar uma nova escala substitui a atual (incluindo ajustes manuais). Continuar?'))) return;
-    await executar(() => api.post('/api/escala/gerar', { inicio, fim }));
+    const escopo = escopoAtual();
+    if (!configMotor(escopo).colaboradores.length && !ativosNoPeriodo(inicio, fim).some((c) => !escopo || c.centroCustoCodigo === escopo)) {
+      return avisar(escopo ? 'Nenhum colaborador ativo neste centro de custo.' : 'Cadastre colaboradores primeiro.');
+    }
+    if (escalaAtual() && !(await confirmar(`Gerar uma nova escala substitui a atual de "${nomeEscopo(escopo)}" (incluindo ajustes manuais). ` +
+      'As escalas dos outros centros de custo não mudam. Continuar?'))) return;
+    await executar(() => api.post('/api/escala/gerar', { inicio, fim, centroCusto: escopo }));
   });
 
-  $('#filtro-setor-escala').addEventListener('change', renderEscala);
+  $('#escopo-escala').addEventListener('change', () => { periodoPadrao(); renderEscala(); });
+
+  $('#btn-excluir-escala').addEventListener('click', async () => {
+    if (!exigirEdicao() || !escalaAtual()) return;
+    if (!(await confirmar(`Excluir a escala de "${nomeEscopo(escopoAtual())}"?`))) return;
+    await executar(() => api.del(`/api/escala?centroCusto=${encodeURIComponent(escopoAtual())}`));
+  });
 
   $('#area-escala').addEventListener('click', async (ev) => {
     const td = ev.target.closest('td[data-c]');
-    if (!td || !estado.escala) return;
+    if (!td || !escalaAtual()) return;
     if (!exigirEdicao()) return;
     td.classList.add('salvando');
-    await executar(() => api.post('/api/escala/celula', { colaboradorId: td.dataset.c, indice: Number(td.dataset.i) }));
+    await executar(() => api.post('/api/escala/celula', { colaboradorId: td.dataset.c, indice: Number(td.dataset.i), centroCusto: escopoAtual() }));
   });
 
   function renderEscala() {
     const area = $('#area-escala');
-    const e = estado.escala;
+    const escopo = escopoAtual();
+    const e = escalaAtual();
+    $('#btn-excluir-escala').hidden = !e;
     if (!e) {
-      area.innerHTML = '<div class="cartao vazio">Defina o período e clique em <b>Gerar escala</b>.</div>';
+      const outras = Object.keys(estado.escalas || {}).filter((k) => k !== escopo).length;
+      area.innerHTML = `<div class="cartao vazio">Ainda não há escala para <b>${esc(nomeEscopo(escopo))}</b>. Defina o período e clique em <b>Gerar escala</b>.` +
+        (outras ? `<br><small>Há ${outras} escala(s) gerada(s) para outros centros de custo: escolha no campo Centro de custo.</small>` : '') + '</div>';
       $('#info-escala').textContent = '';
       $('#area-validacao').hidden = true;
       return;
     }
     const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-    $('#info-escala').textContent = e.geradaEm
+    $('#info-escala').textContent = `${nomeEscopo(escopo)}. ` + (e.geradaEm
       ? `Escala gerada por ${e.geradaPor || '—'} em ${quando(e.geradaEm)}` +
         (e.atualizadaEm !== e.geradaEm ? `; último ajuste em ${quando(e.atualizadaEm)}.` : '.')
-      : '';
+      : '');
     const cfg = configMotor();
     const ocorrencias = M.validarEscala(cfg, e);
-    const filtro = $('#filtro-setor-escala').value;
-    const setores = estado.setores.filter((s) => !filtro || s.id === filtro);
+    const filtro = '';
+    const setores = cfg.setores;
     const porCelula = {};
     for (const o of ocorrencias) {
       if (o.nivel === 'erro' && o.colaboradorId && o.data) porCelula[o.colaboradorId + '|' + o.data] = o;
@@ -754,7 +792,7 @@
 
     let html = '';
     for (const s of setores) {
-      const membros = estado.colaboradores.filter((c) => c.setorId === s.id && e.celulas[c.id])
+      const membros = cfg.colaboradores.filter((c) => c.setorId === s.id && e.celulas[c.id])
         .sort((a, b) => a.nome.localeCompare(b.nome));
       const novos = cfg.colaboradores.filter((c) => c.setorId === s.id && !e.celulas[c.id]).length;
       if (!membros.length) continue;
@@ -785,7 +823,7 @@
         return `<td class="cob ${n < (s.minimoPorDia || 0) ? 'baixo' : ''}">${n}</td>`;
       }).join('');
       html += `<div class="cartao bloco-setor">
-        <h2>${esc(s.nome)} <small>mínimo ${s.minimoPorDia}/dia · ${dataBR(e.inicio)} a ${dataBR(e.fim)}</small></h2>
+        <h2>${esc(s.nome)} <small>${escopo ? `CC ${esc(escopo)} · ${esc(nomeCentro(escopo))} · ` : ''}mínimo ${s.minimoPorDia}/dia · ${dataBR(e.inicio)} a ${dataBR(e.fim)}</small></h2>
         ${novos ? `<p class="aviso">${novos} colaborador(es) cadastrado(s) após a geração não estão na escala — gere novamente.</p>` : ''}
         <div class="rolagem"><table class="grade">
           <thead><tr><th class="fixo">Matr.</th><th class="fixo nome">Nome</th><th>Sexo</th><th>Jornada</th>${cabDias}
@@ -836,20 +874,20 @@
   }
 
   $('#btn-csv').addEventListener('click', () => {
-    const e = estado.escala;
+    const e = escalaAtual();
     if (!e) return avisar('Gere uma escala primeiro.');
-    const filtro = $('#filtro-setor-escala').value;
+    const escopo = escopoAtual();
     const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
-    const linhas = [['Setor', 'Matrícula', 'Nome', 'Sexo', 'Jornada', ...e.dias.map((d) => `${dataBR(d.data)} ${M.NOMES_DIAS[d.dow]}`),
+    const linhas = [['Centro de custo', 'Setor', 'Matrícula', 'Nome', 'Sexo', 'Jornada', ...e.dias.map((d) => `${dataBR(d.data)} ${M.NOMES_DIAS[d.dow]}`),
       'Dias trabalhados', 'Folgas', 'Domingos de folga', 'Horas'].map(q).join(';')];
-    for (const c of estado.colaboradores) {
-      if (!e.celulas[c.id] || (filtro && c.setorId !== filtro)) continue;
+    for (const c of configMotor(escopo).colaboradores) {
+      if (!e.celulas[c.id]) continue;
       const r = M.resumirColaborador(e, c);
-      linhas.push([nomeSetor(c.setorId), c.matricula, c.nome, c.sexo, c.jornada,
+      linhas.push([c.centroCustoCodigo ? `${c.centroCustoCodigo} ${nomeCentro(c.centroCustoCodigo)}` : '', nomeSetor(c.setorId), c.matricula, c.nome, c.sexo, c.jornada,
         ...e.celulas[c.id].map((t) => (t.tipo === 'T' ? `${M.horaDeMinutos(t.inicio)}-${M.horaDeMinutos(t.fim)}` : t.tipo === 'FER' ? 'FERIADO' : 'FOLGA')),
         r.dias, r.folgas, r.domingosFolga, horas(r.minutos)].map(q).join(';'));
     }
-    baixar(`escala_${e.inicio}_${e.fim}.csv`, '﻿' + linhas.join('\r\n'), 'text/csv;charset=utf-8');
+    baixar(`escala_${escopo ? `cc${escopo}_` : ''}${e.inicio}_${e.fim}.csv`, '﻿' + linhas.join('\r\n'), 'text/csv;charset=utf-8');
   });
 
   $('#btn-imprimir').addEventListener('click', () => window.print());

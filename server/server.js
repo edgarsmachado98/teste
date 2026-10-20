@@ -173,6 +173,7 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   rota('POST', '/api/feriados', ({ usuario, corpo }) => servico.salvarFeriado(usuario, corpo));
   rota('DELETE', '/api/feriados/:data', ({ usuario, p }) => servico.removerFeriado(usuario, p.data));
   rota('POST', '/api/escala/gerar', ({ usuario, corpo }) => servico.gerarEscala(usuario, corpo));
+  rota('DELETE', '/api/escala', ({ usuario, url }) => servico.removerEscala(usuario, url.searchParams.get('centroCusto') || ''));
   rota('POST', '/api/escala/celula', ({ usuario, corpo }) => servico.alterarCelula(usuario, corpo));
   rota('POST', '/api/exemplo', ({ usuario }) => servico.carregarExemplo(usuario));
   rota('DELETE', '/api/dados', ({ usuario }) => servico.limparDados(usuario));

@@ -327,15 +327,34 @@ function criarServico(db, opcoes = {}) {
     return q('SELECT * FROM colaboradores ORDER BY nome COLLATE NOCASE').all().map(colabDeLinha);
   }
 
-  function lerEscala() {
-    const e = q('SELECT * FROM escala WHERE id = 1').get();
-    if (!e) return null;
-    return Object.assign(JSON.parse(e.dados), { geradaEm: e.gerada_em, atualizadaEm: e.atualizada_em, geradaPor: e.gerada_por });
+  const escalaDeLinha = (e) => Object.assign(JSON.parse(e.dados), {
+    escopo: e.escopo, geradaEm: e.gerada_em, atualizadaEm: e.atualizada_em, geradaPor: e.gerada_por,
+  });
+
+  /** Escala de um escopo: '' (todos os colaboradores) ou o código do centro de custo. */
+  function lerEscala(escopo = '') {
+    const e = q('SELECT * FROM escalas WHERE escopo = ?').get(String(escopo || ''));
+    return e ? escalaDeLinha(e) : null;
   }
+
+  function lerEscalas() {
+    return Object.fromEntries(q('SELECT * FROM escalas').all().map((e) => [e.escopo, escalaDeLinha(e)]));
+  }
+
+  function escopoValido(v) {
+    const escopo = String(v || '').trim();
+    if (escopo && !q('SELECT 1 FROM centros_custo WHERE codigo = ?').get(escopo)) falhar(400, `Centro de custo ${escopo} não cadastrado.`);
+    return escopo;
+  }
+  const nomeEscopo = (escopo) => {
+    if (!escopo) return 'todos os colaboradores';
+    const c = q('SELECT nome FROM centros_custo WHERE codigo = ?').get(escopo);
+    return `centro de custo ${escopo}${c ? ` ${c.nome}` : ''}`;
+  };
 
   function dados(ator) {
     exigir(ator, 'consulta');
-    const escala = lerEscala();
+    const escala = lerEscala('');
     const verCustos = NIVEL[ator.perfil] >= NIVEL.operador;
     return {
       setores: lerSetores(),
@@ -344,6 +363,7 @@ function criarServico(db, opcoes = {}) {
       feriadosExtras: q('SELECT data, nome FROM feriados ORDER BY data').all().map((f) => ({ ...f })),
       ...config(),
       escala,
+      escalas: lerEscalas(),
       periodo: escala ? { inicio: escala.inicio, fim: escala.fim } : null,
     };
   }
@@ -685,26 +705,29 @@ function criarServico(db, opcoes = {}) {
 
   // ------------------------------------------------------------ escala
 
-  function configMotor(inicio, fim) {
+  function configMotor(inicio, fim, escopo = '') {
     const c = config();
-    // desligados antes do período ou admitidos depois dele ficam fora da escala
-    const ativos = lerColaboradores().filter((c) => (!c.admissao || c.admissao <= fim) && (!c.desligamento || c.desligamento >= inicio));
+    // desligados antes do período ou admitidos depois dele ficam fora da escala; com centro de custo, só os dele
+    const ativos = lerColaboradores().filter((c) => (!c.admissao || c.admissao <= fim) && (!c.desligamento || c.desligamento >= inicio) &&
+      (!escopo || c.centroCustoCodigo === escopo));
+    // só os setores dos colaboradores da escala entram na cobertura mínima
+    const setoresUsados = new Set(ativos.map((x) => x.setorId));
     return {
-      inicio, fim, setores: lerSetores(), colaboradores: ativos,
+      inicio, fim, setores: lerSetores().filter((s) => !escopo || setoresUsados.has(s.id)), colaboradores: ativos,
       feriadosExtras: q('SELECT data, nome FROM feriados').all().map((f) => ({ ...f })),
       regras: c.regras, incluirFacultativos: c.incluirFacultativos,
     };
   }
 
-  function gravarEscala(ator, e, nova) {
+  function gravarEscala(ator, e, nova, escopo = '') {
     const dadosJson = JSON.stringify({ inicio: e.inicio, fim: e.fim, dias: e.dias, celulas: e.celulas });
     if (nova) {
-      q(`INSERT INTO escala (id, inicio, fim, dados, gerada_por, gerada_em, atualizada_em) VALUES (1, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET inicio = excluded.inicio, fim = excluded.fim, dados = excluded.dados,
+      q(`INSERT INTO escalas (escopo, inicio, fim, dados, gerada_por, gerada_em, atualizada_em) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(escopo) DO UPDATE SET inicio = excluded.inicio, fim = excluded.fim, dados = excluded.dados,
          gerada_por = excluded.gerada_por, gerada_em = excluded.gerada_em, atualizada_em = excluded.atualizada_em`)
-        .run(e.inicio, e.fim, dadosJson, ator.login, iso(), iso());
+        .run(escopo, e.inicio, e.fim, dadosJson, ator.login, iso(), iso());
     } else {
-      q('UPDATE escala SET dados = ?, atualizada_em = ? WHERE id = 1').run(dadosJson, iso());
+      q('UPDATE escalas SET dados = ?, atualizada_em = ? WHERE escopo = ?').run(dadosJson, iso(), escopo);
     }
   }
 
@@ -714,33 +737,45 @@ function criarServico(db, opcoes = {}) {
     const fim = dataValida(d.fim, 'Data final');
     if (inicio > fim) falhar(400, 'A data final deve ser posterior à inicial.');
     if ((M.parseData(fim) - M.parseData(inicio)) / 86400000 + 1 > MAX_DIAS_ESCALA) falhar(400, 'Gere no máximo 3 meses por vez.');
-    const cfg = configMotor(inicio, fim);
-    if (!cfg.colaboradores.length) falhar(400, 'Cadastre colaboradores primeiro.');
+    const escopo = escopoValido(d.centroCusto);
+    const cfg = configMotor(inicio, fim, escopo);
+    if (!cfg.colaboradores.length) {
+      falhar(400, escopo ? 'Nenhum colaborador ativo neste centro de custo no período.' : 'Cadastre colaboradores primeiro.');
+    }
     const e = M.gerarEscala(cfg);
-    gravarEscala(ator, e, true);
+    gravarEscala(ator, e, true, escopo);
     const erros = M.validarEscala(cfg, e).filter((o) => o.nivel === 'erro').length;
-    auditar(ator, 'escala.gerar', `${dataBR(inicio)} a ${dataBR(fim)}${erros ? `, ${erros} violação(ões)` : ''}`);
-    return lerEscala();
+    auditar(ator, 'escala.gerar', `${nomeEscopo(escopo)}: ${dataBR(inicio)} a ${dataBR(fim)}${erros ? `, ${erros} violação(ões)` : ''}`);
+    return lerEscala(escopo);
+  }
+
+  function removerEscala(ator, escopo) {
+    exigir(ator, 'operador');
+    escopo = String(escopo || '');
+    if (!q('DELETE FROM escalas WHERE escopo = ?').run(escopo).changes) falhar(404, 'Escala não encontrada.');
+    auditar(ator, 'escala.excluir', nomeEscopo(escopo));
   }
 
   /** Alterna uma célula entre trabalho e folga. */
   function alterarCelula(ator, d) {
     exigir(ator, 'operador');
-    const e = lerEscala() || falhar(404, 'Nenhuma escala gerada.');
+    const escopo = String(d.centroCusto || '');
+    const e = lerEscala(escopo) || falhar(404, 'Nenhuma escala gerada.');
     const c = q('SELECT * FROM colaboradores WHERE id = ?').get(d.colaboradorId) || falhar(404, 'Colaborador não encontrado.');
     const cel = e.celulas[c.id] || falhar(400, 'Colaborador não faz parte desta escala. Gere a escala novamente.');
     const i = Number(d.indice);
     if (!Number.isInteger(i) || i < 0 || i >= cel.length) falhar(400, 'Dia inválido.');
     cel[i] = cel[i].tipo === 'T' ? { tipo: e.dias[i].feriado ? 'FER' : 'F' } : M.turnoTrabalho(colabDeLinha(c));
-    gravarEscala(ator, e, false);
-    auditar(ator, 'escala.ajuste', `${c.matricula} ${c.nome} em ${dataBR(e.dias[i].data)}: ${cel[i].tipo === 'T' ? 'trabalho' : 'folga'}`);
-    return lerEscala();
+    gravarEscala(ator, e, false, escopo);
+    auditar(ator, 'escala.ajuste', `${c.matricula} ${c.nome} em ${dataBR(e.dias[i].data)}: ${cel[i].tipo === 'T' ? 'trabalho' : 'folga'}` +
+      (escopo ? ` (${nomeEscopo(escopo)})` : ''));
+    return lerEscala(escopo);
   }
 
   // ------------------------------------------- exemplo, limpeza, backup
 
   function limparTabelas() {
-    db.exec('DELETE FROM folha_lancamentos; DELETE FROM folha_competencias; DELETE FROM escala; DELETE FROM colaboradores; DELETE FROM centros_custo; DELETE FROM setores; DELETE FROM feriados; DELETE FROM configuracoes;');
+    db.exec('DELETE FROM folha_lancamentos; DELETE FROM folha_competencias; DELETE FROM escalas; DELETE FROM colaboradores; DELETE FROM centros_custo; DELETE FROM setores; DELETE FROM feriados; DELETE FROM configuracoes;');
   }
 
   function carregarExemplo(ator) {
@@ -1342,13 +1377,16 @@ function criarServico(db, opcoes = {}) {
         const max = Number(b.regras.maxFolgasSeguidas);
         if (Number.isInteger(max) && max >= 0 && max <= 7) st.run('maxFolgasSeguidas', JSON.stringify(max));
       }
-      const e = b.escala;
-      if (e && e.inicio && e.fim && Array.isArray(e.dias) && e.celulas && typeof e.celulas === 'object') {
+      // backups antigos têm só "escala" (de todos); os novos, "escalas" por centro de custo
+      const escalas = b.escalas && typeof b.escalas === 'object' ? b.escalas : (b.escala ? { '': b.escala } : {});
+      for (const [escopo, e] of Object.entries(escalas)) {
+        if (!e || !e.inicio || !e.fim || !Array.isArray(e.dias) || !e.celulas || typeof e.celulas !== 'object') continue;
+        if (escopo && !q('SELECT 1 FROM centros_custo WHERE codigo = ?').get(escopo)) continue;
         const celulas = {};
         for (const [idAntigo, lista] of Object.entries(e.celulas)) {
           if (mapaColab[idAntigo] && Array.isArray(lista) && lista.length === e.dias.length) celulas[mapaColab[idAntigo]] = lista;
         }
-        gravarEscala(ator, { inicio: dataValida(e.inicio, 'Data'), fim: dataValida(e.fim, 'Data'), dias: e.dias, celulas }, true);
+        gravarEscala(ator, { inicio: dataValida(e.inicio, 'Data'), fim: dataValida(e.fim, 'Data'), dias: e.dias, celulas }, true, escopo);
       }
       const f = b.folha;
       if (f && typeof f === 'object') {
@@ -1413,7 +1451,7 @@ function criarServico(db, opcoes = {}) {
   return {
     temUsuarios, criarPrimeiroAdmin, login, sessao, logout, alterarMinhaSenha,
     listarUsuarios, criarUsuario, atualizarUsuario, removerUsuario, auditoria,
-    dados, salvarSetor, removerSetor, salvarColaborador, removerColaborador, importarColaboradores,
+    dados, removerEscala, salvarSetor, removerSetor, salvarColaborador, removerColaborador, importarColaboradores,
     salvarConfig, salvarFeriado, removerFeriado, gerarEscala, alterarCelula,
     carregarExemplo, limparDados, backup, restaurar,
     listarContratos, salvarContrato, removerContrato, registrarDocumento,

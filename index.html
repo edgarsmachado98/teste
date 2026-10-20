@@ -620,8 +620,9 @@
         <form id="form-gerar" class="linha-form">
           <label>Início<input type="date" name="inicio" required></label>
           <label>Fim<input type="date" name="fim" required></label>
-          <label>Setor<select name="setor" id="filtro-setor-escala"></select></label>
+          <label>Centro de custo<select name="centroCusto" id="escopo-escala"></select></label>
           <button type="submit" class="so-edicao">Gerar escala</button>
+          <button type="button" id="btn-excluir-escala" class="perigo so-edicao" hidden>Excluir escala</button>
           <button type="button" id="btn-csv" class="sec">Exportar CSV</button>
           <button type="button" id="btn-imprimir" class="sec">Imprimir</button>
         </form>

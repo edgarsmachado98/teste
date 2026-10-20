@@ -230,8 +230,11 @@ O botão **Conferir no Cálculo Exato** abre o site para conferência.
    ```
 3. **Escalas de trabalho › Regras e feriados** — escolha a regra de folga dominical masculina (comércio ou demais
    atividades) e cadastre feriados estaduais/municipais. Feriados nacionais são automáticos.
-4. **Escalas de trabalho › Escala** — escolha o período (até 3 meses) e clique em *Gerar escala*. Clique em qualquer
-   célula para trocar trabalho ↔ folga; a validação é refeita na hora. Exporte em CSV (Excel) ou imprima.
+4. **Escalas de trabalho › Escala** — escolha o **centro de custo** (ou *Todos os colaboradores*), o período (até 3 meses)
+   e clique em *Gerar escala*. Cada centro de custo tem a sua própria escala salva: gerar a de um centro não altera
+   as dos outros, e a lista indica quais já têm escala gerada. Dentro da escala, os colaboradores aparecem por setor,
+   com a cobertura mínima de cada um. Clique em qualquer célula para trocar trabalho ↔ folga; a validação é refeita
+   na hora. Exporte em CSV (Excel), imprima ou exclua a escala do centro de custo.
 
 Clique em **Carregar exemplo** para ver o sistema funcionando com dados fictícios (substitui os dados atuais).
 
