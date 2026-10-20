@@ -219,8 +219,10 @@ test('memória de cálculo: HTML e planilha Excel com fórmulas que fecham com o
   assert.strictEqual(linhas[0][0], 'Memória de cálculo do distrato');
   assert.strictEqual(achar('out/2023')[5], 700.75);
   assert.strictEqual(achar(`Total (${r.linhas.length} meses)`)[5], r.somaAtualizada);
-  assert.strictEqual(achar('Total a pagar')[2], r.total);
+  assert.strictEqual(achar('Total a pagar')[5], r.total);
+  assert.strictEqual(achar('Indenização (1/12)')[5], r.indenizacao);
+  assert.strictEqual(achar('Aviso prévio')[5], r.avisoPrevio);
   // as fórmulas estão na planilha (para a conferência no Excel)
   const zipTexto = Buffer.from(bytes).toString('latin1');
-  assert.ok(zipTexto.includes('ROUND(C') && zipTexto.includes('SUM(F'));
+  assert.ok(zipTexto.includes('ROUND(F') && zipTexto.includes('SUM(F'));
 });
