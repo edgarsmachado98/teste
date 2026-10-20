@@ -55,6 +55,7 @@
     'distrato.alterar': 'Alterou distrato',
     'distrato.excluir': 'Excluiu distrato',
     'distrato.documento': 'Gerou documento do distrato',
+    'distrato.simples': 'Consultou o Simples Nacional',
     'indice.atualizar': 'Atualizou o IGP-M',
     'indice.manual': 'Informou índice manualmente',
   };

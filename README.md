@@ -229,6 +229,20 @@ Prévio** no modelo de cada empresa representada (Antoniazzi & Cia ou Antoniazzi
 O total é a soma das parcelas já arredondadas em centavos, para fechar com os valores listados no termo.
 O valor por extenso é gerado automaticamente.
 
+### Simples Nacional e retenção de imposto de renda
+
+Ao buscar o representante pelo CNPJ, o sistema consulta a situação no **Simples Nacional** nos dados abertos da
+Receita Federal (BrasilAPI; ReceitaWS como alternativa). A "Consulta Optantes" do Portal do Simples
+(www8.receita.fazenda.gov.br) exige captcha, então não pode ser consultada automaticamente: o link para ela fica
+ao lado, para conferência, e a situação pode ser marcada à mão. A situação fica gravada no distrato.
+
+- **Optante**: sem retenção de IR (IN RFB 765/2007).
+- **Não optante**: IR retido na fonte de **1,5%** sobre aviso prévio, comissões a receber e títulos pendentes
+  (RIR/2018, art. 718) e de **15%** sobre a indenização 1/12 (Lei 9.430/1996, art. 70).
+
+A **cláusula segunda** do termo de distrato traz a quantia líquida, as parcelas, o valor bruto, cada retenção com a
+sua base e o valor líquido; a memória de cálculo ganha a seção "Retenção de imposto de renda na fonte".
+
 ### Memória de cálculo
 
 No editor do distrato, **Memória de cálculo** gera o demonstrativo para enviar junto com o distrato:

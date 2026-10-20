@@ -241,7 +241,7 @@
         <div class="cab-cartao">
           <h2>Contratos de representação comercial</h2>
           <div class="linha-botoes">
-            <input type="search" id="ct-busca" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar contrato">
+            <input type="search" id="ct-busca" placeholder="Buscar por nome, CNPJ ou código" aria-label="Buscar contrato">
             <select id="ct-filtro" aria-label="Filtrar por situação">
               <option value="">Todos</option>
               <option value="ativo">Ativos</option>
@@ -317,6 +317,16 @@
               <button type="button" id="dt-buscar" class="sec">Buscar</button>
             </div>
             <div id="dt-representante" class="dt-representante" hidden></div>
+            <div id="dt-simples" class="dt-simples" hidden>
+              <div class="dt-simples-topo">
+                <b>Simples Nacional</b>
+                <button type="button" id="dt-consultar-simples" class="sec mini so-edicao">Consultar situação na Receita</button>
+                <a href="https://www8.receita.fazenda.gov.br/SimplesNacional/aplicacoes.aspx?id=21" target="_blank" rel="noopener noreferrer">Conferir na Consulta Optantes ↗</a>
+              </div>
+              <p id="dt-simples-resultado" class="dica"></p>
+              <label class="check"><input type="radio" name="dt-simples" value="optante"> Optante do Simples Nacional: sem retenção de IR</label>
+              <label class="check"><input type="radio" name="dt-simples" value="nao_optante"> Não optante: reter IR de 1,5% sobre aviso prévio, títulos pendentes e a receber, e de 15% sobre a indenização 1/12</label>
+            </div>
           </fieldset>
 
           <fieldset><legend>2. Empresa representada</legend>

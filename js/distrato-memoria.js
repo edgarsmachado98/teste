@@ -47,6 +47,7 @@
       pendentes: { inicio: d.pendentes && d.pendentes.inicio, fim: d.pendentes && d.pendentes.fim, valor: r.pendentes },
       aReceber: { inicio: d.aReceber && d.aReceber.inicio, fim: d.aReceber && d.aReceber.fim, valor: r.aReceber },
       pagarIndenizacao: d.pagarIndenizacao !== false, pagarAviso: d.pagarAviso !== false,
+      simples: d.simples || {},
       desconsiderarDeflacao: d.desconsiderarDeflacao !== false,
       r,
     };
@@ -119,14 +120,50 @@
           <tr><td>Aviso prévio — art. 34</td><td>${avisoTxt}</td><td class="num">${K.moeda(r.avisoPrevio)}</td></tr>
           <tr><td>Comissões a receber</td><td>${periodo(m.aReceber)}</td><td class="num">${K.moeda(r.aReceber)}</td></tr>
           <tr><td>Comissões sobre títulos pendentes</td><td>${periodo(m.pendentes)}</td><td class="num">${K.moeda(r.pendentes)}</td></tr>
-          <tr class="mc-total"><th colspan="2">Total a pagar</th><th class="num">${K.moeda(r.total)}</th></tr>
+          <tr class="mc-total"><th colspan="2">${r.reterIR ? 'Total bruto' : 'Total a pagar'}</th><th class="num">${K.moeda(r.total)}</th></tr>
         </tbody>
       </table>
-      <p class="mc-extenso">${esc(r.totalExtenso)}</p>
+      ${r.reterIR ? htmlIR(m) : `<p class="mc-extenso">${esc(r.totalExtenso)}</p>${m.simples.situacao === 'optante'
+    ? '<p class="mc-nota-fator">Representante optante do Simples Nacional: sem retenção de imposto de renda (IN RFB 765/2007).</p>' : ''}`}
       ${m.linhas.some((l) => l.acumulado < 0 && l.fator === 1) ? '<p class="mc-nota-fator">* IGP-M acumulado negativo: mantido o valor original (fator 1).</p>' : ''}
       ${r.indicesFaltando.length ? `<p class="mc-alerta">Atenção: faltam índices do IGP-M de ${r.indicesFaltando.map(K.rotuloMes).join(', ')}; os fatores podem estar incompletos.</p>` : ''}
       <ol class="mc-notas">${notas(m).map((n) => `<li>${esc(n)}</li>`).join('')}</ol>
     </div>`;
+  }
+
+  /** Itens da retenção de IR: [rótulo, base, alíquota, imposto]. */
+  const itensIR = (r) => [
+    ['Aviso prévio', r.avisoPrevio, K.IR_COMISSOES, r.ir.aviso],
+    ['Comissões a receber', r.aReceber, K.IR_COMISSOES, r.ir.aReceber],
+    ['Títulos pendentes', r.pendentes, K.IR_COMISSOES, r.ir.pendentes],
+    ['Indenização (1/12)', r.indenizacao, K.IR_INDENIZACAO, r.ir.indenizacao],
+  ];
+  const origemSimples = (m) => (m.simples.fonte === 'consulta'
+    ? `consulta em ${m.simples.consultadoEm ? new Date(m.simples.consultadoEm).toLocaleDateString('pt-BR') : ''}${m.simples.detalhe ? `: ${m.simples.detalhe}` : ''}`
+    : 'informado manualmente');
+
+  function htmlIR(m) {
+    const r = m.r;
+    return `<h2>4. Retenção de imposto de renda na fonte</h2>
+      <p class="mc-nota-fator">Representante não optante do Simples Nacional (${esc(origemSimples(m))}).</p>
+      <table class="mc-tabela mc-resumo">
+        <thead><tr><th>Parcela</th><th class="num">Base (R$)</th><th class="num">Alíquota</th><th class="num">IR retido (R$)</th></tr></thead>
+        <tbody>
+          ${itensIR(r).map(([rot, base, aliq, ir]) => `<tr><td>${rot}</td><td class="num">${K.moeda(base)}</td>
+            <td class="num">${pct(aliq * 100, 1)}</td><td class="num">${K.moeda(ir)}</td></tr>`).join('')}
+          <tr class="mc-total"><th>Total do IR retido</th><th></th><th></th><th class="num">${K.moeda(r.ir.total)}</th></tr>
+        </tbody>
+      </table>
+      <table class="mc-tabela mc-resumo">
+        <tbody>
+          <tr><td>Total bruto</td><td class="num">${K.moeda(r.total)}</td></tr>
+          <tr><td>(−) IR retido na fonte</td><td class="num">${K.moeda(r.ir.total)}</td></tr>
+          <tr class="mc-total"><th>Valor líquido a pagar</th><th class="num">${K.moeda(r.liquido)}</th></tr>
+        </tbody>
+      </table>
+      <p class="mc-extenso">${esc(r.liquidoExtenso)}</p>
+      <p class="mc-nota-fator">IR de 1,5% sobre comissões pagas a pessoa jurídica (RIR/2018, art. 718) e de 15% sobre a indenização
+        por rescisão contratual (Lei 9.430/1996, art. 70).</p>`;
   }
 
   // ------------------------------------------------------------- Excel (.xlsx)
@@ -270,10 +307,39 @@
     refsAviso.length ? { f: `ROUND((${refsAviso.join('+')})/3,2)`, v: r.avisoPrevio } : 0);
     const linhaRec2 = linhaTexto('Comissões a receber', periodo(m.aReceber), { f: `F${linhaReceber}`, v: r.aReceber });
     const linhaPen2 = linhaTexto('Títulos pendentes', periodo(m.pendentes), { f: `F${linhaPendentes}`, v: r.pendentes });
-    add([{ v: 'Total a pagar', s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo },
+    const linhaBruto = add([{ v: r.reterIR ? 'Total bruto' : 'Total a pagar', s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo },
+      { s: S.totalRotulo }, { s: S.totalRotulo },
       { f: `F${linhaInden}+F${linhaAviso}+F${linhaRec2}+F${linhaPen2}`, v: r.total, s: S.totalMoeda }, { s: S.totalRotulo }]);
-    add([{ v: r.totalExtenso, s: S.texto }]);
+    if (r.reterIR) {
+      add(null);
+      add([{ v: '4. Retenção de imposto de renda na fonte', s: S.secao }]);
+      add([{ v: `Representante não optante do Simples Nacional (${origemSimples(m)}).`, s: S.texto }]);
+      mesclar('A', 'G');
+      add([{ v: 'Parcela', s: S.cabecalho }, { v: 'Base (R$)', s: S.cabecalhoNum }, { v: 'Alíquota (%)', s: S.cabecalhoNum }, { s: S.cabecalho },
+        { s: S.cabecalho }, { v: 'IR retido (R$)', s: S.cabecalhoNum }]);
+      const bases = { 'Aviso prévio': linhaAviso, 'Comissões a receber': linhaRec2, 'Títulos pendentes': linhaPen2, 'Indenização (1/12)': linhaInden };
+      const primeiraIR = L.length + 1;
+      for (const [rot, base, aliq, ir] of itensIR(r)) {
+        const n = L.length + 1;
+        add([rot, { f: `F${bases[rot]}`, v: base, s: S.moeda }, { v: aliq * 100, s: S.pct2 }, null, null,
+          { f: `ROUND(B${n}*C${n}/100,2)`, v: ir, s: S.moeda }]);
+      }
+      const linhaIR = add([{ v: 'Total do IR retido', s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo },
+        { s: S.totalRotulo }, { f: `SUM(F${primeiraIR}:F${L.length})`, v: r.ir.total, s: S.totalMoeda }, { s: S.totalRotulo }]);
+      add(null);
+      add([{ v: 'Valor líquido a pagar', s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo }, { s: S.totalRotulo },
+        { s: S.totalRotulo }, { f: `F${linhaBruto}-F${linhaIR}`, v: r.liquido, s: S.totalMoeda }, { s: S.totalRotulo }]);
+    }
+    add([{ v: r.reterIR ? r.liquidoExtenso : r.totalExtenso, s: S.texto }]);
     mesclar('A', 'G');
+    if (r.reterIR) {
+      add([{ v: 'IR de 1,5% sobre comissões pagas a pessoa jurídica (RIR/2018, art. 718) e de 15% sobre a indenização por rescisão contratual (Lei 9.430/1996, art. 70).', s: S.texto }]);
+      mesclar('A', 'G');
+      alturas[L.length] = 28;
+    } else if (m.simples.situacao === 'optante') {
+      add([{ v: 'Representante optante do Simples Nacional: sem retenção de imposto de renda (IN RFB 765/2007).', s: S.texto }]);
+      mesclar('A', 'G');
+    }
     add(null);
     for (const n of notas(m)) {
       add([{ v: n, s: S.texto }]);

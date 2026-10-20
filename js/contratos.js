@@ -34,9 +34,10 @@
     const filtro = $('#ct-filtro').value;
     const lista = contratos.filter((c) => (!filtro || c.situacao === filtro) &&
       (!busca || (c.razao || '').toLowerCase().includes(busca) || (c.responsavel || '').toLowerCase().includes(busca) ||
+        (c.codigo || '').toLowerCase() === busca ||
         (digitos && C.soDigitos(c.cnpj).includes(digitos))));
     $('#ct-lista').innerHTML = lista.map((c) => `<tr>
-        <td><b>${esc(c.razao)}</b><br><small class="suave">${esc(c.responsavel || '')}</small></td>
+        <td><b>${esc(c.razao)}</b><br><small class="suave">${c.codigo ? `Cód. ${esc(c.codigo)} · ` : ''}${esc(c.responsavel || '')}</small></td>
         <td>${esc(c.cnpj)}</td>
         <td>${esc([c.cidade, c.uf].filter(Boolean).join('-'))}</td>
         <td>${esc((c.zona || '').split('\n')[0])}</td>

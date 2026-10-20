@@ -187,6 +187,7 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
   rota('POST', '/api/indices/:serie/atualizar', ({ usuario, p }) => servico.atualizarIndices(usuario, p.serie));
   rota('PUT', '/api/indices/:serie/:mes', ({ usuario, corpo, p }) => servico.salvarIndice(usuario, p.serie, p.mes, corpo.valor));
   rota('DELETE', '/api/indices/:serie/:mes', ({ usuario, p }) => servico.removerIndice(usuario, p.serie, p.mes));
+  rota('GET', '/api/cnpj/:cnpj/simples', ({ usuario, p }) => servico.consultarSimples(usuario, p.cnpj));
   rota('GET', '/api/distratos', ({ usuario }) => servico.listarDistratos(usuario));
   rota('POST', '/api/distratos', ({ usuario, corpo }) => servico.salvarDistrato(usuario, { ...corpo, id: null }));
   rota('PUT', '/api/distratos/:id', ({ usuario, corpo, p }) => servico.salvarDistrato(usuario, { ...corpo, id: p.id }));

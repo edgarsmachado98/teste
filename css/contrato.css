@@ -217,3 +217,10 @@ a.botao { text-decoration: none; }
 }
 @page memoria { size: A4 portrait; margin: 14mm 14mm 14mm 16mm; }
 .mc-nota-fator { font-size: 8.5pt; color: #444444; margin: 2px 0 0; }
+
+/* ---------------------------------------------- Simples Nacional no distrato */
+.dt-simples { display: grid; gap: .35rem; margin-top: .6rem; padding: .6rem .7rem; border: 1px solid var(--borda); border-radius: 6px; background: var(--cabecalho); }
+.dt-simples-topo { display: flex; flex-wrap: wrap; gap: .4rem .75rem; align-items: center; }
+.dt-simples-topo a { font-size: .85rem; color: var(--secundaria); }
+.dt-simples .dica { margin: 0; }
+.dt-simples .ruim { color: var(--erro); font-weight: 600; }

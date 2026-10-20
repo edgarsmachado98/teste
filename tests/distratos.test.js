@@ -226,3 +226,65 @@ test('memória de cálculo: HTML e planilha Excel com fórmulas que fecham com o
   const zipTexto = Buffer.from(bytes).toString('latin1');
   assert.ok(zipTexto.includes('ROUND(F') && zipTexto.includes('SUM(F'));
 });
+
+test('não optante do Simples: IR de 1,5% sobre aviso, a receber e pendentes e de 15% sobre a indenização', async () => {
+  // valores do distrato de exemplo enviado pela empresa (out/2026)
+  const d = {
+    dataInicio: '2026-06-15', dataDistrato: '2026-10-16', comissoes: [{ mes: '2026-10', valor: 312.61 }],
+    aReceber: { inicio: '2026-10-01', fim: '2026-10-16', valor: 175.82 }, pendentes: { inicio: '2026-09-20', fim: '2027-01-16', valor: 255.55 },
+  };
+  const semIR = K.calcular({ ...d, simples: { situacao: 'optante' } }, {});
+  assert.deepStrictEqual([semIR.total, semIR.reterIR, semIR.ir.total, semIR.liquido], [597.57, false, 0, 597.57]);
+  const r = K.calcular({ ...d, simples: { situacao: 'nao_optante' } }, {});
+  assert.deepStrictEqual([r.indenizacao, r.avisoPrevio], [62.00, 104.20]);
+  assert.deepStrictEqual(r.ir, { aviso: 1.56, aReceber: 2.64, pendentes: 3.83, indenizacao: 9.30, comissoes: 8.03, total: 17.33 });
+  assert.strictEqual(r.liquido, 580.24);
+  assert.strictEqual(r.liquidoExtenso, 'Quinhentos e oitenta reais e vinte e quatro centavos');
+
+  // cláusula segunda: quantia líquida, parcelas brutas e o IR retido
+  const contrato = { ...CONTRATO, cnpj: C.formatarCNPJ(CONTRATO.cnpj) };
+  const dd = { ...d, representada: 'alimentos', simples: { situacao: 'nao_optante' }, documentos: ['distrato'] };
+  const doc = M.montar(contrato, dd, r)[0];
+  const vals = M.valores(contrato, dd, r);
+  const texto = doc.blocos.filter((b) => b[0] === 'p').map((b) => C.trechos(b[1], vals).map((t) => t.texto).join('')).join('\n');
+  assert.match(texto, /R\$ 580,24 \(Quinhentos e oitenta reais e vinte e quatro centavos\)/);
+  assert.match(texto, /Valor bruto: R\$ 597,57/);
+  assert.match(texto, /IRRF de 1,5% .*base R\$ 535,57\): R\$ 8,03/);
+  assert.match(texto, /IRRF de 15% .*base R\$ 62,00\): R\$ 9,30/);
+  assert.match(texto, /Valor líquido: R\$ 580,24/);
+
+  // memória de cálculo com a seção de IR
+  const MEM = require('../js/distrato-memoria.js');
+  const P = require('../js/planilha.js');
+  const m = MEM.montar(contrato, dd, r, {}, { nome: 'Antoniazzi Alimentos', cnpj: '11.780.083/0001-03' });
+  assert.match(MEM.html(m), /Valor líquido a pagar<\/th><th class="num">580,24/);
+  const linhas = await P.ler(MEM.xlsx(m));
+  assert.strictEqual(linhas.find((l) => l[0] === 'Total do IR retido')[5], 17.33);
+  assert.strictEqual(linhas.find((l) => l[0] === 'Valor líquido a pagar')[5], 580.24);
+});
+
+test('consulta do Simples Nacional pelos dados abertos da Receita (BrasilAPI e alternativa)', async () => {
+  const respostas = [];
+  const buscar = async (url) => {
+    const r = respostas.shift();
+    if (r instanceof Error) throw r;
+    return { ok: r.status === 200, status: r.status, json: async () => r.corpo, url };
+  };
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 }, buscar });
+  const A = { id: 'a', login: 'a', perfil: 'admin' };
+  respostas.push({ status: 200, corpo: { razao_social: 'X LTDA', descricao_situacao_cadastral: 'ATIVA', opcao_pelo_simples: false,
+    data_opcao_pelo_simples: '2015-01-01', data_exclusao_do_simples: '2020-12-31', opcao_pelo_mei: false } });
+  let r = await s.consultarSimples(A, '29.356.095/0001-62');
+  assert.deepStrictEqual([r.optante, r.dataExclusao, r.situacaoCadastral, r.cnpj], [false, '2020-12-31', 'ATIVA', '29.356.095/0001-62']);
+  // BrasilAPI fora do ar: usa a ReceitaWS
+  respostas.push(new Error('timeout'), { status: 200, corpo: { nome: 'X LTDA', situacao: 'ATIVA', simples: { optante: true, data_opcao: '01/07/2007' } } });
+  r = await s.consultarSimples(A, '29356095000162');
+  assert.deepStrictEqual([r.optante, r.dataOpcao, r.fonte], [true, '2007-07-01', 'ReceitaWS (dados da Receita Federal)']);
+  respostas.push(new Error('a'), new Error('b'));
+  await assert.rejects(s.consultarSimples(A, '29356095000162'), (e) => e.status === 502 && /Consulta Optantes/.test(e.message));
+  respostas.push({ status: 404, corpo: {} });
+  await assert.rejects(s.consultarSimples(A, '29356095000162'), (e) => e.status === 404);
+  await assert.rejects(s.consultarSimples(A, '11111111111111'), /CNPJ inválido/);
+  await assert.rejects(s.consultarSimples({ id: 'c', login: 'c', perfil: 'consulta' }, '29356095000162'), (e) => e.status === 403);
+});

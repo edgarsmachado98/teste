@@ -71,8 +71,14 @@
       dataInicio: C.dataExtenso(d.dataInicio),
       dataDistrato: C.dataExtenso(d.dataDistrato),
       dataAviso: C.dataExtenso(d.dataAviso || d.dataDistrato),
-      total: K.moeda(r.total),
-      totalExtenso: r.totalExtenso,
+      // a cláusula segunda traz a quantia líquida (igual ao total quando não há retenção de IR)
+      total: K.moeda(r.liquido),
+      totalExtenso: r.liquidoExtenso,
+      totalBruto: K.moeda(r.total),
+      baseComissoesIR: K.moeda(r.avisoPrevio + r.aReceber + r.pendentes),
+      irComissoes: K.moeda(r.ir.comissoes),
+      irIndenizacao: K.moeda(r.ir.indenizacao),
+      irTotal: K.moeda(r.ir.total),
       aviso: K.moeda(r.avisoPrevio),
       indenizacao: K.moeda(r.indenizacao),
       aReceber: K.moeda(r.aReceber),
@@ -104,6 +110,16 @@
     if (r.indenizacao) itens.push(`**- Ref. Indenização 1/12 avos: R$ ${c('indenizacao')}**`);
     if (r.aReceber) itens.push(`**- Comissões a receber de ${c('periodoReceber')}: R$ ${c('aReceber')}**`);
     if (r.pendentes) itens.push(`**- Comissões sobre títulos pendentes de ${c('periodoPendentes')}: R$ ${c('pendentes')}**`);
+    // representante não optante do Simples: demonstra o IR retido e o líquido
+    if (r.reterIR && r.ir.total) {
+      itens.push(`**Valor bruto: R$ ${c('totalBruto')}**`);
+      if (r.ir.comissoes) {
+        itens.push(`**(-) IRRF de 1,5% sobre aviso prévio, comissões a receber e títulos pendentes (base R$ ${c('baseComissoesIR')}): ` +
+          `R$ ${c('irComissoes')}**`);
+      }
+      if (r.ir.indenizacao) itens.push(`**(-) IRRF de 15% sobre a indenização 1/12 avos (base R$ ${c('indenizacao')}): R$ ${c('irIndenizacao')}**`);
+      itens.push(`**Valor líquido: R$ ${c('total')}**`);
+    }
     const ass = e.assinaturasLado
       ? [['assLado', [[e.assinatura, 'REPRESENTADA'], ['⟦razao⟧', 'REPRESENTANTE']]]]
       : [['assPilha', [e.assinatura, 'REPRESENTADA']], ['assPilha', ['⟦razao⟧', 'REPRESENTANTE']]];

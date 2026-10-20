@@ -1076,6 +1076,16 @@ function criarServico(db, opcoes = {}) {
     return out;
   };
 
+  function normalizarSimples(s) {
+    s = s && typeof s === 'object' ? s : {};
+    const situacao = ['optante', 'nao_optante'].includes(s.situacao) ? s.situacao : '';
+    const txt = (v, max) => String(v == null ? '' : v).slice(0, max);
+    return {
+      situacao, fonte: s.fonte === 'consulta' ? 'consulta' : situacao ? 'manual' : '',
+      consultadoEm: txt(s.consultadoEm, 40), detalhe: txt(s.detalhe, 300),
+    };
+  }
+
   function normalizarDistrato(d) {
     const contrato = q('SELECT * FROM contratos_representante WHERE id = ?').get(d.contratoId) ||
       falhar(400, 'Selecione o contrato do representante.');
@@ -1109,6 +1119,7 @@ function criarServico(db, opcoes = {}) {
         desconsiderarDeflacao: d.desconsiderarDeflacao !== false,
         profissao: t(d.profissao, 60), estadoCivil: t(d.estadoCivil, 120), naturalidade: t(d.naturalidade, 80),
         documentos: docs.length ? docs : ['distrato', 'aviso'],
+        simples: normalizarSimples(d.simples),
       },
     };
   }
@@ -1161,6 +1172,66 @@ function criarServico(db, opcoes = {}) {
     q('DELETE FROM distratos WHERE id = ?').run(id);
     const c = q('SELECT razao_social FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
     auditar(ator, 'distrato.excluir', `${c.razao_social || ''} / ${l.representada === 'cia' ? 'Antoniazzi & Cia' : 'Antoniazzi Alimentos'}`);
+  }
+
+  // ------------------------------------------------- Simples Nacional (CNPJ)
+
+  const dataDeAPI = (v) => {
+    const s = String(v || '');
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+  };
+
+  /**
+   * Situação do CNPJ no Simples Nacional, pelos dados abertos da Receita Federal (BrasilAPI; ReceitaWS como
+   * alternativa). A "Consulta Optantes" do Portal do Simples exige captcha e não pode ser consultada pelo sistema.
+   */
+  async function consultarSimples(ator, cnpj) {
+    exigir(ator, 'operador');
+    const dig = String(cnpj || '').replace(/\D/g, '');
+    if (dig.length !== 14 || !CT.validarCNPJ(dig)) falhar(400, 'CNPJ inválido.');
+    const pedir = async (url) => {
+      const r = await buscarUrl(url, { signal: AbortSignal.timeout(15000), headers: { Accept: 'application/json' } });
+      if (r.status === 404) falhar(404, 'CNPJ não encontrado na base da Receita Federal.');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    };
+    const fontes = [
+      async () => {
+        const j = await pedir(`https://brasilapi.com.br/api/cnpj/v1/${dig}`);
+        return {
+          razao: j.razao_social || '', situacaoCadastral: j.descricao_situacao_cadastral || '',
+          optante: typeof j.opcao_pelo_simples === 'boolean' ? j.opcao_pelo_simples : null,
+          dataOpcao: dataDeAPI(j.data_opcao_pelo_simples), dataExclusao: dataDeAPI(j.data_exclusao_do_simples),
+          mei: j.opcao_pelo_mei === true, fonte: 'BrasilAPI (dados abertos da Receita Federal)',
+        };
+      },
+      async () => {
+        const j = await pedir(`https://receitaws.com.br/v1/cnpj/${dig}`);
+        if (j.status === 'ERROR') falhar(404, j.message || 'CNPJ não encontrado.');
+        const s = j.simples || {};
+        return {
+          razao: j.nome || '', situacaoCadastral: j.situacao || '',
+          optante: typeof s.optante === 'boolean' ? s.optante : null,
+          dataOpcao: dataDeAPI(s.data_opcao), dataExclusao: dataDeAPI(s.data_exclusao),
+          mei: !!(j.simei && j.simei.optante), fonte: 'ReceitaWS (dados da Receita Federal)',
+        };
+      },
+    ];
+    const erros = [];
+    for (const fonte of fontes) {
+      try {
+        const r = await fonte();
+        auditar(ator, 'distrato.simples', `${CT.formatarCNPJ(dig)}: ${r.optante == null ? 'sem informação' : r.optante ? 'optante' : 'não optante'} (${r.fonte})`);
+        return { cnpj: CT.formatarCNPJ(dig), ...r, consultadoEm: iso() };
+      } catch (e) {
+        if (e instanceof ErroApp) throw e;
+        erros.push(e.message);
+      }
+    }
+    falhar(502, `Não foi possível consultar a Receita Federal (${erros.join('; ')}). Confira na Consulta Optantes do ` +
+      'Portal do Simples Nacional e marque a situação manualmente.');
   }
 
   function registrarDocumentoDistrato(ator, id, formato) {
@@ -1470,7 +1541,7 @@ function criarServico(db, opcoes = {}) {
     carregarExemplo, limparDados, backup, restaurar,
     listarContratos, salvarContrato, removerContrato, registrarDocumento,
     indices, atualizarIndices, salvarIndice, removerIndice,
-    listarDistratos, salvarDistrato, removerDistrato, registrarDocumentoDistrato,
+    listarDistratos, salvarDistrato, removerDistrato, registrarDocumentoDistrato, consultarSimples,
     custos, salvarParametrosCustos, abrirCompetencia, salvarFolha, importarFolha, removerCompetencia,
     salvarCentroCusto, removerCentroCusto, importarCentrosCusto,
   };

@@ -20,6 +20,7 @@
   let atual = null;     // distrato em edição ({} = novo)
   let contrato = null;  // contrato do representante selecionado
   const valoresMes = {}; // 'AAAA-MM' -> texto digitado
+  let simples = {};      // situação no Simples Nacional: { situacao, fonte, consultadoEm, detalhe }
   const podeEditar = () => !!usuario && usuario.perfil !== 'consulta';
 
   // ------------------------------------------------------------------ lista
@@ -79,6 +80,7 @@
     Object.keys(valoresMes).forEach((k) => delete valoresMes[k]);
     for (const c of d.comissoes || []) valoresMes[c.mes] = K.moeda(c.valor);
     contrato = d.contratoId ? contratos.find((c) => c.id === d.contratoId) || null : null;
+    simples = d.simples ? { ...d.simples } : {};
     $('#dt-cnpj').value = contrato ? contrato.cnpj : '';
     form.querySelectorAll('input[name=representada]').forEach((r) => { r.checked = r.value === d.representada; });
     $('#dt-inicio').value = d.dataInicio || (contrato && contrato.dataContrato) || '';
@@ -137,9 +139,12 @@
       renderRepresentante('Nenhum contrato cadastrado com este CNPJ. Cadastre-o em Contratos de representantes.');
       return;
     }
+    const outro = !contrato || contrato.id !== achados[0].id;
     contrato = achados[0];
     if (!$('#dt-inicio').value || !atual.id) $('#dt-inicio').value = contrato.dataContrato || '';
+    if (outro) simples = {};
     renderRepresentante();
+    if (!simples.situacao) consultarSimples(true);
     renderMeses();
     atualizar();
   }
@@ -147,6 +152,8 @@
   function renderRepresentante(msg) {
     const box = $('#dt-representante');
     box.hidden = false;
+    $('#dt-simples').hidden = !contrato;
+    renderSimples();
     if (!contrato) {
       box.innerHTML = msg ? `<p class="aviso">${esc(msg)}</p>` : '';
       box.hidden = !msg;
@@ -154,6 +161,7 @@
     }
     const pend = C.pendencias(contrato);
     box.innerHTML = `<dl class="dt-dados">
+        ${contrato.codigo ? `<dt>Código</dt><dd>${esc(contrato.codigo)}</dd>` : ''}
         <dt>Razão social</dt><dd>${esc(contrato.razao)}</dd>
         <dt>CNPJ</dt><dd>${esc(contrato.cnpj)}</dd>
         <dt>Responsável</dt><dd>${esc(contrato.responsavel || '—')} · CPF ${esc(contrato.cpf || '—')}</dd>
@@ -161,6 +169,61 @@
         <dt>Contrato</dt><dd>desde ${dataBR(contrato.dataContrato) || '—'} · ${contrato.situacao === 'encerrado' ? 'encerrado' : 'ativo'}</dd>
       </dl>` + (pend.length ? `<p class="aviso">O cadastro deste contrato está incompleto (${pend.length} campo(s)). Complete-o em Contratos de representantes para gerar os documentos.</p>` : '');
   }
+
+  // ------------------------------------------------- Simples Nacional / IR
+
+  const dataHora = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '');
+
+  function renderSimples() {
+    form.querySelectorAll('input[name=dt-simples]').forEach((x) => { x.checked = x.value === simples.situacao; });
+    const el = $('#dt-simples-resultado');
+    if (!simples.situacao) {
+      el.innerHTML = '<span class="ruim">Situação ainda não verificada.</span> Consulte a Receita ou marque abaixo; ela define a retenção de IR.';
+    } else {
+      const quem = simples.situacao === 'optante' ? 'Optante do Simples Nacional' : 'Não optante do Simples Nacional';
+      el.textContent = `${quem}${simples.detalhe ? ` (${simples.detalhe})` : ''}` +
+        (simples.fonte === 'consulta' ? ` · consultado em ${dataHora(simples.consultadoEm)}` : ' · marcado manualmente');
+    }
+  }
+
+  async function consultarSimples(automatica) {
+    if (!contrato || !podeEditar()) return;
+    const botao = $('#dt-consultar-simples');
+    botao.disabled = true;
+    $('#dt-simples-resultado').textContent = 'Consultando a Receita Federal…';
+    try {
+      const r = await api.get(`/api/cnpj/${C.soDigitos(contrato.cnpj)}/simples`);
+      if (r.optante == null) {
+        simples = { ...simples, fonte: simples.situacao ? simples.fonte : '' };
+        renderSimples();
+        App.avisar('A base da Receita não informa a situação deste CNPJ no Simples Nacional. Confira na Consulta Optantes e marque a opção.');
+        return;
+      }
+      const datas = r.optante ? (r.dataOpcao ? `desde ${dataBR(r.dataOpcao)}` : '')
+        : (r.dataExclusao ? `excluído em ${dataBR(r.dataExclusao)}` : 'sem opção');
+      simples = {
+        situacao: r.optante ? 'optante' : 'nao_optante', fonte: 'consulta', consultadoEm: r.consultadoEm,
+        detalhe: [datas, r.mei ? 'MEI' : '', r.situacaoCadastral ? `situação cadastral ${r.situacaoCadastral.toLowerCase()}` : '', r.fonte]
+          .filter(Boolean).join('; '),
+      };
+      renderSimples();
+      atualizar();
+    } catch (e) {
+      if (e.status === 401) return;
+      renderSimples();
+      if (!automatica || e.status !== 502) App.avisar(e.message);
+      else $('#dt-simples-resultado').innerHTML = `<span class="ruim">${esc(e.message)}</span>`;
+    } finally {
+      botao.disabled = false;
+    }
+  }
+  $('#dt-consultar-simples').addEventListener('click', () => consultarSimples(false));
+  form.querySelectorAll('input[name=dt-simples]').forEach((x) => x.addEventListener('change', () => {
+    // marcar à mão uma situação diferente da consultada passa a valer como informação manual
+    if (simples.situacao !== x.value) simples = { situacao: x.value, fonte: 'manual', consultadoEm: '', detalhe: '' };
+    renderSimples();
+    atualizar();
+  }));
 
   // ------------------------------------------------------- comissões mensais
 
@@ -264,6 +327,7 @@
       estadoCivil: $('#dt-estado-civil').value,
       naturalidade: $('#dt-naturalidade').value,
       documentos: [...form.querySelectorAll('input[name=dt-documento]:checked')].map((x) => x.value),
+      simples: { ...simples, situacao: (form.querySelector('input[name=dt-simples]:checked') || {}).value || '' },
     };
   }
 
@@ -307,8 +371,12 @@
       tile('Indenização (1/12)', r.indenizacao, d.pagarIndenizacao ? `base R$ ${K.moeda(r.baseIndenizacao)} ÷ 12` : 'não paga') +
       tile('Aviso prévio', r.avisoPrevio, d.pagarAviso ? (r.mesesAviso.length ? `média de ${r.mesesAviso.map(K.rotuloMes).join(', ')}` : '—') : 'não pago') +
       tile('Títulos pendentes', r.pendentes, d.pendentes.inicio ? `${dataBR(d.pendentes.inicio)} a ${dataBR(d.pendentes.fim)}` : '') +
-      tile('A receber', r.aReceber, d.aReceber.inicio ? `${dataBR(d.aReceber.inicio)} a ${dataBR(d.aReceber.fim)}` : '');
-    $('#dt-total').innerHTML = `<span>Total líquido</span><b>R$ ${K.moeda(r.total)}</b><small>${esc(r.totalExtenso)}</small>`;
+      tile('A receber', r.aReceber, d.aReceber.inicio ? `${dataBR(d.aReceber.inicio)} a ${dataBR(d.aReceber.fim)}` : '') +
+      (r.reterIR ? tile('IR retido na fonte', r.ir.total,
+        `1,5% s/ comissões R$ ${K.moeda(r.ir.comissoes)} · 15% s/ indenização R$ ${K.moeda(r.ir.indenizacao)}`) : '');
+    $('#dt-total').innerHTML = r.reterIR
+      ? `<span>Líquido a pagar</span><b>R$ ${K.moeda(r.liquido)}</b><small>bruto R$ ${K.moeda(r.total)} − IR R$ ${K.moeda(r.ir.total)} · ${esc(r.liquidoExtenso)}</small>`
+      : `<span>Total líquido</span><b>R$ ${K.moeda(r.total)}</b><small>${esc(r.totalExtenso)}${d.simples.situacao === 'optante' ? ' · optante do Simples: sem retenção de IR' : ''}</small>`;
 
     // prévia dos documentos
     if (contrato && d.representada) {
@@ -385,6 +453,9 @@
       if (K.lerValor(p.valor) && (!p.inicio || !p.fim)) out.push({ campo: `dt-${pref}-inicio`, mensagem: `Informe o período das ${nome}.` });
     }
     if (!d.documentos.length) out.push({ campo: 'dt-documento', mensagem: 'Escolha ao menos um documento.' });
+    if (contrato && !d.simples.situacao) {
+      out.push({ campo: 'dt-consultar-simples', mensagem: 'Verifique se o representante é optante do Simples Nacional (define a retenção de IR).' });
+    }
     return out;
   }
 

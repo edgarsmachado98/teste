@@ -20,6 +20,8 @@
   'use strict';
 
   const centavos = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const IR_COMISSOES = 0.015;
+  const IR_INDENIZACAO = 0.15;
 
   function moeda(v) {
     return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -122,10 +124,25 @@
     // o total é a soma das parcelas já arredondadas, para fechar com o que o termo lista
     const total = centavos(avisoPrevio + indenizacao + aReceber + pendentes);
 
+    // representante não optante do Simples Nacional: IR retido na fonte sobre cada parcela
+    // (comissões: 1,5% — RIR/2018, art. 718; indenização por rescisão: 15% — Lei 9.430/1996, art. 70).
+    // Optante do Simples: sem retenção (IN RFB 765/2007).
+    const reterIR = !!(d.simples && d.simples.situacao === 'nao_optante');
+    const ir = {
+      aviso: reterIR ? centavos(avisoPrevio * IR_COMISSOES) : 0,
+      aReceber: reterIR ? centavos(aReceber * IR_COMISSOES) : 0,
+      pendentes: reterIR ? centavos(pendentes * IR_COMISSOES) : 0,
+      indenizacao: reterIR ? centavos(indenizacao * IR_INDENIZACAO) : 0,
+    };
+    ir.comissoes = centavos(ir.aviso + ir.aReceber + ir.pendentes);
+    ir.total = centavos(ir.comissoes + ir.indenizacao);
+    const liquido = centavos(total - ir.total);
+
     return {
       linhas, somaNominal, somaAtualizada, aReceber, pendentes, baseIndenizacao,
       indenizacao, avisoPrevio, mesesAviso: ultimos.map((l) => l.mes), total,
       totalExtenso: porExtenso(total),
+      reterIR, ir, liquido, liquidoExtenso: porExtenso(liquido),
       indicesFaltando: [...faltando].sort(),
       foraDoPeriodo,
     };
@@ -195,7 +212,7 @@
   }
 
   return {
-    calcular, fatorIndice, porExtenso, inteiroExtenso, moeda, lerValor, centavos,
+    calcular, fatorIndice, IR_COMISSOES, IR_INDENIZACAO, porExtenso, inteiroExtenso, moeda, lerValor, centavos,
     listarMeses, somarMes, mesDe, rotuloMes,
   };
 });

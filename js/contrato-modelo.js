@@ -45,6 +45,7 @@
 
   /** Campos do formulário (dados do REPRESENTANTE). */
   const CAMPOS = [
+    { id: 'codigo', grupo: 'empresa', rotulo: 'Código do representante', max: 20, dica: 'Opcional; código usado no sistema da empresa' },
     { id: 'razao', grupo: 'empresa', rotulo: 'Razão social', obrig: true, max: 150 },
     { id: 'cnpj', grupo: 'empresa', rotulo: 'CNPJ', obrig: true, tipo: 'cnpj' },
     { id: 'fantasia', grupo: 'empresa', rotulo: 'Nome fantasia', max: 150, dica: 'Em branco, o contrato mostra ***' },
