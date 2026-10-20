@@ -247,6 +247,7 @@
               <option value="ativo">Ativos</option>
               <option value="encerrado">Encerrados</option>
             </select>
+            <button type="button" id="ct-exportar" class="sec">Exportar lista</button>
             <button type="button" id="ct-novo" class="so-edicao">Novo contrato</button>
           </div>
         </div>
@@ -279,6 +280,7 @@
             <button type="submit" class="sec so-edicao">Salvar</button>
             <button type="button" id="ct-pdf">Gerar PDF</button>
             <button type="button" id="ct-docx">Gerar Word (.docx)</button>
+            <button type="button" class="sec ct-voltar-fim" data-voltar="ct">Voltar à lista</button>
           </div>
           <p class="dica">“Gerar PDF” abre a janela de impressão: escolha <b>Salvar como PDF</b> como destino.</p>
         </form>
@@ -401,6 +403,7 @@
             <button type="button" id="dt-memoria-pdf" class="sec">Imprimir / PDF</button>
             <button type="button" id="dt-memoria-xlsx" class="sec">Planilha Excel (.xlsx)</button>
           </div>
+          <div class="ct-acoes"><button type="button" class="sec ct-voltar-fim" data-voltar="dt">Voltar à lista</button></div>
           <p class="dica">“Gerar PDF” e “Imprimir / PDF” abrem a janela de impressão: escolha <b>Salvar como PDF</b> como destino.
             A planilha da memória traz as fórmulas para a conferência.</p>
         </form>
@@ -723,6 +726,23 @@
         <button type="submit" value="ok">OK</button>
         <button type="button" id="dialogo-copiar" class="sec" hidden>Copiar</button>
         <button type="submit" value="cancelar" id="dialogo-cancelar" class="sec" hidden>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-exportar" aria-labelledby="exp-titulo">
+    <form method="dialog" class="formulario">
+      <h2 id="exp-titulo">Exportar lista de representantes</h2>
+      <p id="exp-resumo"></p>
+      <fieldset>
+        <legend>Formato</legend>
+        <label class="check"><input type="radio" name="exp-formato" value="pdf" checked> PDF (impressão)</label>
+        <label class="check"><input type="radio" name="exp-formato" value="xlsx"> Planilha Excel (.xlsx)</label>
+        <label class="check"><input type="radio" name="exp-formato" value="xml"> XML</label>
+      </fieldset>
+      <div class="linha-botoes">
+        <button type="submit" value="ok">Exportar</button>
+        <button type="submit" value="cancelar" class="sec">Cancelar</button>
       </div>
     </form>
   </dialog>

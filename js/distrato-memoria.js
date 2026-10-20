@@ -208,7 +208,7 @@
    * Planilha com uma aba; células: { v, f, s } (v = texto ou número; f = fórmula).
    * alturas: { linha (1..n): altura em pontos }.
    */
-  function planilha(linhas, larguras, mesclas, alturas, desenho) {
+  function planilha(linhas, larguras, mesclas, alturas, desenho, ncols = 7, orientacao = 'portrait') {
     const corpo = linhas.map((l, i) => {
       const ht = alturas[i + 1] ? ` ht="${alturas[i + 1]}" customHeight="1"` : '';
       if (!l) return ht ? `<row r="${i + 1}"${ht}/>` : '';
@@ -228,11 +228,11 @@
     const merge = mesclas.length ? `<mergeCells count="${mesclas.length}">${mesclas.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '';
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:G${linhas.length}"/>
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${colLetra(ncols - 1)}${Math.max(1, linhas.length)}"/>
 <sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>
 <cols>${cols}</cols><sheetData>${corpo}</sheetData>${merge}
 <pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>
-<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>${desenho ? '<drawing r:id="rId1"/>' : ''}</worksheet>`;
+<pageSetup paperSize="9" orientation="${orientacao}" fitToWidth="1" fitToHeight="0"/>${desenho ? '<drawing r:id="rId1"/>' : ''}</worksheet>`;
   }
 
   /**
@@ -347,6 +347,11 @@
       alturas[L.length] = n.length > 110 ? 28 : 15; // células mescladas não ajustam a altura sozinhas no Excel
     }
     const aba = planilha(L, [22, 15, 14, 16, 14, 16, 11], mesclas, alturas, !!logo);
+    return pacote(aba, logo, 'Memória de cálculo');
+  }
+
+  /** Monta o arquivo .xlsx (uma aba) com o logotipo opcional no canto superior esquerdo. */
+  function pacote(aba, logo, nomeAba) {
     const arquivos = [
       { nome: '[Content_Types].xml', dados: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -364,7 +369,7 @@
 </Relationships>` },
       { nome: 'xl/workbook.xml', dados: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="Memória de cálculo" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>` },
+<sheets><sheet name="${xml(nomeAba)}" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>` },
       { nome: 'xl/_rels/workbook.xml.rels', dados: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
@@ -401,5 +406,20 @@
     return DOCX.zip(arquivos);
   }
 
-  return { montar, html, xlsx };
+  /**
+   * Planilha de uma tabela simples: título, subtítulo, cabeçalho e linhas (texto ou número; números com 2
+   * casas usam o formato de moeda quando a coluna está em `moeda`).
+   */
+  function tabelaXlsx({ titulo, subtitulo, cabecalho, linhas, larguras, moeda = [], logo = null, nomeAba = 'Lista' }) {
+    const c0 = logo ? [null] : [];
+    const L = [[...c0, { v: titulo, s: S.titulo }], [...c0, { v: subtitulo || '', s: S.subtitulo }], null];
+    const alturas = logo ? { 1: 28, 2: 18, 3: 14 } : { 1: 24 };
+    const cab = L.push(cabecalho.map((v) => ({ v, s: S.cabecalho })));
+    alturas[cab] = 30;
+    for (const l of linhas) L.push(l.map((v, j) => (typeof v === 'number' && moeda.includes(j) ? { v, s: S.moeda } : v == null ? '' : v)));
+    const aba = planilha(L, larguras, [], alturas, !!logo, cabecalho.length, 'landscape');
+    return pacote(aba, logo, nomeAba);
+  }
+
+  return { montar, html, xlsx, tabelaXlsx };
 });

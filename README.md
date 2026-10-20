@@ -215,6 +215,10 @@ São Paulo). A informação fica só no cadastro (não aparece nos documentos) e
 | São Paulo | modelo anterior | contratos da Antoniazzi & Cia e da Antoniazzi Alimentos, política de privacidade das duas empresas, termo aditivo (5% no Estado de São Paulo) e termo de ciência |
 | Rio Grande do Sul e/ou Santa Catarina | modelo RS/SC | contrato só da Antoniazzi & Cia (Anexo II: 2% vendas de farinha de trigo), política de privacidade só da Antoniazzi & Cia, termo aditivo (4% em RS e SC) e termo de ciência |
 
+**Exportar lista** (ao lado de "Novo contrato") gera a lista de representantes exatamente como está na tela
+(busca e filtro Todos/Ativos/Encerrados) em **PDF**, **Excel (.xlsx)** ou **XML**. Ao salvar um distrato, o contrato
+do representante passa automaticamente para **Encerrado**; excluindo o último distrato, ele volta a **Ativo**.
+
 São Paulo junto com RS/SC não é aceito (os modelos são diferentes): cadastre contratos separados. O campo
 **Código do representante** é opcional.
 

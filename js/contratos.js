@@ -28,14 +28,19 @@
     renderLista();
   }
 
-  function renderLista() {
+  /** Contratos com a busca e o filtro de situação da tela (a mesma lista exportada). */
+  function listaFiltrada() {
     const busca = $('#ct-busca').value.trim().toLowerCase();
     const digitos = C.soDigitos(busca);
     const filtro = $('#ct-filtro').value;
-    const lista = contratos.filter((c) => (!filtro || c.situacao === filtro) &&
+    return contratos.filter((c) => (!filtro || c.situacao === filtro) &&
       (!busca || (c.razao || '').toLowerCase().includes(busca) || (c.responsavel || '').toLowerCase().includes(busca) ||
         (c.codigo || '').toLowerCase() === busca ||
         (digitos && C.soDigitos(c.cnpj).includes(digitos))));
+  }
+
+  function renderLista() {
+    const lista = listaFiltrada();
     $('#ct-lista').innerHTML = lista.map((c) => `<tr>
         <td><b>${esc(c.razao)}</b><br><small class="suave">${c.codigo ? `Cód. ${esc(c.codigo)} · ` : ''}${esc(c.responsavel || '')}</small></td>
         <td>${esc(c.cnpj)}</td>
@@ -54,6 +59,103 @@
   $('#ct-busca').addEventListener('input', renderLista);
   $('#ct-filtro').addEventListener('change', renderLista);
   $('#ct-novo').addEventListener('click', () => abrir({}));
+
+  // ------------------------------------------------------- exportar lista
+
+  const COLUNAS_EXPORT = [
+    ['codigo', 'Código', 10], ['razao', 'Representante', 34], ['responsavel', 'Responsável', 26], ['cnpj', 'CNPJ', 19],
+    ['cidade', 'Cidade/UF', 20], ['estados', 'Estado de atuação', 12], ['zona', 'Zona de influência', 34],
+    ['dataContrato', 'Data do contrato', 12], ['situacao', 'Situação', 11],
+  ];
+  const valorExport = (c, k) => ({
+    cidade: [c.cidade, c.uf].filter(Boolean).join('-'), estados: C.listaEstados(c.estados).join(', '),
+    zona: String(c.zona || '').replace(/\s*\n\s*/g, '; '), dataContrato: C.dataBR(c.dataContrato),
+    situacao: c.situacao === 'encerrado' ? 'Encerrado' : 'Ativo',
+  }[k] ?? (c[k] || ''));
+
+  function descricaoFiltro() {
+    const filtro = { '': 'todos', ativo: 'ativos', encerrado: 'encerrados' }[$('#ct-filtro').value];
+    const busca = $('#ct-busca').value.trim();
+    return `Situação: ${filtro}${busca ? ` · busca: "${busca}"` : ''}`;
+  }
+
+  function baixarArquivo(nome, conteudo, tipo) {
+    const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: nome });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  function exportarPDF(lista, quando) {
+    const area = $('#impressao');
+    area.innerHTML = `<div class="rl-impressao"><header class="rl-cab">
+        <img src="img/logo-moinho-santa-maria.png" alt="" width="60" height="70">
+        <div><h1>Representantes comerciais</h1><p>${esc(descricaoFiltro())} · ${lista.length} representante(s) · emitido em ${esc(quando)}</p></div></header>
+      <table class="tabela rl-tabela"><thead><tr>${COLUNAS_EXPORT.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr></thead>
+      <tbody>${lista.map((c) => `<tr>${COLUNAS_EXPORT.map(([k]) => `<td>${esc(valorExport(c, k))}</td>`).join('')}</tr>`).join('') ||
+        `<tr><td colspan="${COLUNAS_EXPORT.length}" class="vazio">Nenhum representante.</td></tr>`}</tbody></table></div>`;
+    const titulo = document.title;
+    document.title = 'Representantes';
+    document.body.classList.add('imprimindo', 'imprimindo-relatorio');
+    const terminar = () => {
+      document.body.classList.remove('imprimindo', 'imprimindo-relatorio');
+      area.innerHTML = '';
+      document.title = titulo;
+      window.removeEventListener('afterprint', terminar);
+    };
+    window.addEventListener('afterprint', terminar);
+    const img = area.querySelector('img');
+    if (img.complete) window.print(); else { img.onload = () => window.print(); img.onerror = () => window.print(); }
+  }
+
+  async function exportarXlsx(lista, quando) {
+    let logo = null;
+    try {
+      const r = await fetch('img/logo-moinho-santa-maria.png');
+      if (r.ok) logo = { bytes: new Uint8Array(await r.arrayBuffer()), largura: 170, altura: 198 };
+    } catch (e) { /* sem logotipo */ }
+    const bytes = window.EscalaDistratoMemoria.tabelaXlsx({
+      titulo: 'Representantes comerciais', subtitulo: `${descricaoFiltro()} · ${lista.length} representante(s) · emitido em ${quando}`,
+      cabecalho: COLUNAS_EXPORT.map(([, n]) => n), larguras: COLUNAS_EXPORT.map(([, , w]) => w),
+      linhas: lista.map((c) => COLUNAS_EXPORT.map(([k]) => valorExport(c, k))), logo, nomeAba: 'Representantes',
+    });
+    baixarArquivo(`representantes_${new Date().toISOString().slice(0, 10)}.xlsx`, bytes,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  }
+
+  function exportarXml(lista) {
+    const x = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const campos = ['codigo', 'razao', 'fantasia', 'cnpj', 'responsavel', 'cpf', 'endereco', 'bairro', 'cidade', 'uf', 'cep', 'zona', 'dataContrato'];
+    const corpo = lista.map((c) => `  <representante situacao="${c.situacao === 'encerrado' ? 'encerrado' : 'ativo'}">\n` +
+      campos.map((k) => `    <${k}>${x(c[k])}</${k}>`).join('\n') +
+      `\n    <estadosAtuacao>${C.listaEstados(c.estados).map((e) => `<estado>${e}</estado>`).join('')}</estadosAtuacao>\n  </representante>`).join('\n');
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<representantes geradoEm="${new Date().toISOString()}" ` +
+      `filtro="${x(descricaoFiltro())}" total="${lista.length}">\n${corpo}\n</representantes>\n`;
+    baixarArquivo(`representantes_${new Date().toISOString().slice(0, 10)}.xml`, xml, 'application/xml;charset=utf-8');
+  }
+
+  $('#ct-exportar').addEventListener('click', () => {
+    const lista = listaFiltrada();
+    if (!lista.length) return App.avisar('Nenhum representante na lista para exportar.');
+    const dlg = $('#dialogo-exportar');
+    $('#exp-resumo').textContent = `${lista.length} representante(s), como na tela (${descricaoFiltro()}).`;
+    dlg.onclose = async () => {
+      if (dlg.returnValue !== 'ok') return;
+      const formato = (dlg.querySelector('input[name=exp-formato]:checked') || {}).value;
+      const quando = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+      try {
+        if (formato === 'pdf') exportarPDF(lista, quando);
+        else if (formato === 'xlsx') await exportarXlsx(lista, quando);
+        else exportarXml(lista);
+      } catch (e) {
+        App.avisar(e.message);
+      }
+    };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
 
   $('#ct-lista').addEventListener('click', async (ev) => {
     const b = ev.target.closest('button[data-acao]');
@@ -188,6 +290,7 @@
     renderLista();
   }
   $('#ct-voltar').addEventListener('click', fechar);
+  document.querySelector('[data-voltar="ct"]').addEventListener('click', fechar);
 
   let temporizador = null;
   function atualizar() {

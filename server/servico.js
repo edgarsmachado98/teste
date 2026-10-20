@@ -1166,15 +1166,26 @@ function criarServico(db, opcoes = {}) {
         JSON.stringify(dados), ator.login, iso(), iso());
       auditar(ator, 'distrato.criar', detalhe);
     }
-    return distratoDeLinha(q('SELECT * FROM distratos WHERE id = ?').get(id));
+    // com o distrato, o contrato do representante passa a encerrado
+    const encerrou = q("UPDATE contratos_representante SET situacao = 'encerrado', atualizado_em = ? WHERE id = ? AND situacao <> 'encerrado'")
+      .run(iso(), dados.contratoId).changes > 0;
+    if (encerrou) auditar(ator, 'contrato.alterar', `${contrato.razao_social} (${contrato.cnpj}), encerrado pelo distrato`);
+    return { ...distratoDeLinha(q('SELECT * FROM distratos WHERE id = ?').get(id)), contratoEncerrado: encerrou };
   }
 
   function removerDistrato(ator, id) {
     exigir(ator, 'operador');
     const l = q('SELECT * FROM distratos WHERE id = ?').get(id) || falhar(404, 'Distrato não encontrado.');
     q('DELETE FROM distratos WHERE id = ?').run(id);
-    const c = q('SELECT razao_social FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
+    const c = q('SELECT * FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
     auditar(ator, 'distrato.excluir', `${c.razao_social || ''} / ${l.representada === 'cia' ? 'Antoniazzi & Cia' : 'Antoniazzi Alimentos'}`);
+    // sem nenhum distrato, o contrato volta a ativo (se não houver outro contrato ativo do mesmo CNPJ)
+    const restantes = q('SELECT COUNT(*) AS n FROM distratos WHERE contrato_id = ?').get(l.contrato_id).n;
+    const outroAtivo = c.id && q("SELECT 1 FROM contratos_representante WHERE cnpj = ? AND situacao = 'ativo' AND id <> ?").get(c.cnpj, c.id);
+    if (c.id && !restantes && !outroAtivo && c.situacao === 'encerrado') {
+      q("UPDATE contratos_representante SET situacao = 'ativo', atualizado_em = ? WHERE id = ?").run(iso(), c.id);
+      auditar(ator, 'contrato.alterar', `${c.razao_social} (${c.cnpj}), reativado ao excluir o distrato`);
+    }
   }
 
   // ------------------------------------------------- Simples Nacional (CNPJ)

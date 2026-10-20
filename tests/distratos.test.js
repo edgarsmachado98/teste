@@ -288,3 +288,31 @@ test('consulta do Simples Nacional pelos dados abertos da Receita (BrasilAPI e a
   await assert.rejects(s.consultarSimples(A, '11111111111111'), /CNPJ inválido/);
   await assert.rejects(s.consultarSimples({ id: 'c', login: 'c', perfil: 'consulta' }, '29356095000162'), (e) => e.status === 403);
 });
+
+test('salvar o distrato encerra o contrato do representante; excluir o último distrato reativa', () => {
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  const A = { id: 'a', login: 'a', perfil: 'admin' };
+  const c = s.salvarContrato(A, { ...CONTRATO, estados: 'SP' });
+  assert.strictEqual(c.situacao, 'ativo');
+  const base = { contratoId: c.id, dataInicio: '2023-03-08', dataDistrato: '2026-02-11', comissoes: CIA };
+  const d1 = s.salvarDistrato(A, { ...base, representada: 'cia' });
+  assert.strictEqual(d1.contratoEncerrado, true);
+  assert.strictEqual(s.listarContratos(A)[0].situacao, 'encerrado');
+  const d2 = s.salvarDistrato(A, { ...base, representada: 'alimentos' });
+  assert.strictEqual(d2.contratoEncerrado, false); // já estava encerrado
+  s.removerDistrato(A, d1.id);
+  assert.strictEqual(s.listarContratos(A)[0].situacao, 'encerrado'); // ainda há o distrato da Alimentos
+  s.removerDistrato(A, d2.id);
+  assert.strictEqual(s.listarContratos(A)[0].situacao, 'ativo');
+  assert.ok(s.auditoria(A).some((a) => /encerrado pelo distrato/.test(a.detalhe)));
+
+  // planilha da lista de representantes
+  const MEM = require('../js/distrato-memoria.js');
+  const P = require('../js/planilha.js');
+  return P.ler(MEM.tabelaXlsx({ titulo: 'Representantes comerciais', subtitulo: 'Situação: ativos', cabecalho: ['Código', 'Representante'],
+    linhas: [['10', 'A'], ['', 'B']], larguras: [10, 30] })).then((l) => {
+    assert.deepStrictEqual(l[3], ['Código', 'Representante']);
+    assert.deepStrictEqual(l[4], ['10', 'A']);
+  });
+});

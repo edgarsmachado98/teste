@@ -122,6 +122,7 @@
     renderLista();
   }
   $('#dt-voltar').addEventListener('click', fechar);
+  document.querySelector('[data-voltar="dt"]').addEventListener('click', fechar);
 
   // ------------------------------------------------- busca do representante
 
@@ -482,8 +483,8 @@
     ev.preventDefault();
     if (!podeEditar()) return;
     try {
-      await salvar();
-      App.avisar('Distrato salvo.');
+      const salvo = await salvar();
+      App.avisar(salvo.contratoEncerrado ? 'Distrato salvo. O contrato do representante passou para a situação Encerrado.' : 'Distrato salvo.');
     } catch (e) {
       App.avisar(e.message);
     }

@@ -224,3 +224,12 @@ a.botao { text-decoration: none; }
 .dt-simples-topo a { font-size: .85rem; color: var(--secundaria); }
 .dt-simples .dica { margin: 0; }
 .dt-simples .ruim { color: var(--erro); font-weight: 600; }
+
+/* o título do formulário (com "Voltar à lista") fica fixo no topo enquanto o formulário rola */
+.ct-form > .cab-cartao {
+  position: sticky; top: -1rem; z-index: 3; margin: -1rem -1rem 0; padding: .75rem 1rem .6rem;
+  background: var(--cartao); border-bottom: 1px solid var(--borda); border-radius: 8px 8px 0 0;
+}
+@media (max-width: 1100px) {
+  .ct-form > .cab-cartao { top: 0; border-radius: 0; }
+}
