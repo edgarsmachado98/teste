@@ -49,6 +49,26 @@ HOST=0.0.0.0 PORT=8080 npm start
 Para uso pela internet, coloque o servidor atrás de um proxy com HTTPS (por exemplo Caddy ou nginx)
 e use `COOKIE_SECURE=1 TRUST_PROXY=1`.
 
+### Atualizar para uma versão nova sem perder os dados
+
+Os dados ficam na pasta **`dados`** dentro da pasta do sistema (arquivo `dados/escala.db`). O ZIP de uma
+versão nova **não traz** essa pasta, então os dados só se perdem se o ZIP for extraído numa pasta nova e o
+sistema for aberto de lá.
+
+Forma recomendada (Windows):
+
+1. Feche a janela preta do servidor.
+2. Baixe o ZIP da versão nova (fica em Downloads).
+3. Dê dois cliques em **`atualizar.bat`** na pasta do sistema (ou arraste o ZIP sobre ele). Ele faz uma cópia da
+   pasta `dados` em `backups-atualizacao`, extrai o ZIP e copia os arquivos novos por cima, **sem tocar em `dados`**.
+4. Abra o `iniciar.bat` e confira a versão no menu.
+
+Sem o `atualizar.bat`: extraia o ZIP e copie o **conteúdo** da pasta extraída para dentro da pasta do sistema,
+substituindo os arquivos, mas nunca apague nem substitua a pasta `dados`.
+
+Além disso, a cada vez que o servidor inicia é feita uma cópia do banco em `dados/backups` (as 20 mais
+recentes ficam guardadas). As mudanças de estrutura do banco das versões novas são aplicadas sozinhas.
+
 ### Backup
 
 Todos os dados ficam no arquivo `dados/escala.db`. Faça cópia desse arquivo periodicamente

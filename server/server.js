@@ -275,10 +275,43 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
 
 // -------------------------------------------------------------- execução
 
+const MANTER_COPIAS = 20;
+
+/**
+ * Cópia do banco ao iniciar (antes de qualquer atualização do esquema), em dados/backups.
+ * Mantém as 20 mais recentes. Usa VACUUM INTO, que gera uma cópia consistente mesmo com WAL.
+ */
+function copiaDeSeguranca(arquivo) {
+  if (!fs.existsSync(arquivo) || !fs.statSync(arquivo).size) return null;
+  const pasta = path.join(path.dirname(arquivo), 'backups');
+  fs.mkdirSync(pasta, { recursive: true });
+  const agora = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const carimbo = `${agora.getFullYear()}-${p2(agora.getMonth() + 1)}-${p2(agora.getDate())}_${p2(agora.getHours())}h${p2(agora.getMinutes())}`;
+  const destino = path.join(pasta, `${path.basename(arquivo, '.db')}_${carimbo}_v${VERSAO}.db`);
+  if (fs.existsSync(destino)) return destino;
+  const { DatabaseSync } = require('node:sqlite');
+  const origem = new DatabaseSync(arquivo);
+  try {
+    origem.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`);
+  } finally {
+    origem.close();
+  }
+  const copias = fs.readdirSync(pasta).filter((n) => n.endsWith('.db')).sort();
+  for (const antiga of copias.slice(0, Math.max(0, copias.length - MANTER_COPIAS))) fs.rmSync(path.join(pasta, antiga), { force: true });
+  return destino;
+}
+
 if (require.main === module) {
   const porta = Number(process.env.PORT) || 3000;
   const host = process.env.HOST || '127.0.0.1';
   const arquivo = process.env.DB_PATH || path.join(RAIZ, 'dados', 'escala.db');
+  let copia = null;
+  try {
+    copia = copiaDeSeguranca(arquivo);
+  } catch (e) {
+    console.error('Aviso: não foi possível fazer a cópia de segurança do banco:', e.message);
+  }
   const db = abrirBanco(arquivo);
   const servidor = criarApp({
     servico: criarServico(db),
@@ -303,10 +336,11 @@ if (require.main === module) {
     console.log(`CORE RH — versão ${VERSAO}`);
     console.log(`Rodando em http://${endereco}:${porta}`);
     console.log(`Banco de dados: ${arquivo}`);
+    if (copia) console.log(`Cópia de segurança: ${copia}`);
   });
   const encerrar = () => servidor.close(() => { db.close(); process.exit(0); });
   process.on('SIGINT', encerrar);
   process.on('SIGTERM', encerrar);
 }
 
-module.exports = { criarApp, criarLimitador };
+module.exports = { criarApp, criarLimitador, copiaDeSeguranca };

@@ -2,7 +2,7 @@
 chcp 65001 >nul
 title Gestao de Pessoal RH
 cd /d "%~dp0"
-where node >/dev/null 2>nul
+where node >nul 2>nul
 if errorlevel 1 (
   echo Node.js nao encontrado. Instale a versao LTS em https://nodejs.org e tente de novo.
   pause
@@ -24,6 +24,6 @@ if not errorlevel 1 (
   exit /b 1
 )
 echo Abrindo http://localhost:3000 ... Para encerrar, feche esta janela.
-start "" cmd /c "timeout /t 2 >/dev/null & start http://localhost:3000"
+start "" cmd /c "timeout /t 2 >nul & start http://localhost:3000"
 node --disable-warning=ExperimentalWarning server/server.js
 pause
