@@ -479,6 +479,9 @@
     const titulo = document.title;
     document.title = nomeMemoria(g.d, 'pdf').replace(/\.pdf$/, '');
     document.body.classList.add('imprimindo', 'imprimindo-memoria');
+    // espera o logotipo carregar antes de abrir a impressão
+    await Promise.all([...area.querySelectorAll('img')].map((img) => (img.complete ? null
+      : new Promise((r) => { img.onload = r; img.onerror = r; }))));
     const terminar = () => {
       document.body.classList.remove('imprimindo', 'imprimindo-memoria');
       area.innerHTML = '';
@@ -492,7 +495,12 @@
   $('#dt-memoria-xlsx').addEventListener('click', async () => {
     const g = await prepararMemoria('memoria-xlsx');
     if (!g) return;
-    const blob = new Blob([MEM.xlsx(g.m)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    let logo = null;
+    try {
+      const resp = await fetch('img/logo-moinho-santa-maria.png');
+      if (resp.ok) logo = { bytes: new Uint8Array(await resp.arrayBuffer()), largura: 170, altura: 198 };
+    } catch (e) { /* sem logotipo, a planilha sai igual */ }
+    const blob = new Blob([MEM.xlsx(g.m, logo)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement('a'), { href: url, download: nomeMemoria(g.d, 'xlsx') });
     document.body.appendChild(a);

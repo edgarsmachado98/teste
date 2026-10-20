@@ -77,8 +77,9 @@
       ? `(${m.linhas.filter((l) => l.aviso).map((l) => K.moeda(l.atualizado)).join(' + ')}) ÷ 3` : 'não pago';
     return `<div class="mc">
       <header class="mc-cab">
-        <h1>Memória de cálculo do distrato</h1>
-        <p>Representação comercial — Lei 4.886/1965</p>
+        <img src="img/logo-moinho-santa-maria.png" alt="" width="60" height="70">
+        <div><h1>Memória de cálculo do distrato</h1>
+        <p>Representação comercial — Lei 4.886/1965</p></div>
       </header>
       <table class="mc-dados"><tbody>
         <tr><th>Representada</th><td>${esc(m.empresa.nome || '')}${m.empresa.cnpj ? ` · CNPJ ${esc(m.empresa.cnpj)}` : ''}</td></tr>
@@ -94,7 +95,7 @@
         <thead><tr><th>Mês</th><th class="num">Comissão (R$)</th><th class="num">IGP-M do mês</th><th class="num">IGP-M acumulado</th>
           <th class="num">Fator</th><th class="num">Atualizada (R$)</th><th></th></tr></thead>
         <tbody>${linhas}
-        <tr class="mc-total"><th>Total (${m.linhas.length} meses)</th><th class="num">${K.moeda(r.somaNominal)}</th><th></th><th></th><th></th>
+        <tr class="mc-total"><th>Total (${m.linhas.length} ${m.linhas.length === 1 ? 'mês' : 'meses'})</th><th class="num">${K.moeda(r.somaNominal)}</th><th></th><th></th><th></th>
           <th class="num">${K.moeda(r.somaAtualizada)}</th><th></th></tr></tbody>
       </table>
 
@@ -155,7 +156,7 @@
 </styleSheet>`;
 
   /** Planilha com uma aba; células: { v, f, s } (v = texto ou número; f = fórmula). */
-  function planilha(linhas, larguras, mesclas) {
+  function planilha(linhas, larguras, mesclas, desenho) {
     const corpo = linhas.map((l, i) => {
       if (!l) return '';
       const cels = l.map((c, j) => {
@@ -173,14 +174,17 @@
     const cols = larguras.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('');
     const merge = mesclas.length ? `<mergeCells count="${mesclas.length}">${mesclas.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '';
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
 <cols>${cols}</cols><sheetData>${corpo}</sheetData>${merge}
 <pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>
-<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>${desenho ? '<drawing r:id="rId1"/>' : ''}</worksheet>`;
   }
 
-  /** Gera o .xlsx (bytes). As colunas de valor atualizado, totais, indenização e aviso são fórmulas. */
-  function xlsx(m) {
+  /**
+   * Gera o .xlsx (bytes). As colunas de valor atualizado, totais, indenização e aviso são fórmulas.
+   * logo (opcional): { bytes: Uint8Array PNG, largura, altura } — vai no canto superior direito.
+   */
+  function xlsx(m, logo) {
     const r = m.r;
     const L = [];
     const mesclas = [];
@@ -208,7 +212,7 @@
     }
     const ultima = L.length;
     const temLinhas = ultima >= primeira;
-    const linhaTotal = add([{ v: `Total (${m.linhas.length} meses)`, s: 1 },
+    const linhaTotal = add([{ v: `Total (${m.linhas.length} ${m.linhas.length === 1 ? 'mês' : 'meses'})`, s: 1 },
       { f: temLinhas ? `SUM(B${primeira}:B${ultima})` : '0', v: r.somaNominal, s: 3 }, null, null, null,
       { f: temLinhas ? `SUM(F${primeira}:F${ultima})` : '0', v: r.somaAtualizada, s: 3 }]);
     add(null);
@@ -238,12 +242,14 @@
       add([{ v: n, s: 8 }]);
       mesclas.push(`A${L.length}:G${L.length}`);
     }
-    const aba = planilha(L, [24, 30, 16, 18, 16, 16, 12], mesclas);
+    const aba = planilha(L, [24, 30, 16, 18, 16, 16, 12], mesclas, !!logo);
     const arquivos = [
       { nome: '[Content_Types].xml', dados: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
 <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
@@ -263,6 +269,31 @@
       { nome: 'xl/styles.xml', dados: ESTILOS },
       { nome: 'xl/worksheets/sheet1.xml', dados: aba },
     ];
+    if (logo) {
+      // 1,6 cm de altura, proporcional, ancorado na coluna G (índice 6), linha 1
+      const emu = 9525;
+      const alt = 64;
+      const larg = Math.round(alt * logo.largura / logo.altura);
+      arquivos.push(
+        { nome: 'xl/media/image1.png', dados: logo.bytes },
+        { nome: 'xl/worksheets/_rels/sheet1.xml.rels', dados: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
+</Relationships>` },
+        { nome: 'xl/drawings/_rels/drawing1.xml.rels', dados: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+</Relationships>` },
+        { nome: 'xl/drawings/drawing1.xml', dados: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<xdr:oneCellAnchor><xdr:from><xdr:col>6</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+<xdr:ext cx="${larg * emu}" cy="${alt * emu}"/>
+<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logotipo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>
+<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>
+<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${larg * emu}" cy="${alt * emu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>
+<xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>` },
+      );
+    }
     return DOCX.zip(arquivos);
   }
 

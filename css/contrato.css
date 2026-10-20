@@ -193,7 +193,8 @@ a.botao { text-decoration: none; }
 .dt-memoria-acoes { align-items: center; flex-wrap: wrap; border-top: 1px dashed var(--borda); padding-top: .6rem; }
 .dt-memoria-acoes span { flex: 1 1 100%; font-size: .85rem; color: var(--suave); }
 .mc { font: 10pt/1.35 Arial, Helvetica, sans-serif; color: #111111; }
-.mc-cab { border-bottom: 2px solid #2e3192; margin-bottom: 8px; padding-bottom: 4px; }
+.mc-cab { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid #2e3192; margin-bottom: 8px; padding-bottom: 6px; }
+.mc-cab img { width: 60px; height: auto; }
 .mc-cab h1 { margin: 0; font-size: 15pt; color: #2e3192; }
 .mc-cab p { margin: 2px 0 0; color: #555555; font-size: 9pt; }
 .mc h2 { font-size: 11pt; margin: 14px 0 4px; color: #2e3192; }
