@@ -1166,9 +1166,10 @@ function criarServico(db, opcoes = {}) {
   function registrarDocumentoDistrato(ator, id, formato) {
     exigir(ator, 'consulta');
     const l = q('SELECT * FROM distratos WHERE id = ?').get(id) || falhar(404, 'Distrato não encontrado.');
-    if (!['pdf', 'docx'].includes(formato)) falhar(400, 'Formato inválido.');
+    const nomes = { pdf: 'PDF', docx: 'Word', 'memoria-pdf': 'memória de cálculo em PDF', 'memoria-xlsx': 'memória de cálculo em Excel' };
+    if (!nomes[formato]) falhar(400, 'Formato inválido.');
     const c = q('SELECT razao_social FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
-    auditar(ator, 'distrato.documento', `${c.razao_social || ''}: ${formato === 'pdf' ? 'PDF' : 'Word'}`);
+    auditar(ator, 'distrato.documento', `${c.razao_social || ''}: ${nomes[formato]}`);
   }
 
   // ------------------------------------------------------ custos de pessoal

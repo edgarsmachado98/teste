@@ -188,3 +188,31 @@ a.botao { text-decoration: none; }
 }
 .dt-editor { grid-template-columns: minmax(320px, 500px) minmax(0, 1fr); }
 @media (max-width: 1100px) { .dt-editor { grid-template-columns: minmax(0, 1fr); } }
+
+/* ------------------------------------------------- memória de cálculo do distrato */
+.dt-memoria-acoes { align-items: center; flex-wrap: wrap; border-top: 1px dashed var(--borda); padding-top: .6rem; }
+.dt-memoria-acoes span { flex: 1 1 100%; font-size: .85rem; color: var(--suave); }
+.mc { font: 10pt/1.35 Arial, Helvetica, sans-serif; color: #111111; }
+.mc-cab { border-bottom: 2px solid #2e3192; margin-bottom: 8px; padding-bottom: 4px; }
+.mc-cab h1 { margin: 0; font-size: 15pt; color: #2e3192; }
+.mc-cab p { margin: 2px 0 0; color: #555555; font-size: 9pt; }
+.mc h2 { font-size: 11pt; margin: 14px 0 4px; color: #2e3192; }
+.mc table { width: 100%; border-collapse: collapse; }
+.mc-dados th { text-align: left; width: 34%; font-weight: 600; padding: 2px 6px 2px 0; vertical-align: top; }
+.mc-dados td { padding: 2px 0; }
+.mc-tabela th, .mc-tabela td { border-bottom: 1px solid #cccccc; padding: 3px 5px; text-align: left; }
+.mc-tabela thead th { background: #e8eaf6; font-size: 8.5pt; }
+.mc-tabela tr.mc-total th { border-top: 2px solid #2e3192; border-bottom: 0; }
+.mc-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mc-tabela tr.mc-aviso td { background: #fff7d6; }
+.mc-resumo tr.mc-total th { font-size: 11pt; }
+.mc-extenso { font-style: italic; margin: 4px 0 10px; }
+.mc-alerta { color: #a12020; font-weight: 600; }
+.mc-notas { font-size: 8.5pt; color: #444444; padding-left: 16px; }
+.mc thead { display: table-header-group; }
+.mc tr { break-inside: avoid; }
+@media print {
+  body.imprimindo.imprimindo-memoria #impressao { page: memoria; }
+}
+@page memoria { size: A4 portrait; margin: 14mm 14mm 14mm 16mm; }
+.mc-nota-fator { font-size: 8.5pt; color: #444444; margin: 2px 0 0; }

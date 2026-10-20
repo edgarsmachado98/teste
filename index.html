@@ -386,7 +386,13 @@
             <button type="button" id="dt-pdf">Gerar PDF</button>
             <button type="button" id="dt-docx">Gerar Word (.docx)</button>
           </div>
-          <p class="dica">“Gerar PDF” abre a janela de impressão: escolha <b>Salvar como PDF</b> como destino.</p>
+          <div class="ct-acoes dt-memoria-acoes">
+            <span><b>Memória de cálculo</b> (comissões corrigidas, indenização, aviso e totais)</span>
+            <button type="button" id="dt-memoria-pdf" class="sec">Imprimir / PDF</button>
+            <button type="button" id="dt-memoria-xlsx" class="sec">Planilha Excel (.xlsx)</button>
+          </div>
+          <p class="dica">“Gerar PDF” e “Imprimir / PDF” abrem a janela de impressão: escolha <b>Salvar como PDF</b> como destino.
+            A planilha da memória traz as fórmulas para a conferência.</p>
         </form>
 
         <div class="ct-previa-col">
@@ -746,6 +752,7 @@
   <script src="js/contrato-docx.js"></script>
   <script src="js/distrato-calculo.js"></script>
   <script src="js/distrato-modelo.js"></script>
+  <script src="js/distrato-memoria.js"></script>
   <script src="js/documento-html.js"></script>
   <script src="js/app.js"></script>
   <script src="js/contratos.js"></script>

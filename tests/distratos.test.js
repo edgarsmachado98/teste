@@ -197,3 +197,30 @@ test('comissões depois do mês do distrato não entram no cálculo', () => {
   assert.deepStrictEqual(r.foraDoPeriodo, ['2026-06']);
   assert.strictEqual(r.total, 662.45);
 });
+
+test('memória de cálculo: HTML e planilha Excel com fórmulas que fecham com o cálculo', async () => {
+  const MEM = require('../js/distrato-memoria.js');
+  const P = require('../js/planilha.js');
+  const d = {
+    dataInicio: '2023-03-08', dataDistrato: '2026-02-11', comissoes: CIA,
+    aReceber: { inicio: '2026-01-01', fim: '2026-02-11', valor: 120.5 }, pendentes: { inicio: '2025-12-01', fim: '2026-02-11', valor: 80 },
+  };
+  const r = K.calcular(d, IGPM);
+  const m = MEM.montar({ razao: CONTRATO.razao, cnpj: C.formatarCNPJ(CONTRATO.cnpj) }, d, r, IGPM, { nome: 'Antoniazzi & Cia Ltda', cnpj: '95.597.647/0001-59' });
+  const html = MEM.html(m);
+  assert.match(html, /Memória de cálculo do distrato/);
+  assert.ok(html.includes(K.moeda(r.total)));
+  assert.ok(html.includes('out/2023'));
+  assert.strictEqual((html.match(/class="mc-aviso"/g) || []).length, 3);
+
+  const bytes = MEM.xlsx(m);
+  const linhas = await P.ler(bytes);
+  const achar = (rotulo) => linhas.find((l) => l[0] === rotulo);
+  assert.strictEqual(linhas[0][0], 'Memória de cálculo do distrato');
+  assert.strictEqual(achar('out/2023')[5], 700.75);
+  assert.strictEqual(achar(`Total (${r.linhas.length} meses)`)[5], r.somaAtualizada);
+  assert.strictEqual(achar('Total a pagar')[2], r.total);
+  // as fórmulas estão na planilha (para a conferência no Excel)
+  const zipTexto = Buffer.from(bytes).toString('latin1');
+  assert.ok(zipTexto.includes('ROUND(C') && zipTexto.includes('SUM(F'));
+});

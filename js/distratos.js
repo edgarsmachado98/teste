@@ -5,6 +5,7 @@
   const C = window.EscalaContrato;
   const K = window.EscalaDistratoCalculo;
   const M = window.EscalaDistrato;
+  const MEM = window.EscalaDistratoMemoria;
   const Doc = window.EscalaDocHTML;
   const api = window.EscalaApi;
   const App = window.EscalaApp;
@@ -444,6 +445,60 @@
     } catch (e) {
       App.avisar(e.message);
     }
+  });
+
+  // ------------------------------------------------------- memória de cálculo
+
+  async function prepararMemoria(formato) {
+    const { d, r } = recalcular();
+    const falta = [];
+    if (!contrato) falta.push('busque o representante pelo CNPJ');
+    if (!d.representada) falta.push('escolha a empresa representada');
+    if (!d.dataDistrato) falta.push('informe a data do distrato');
+    if (!r.linhas.length) falta.push('informe as comissões mensais');
+    if (falta.length) { App.avisar(`Para gerar a memória de cálculo, ${falta.join(', ')}.`); return null; }
+    if (r.indicesFaltando.length && !(await App.confirmar(`Faltam ${r.indicesFaltando.length} mês(es) do IGP-M; a correção ficará incompleta. ` +
+      'Gerar a memória mesmo assim?'))) return null;
+    try {
+      if (podeEditar()) await salvar();
+      if (atual && atual.id) await api.post(`/api/distratos/${atual.id}/documento`, { formato });
+    } catch (e) {
+      App.avisar(e.message);
+      return null;
+    }
+    const empresa = M.EMPRESAS[d.representada];
+    return { m: MEM.montar(contrato, d, r, igpm.meses, { nome: empresa.nome, cnpj: empresa.cnpj }), d };
+  }
+  const nomeMemoria = (d, ext) => M.nomeArquivo(contrato, d, ext).replace(/^Distrato_/, 'Memoria_calculo_distrato_');
+
+  $('#dt-memoria-pdf').addEventListener('click', async () => {
+    const g = await prepararMemoria('memoria-pdf');
+    if (!g) return;
+    const area = $('#impressao');
+    area.innerHTML = MEM.html(g.m);
+    const titulo = document.title;
+    document.title = nomeMemoria(g.d, 'pdf').replace(/\.pdf$/, '');
+    document.body.classList.add('imprimindo', 'imprimindo-memoria');
+    const terminar = () => {
+      document.body.classList.remove('imprimindo', 'imprimindo-memoria');
+      area.innerHTML = '';
+      document.title = titulo;
+      window.removeEventListener('afterprint', terminar);
+    };
+    window.addEventListener('afterprint', terminar);
+    window.print();
+  });
+
+  $('#dt-memoria-xlsx').addEventListener('click', async () => {
+    const g = await prepararMemoria('memoria-xlsx');
+    if (!g) return;
+    const blob = new Blob([MEM.xlsx(g.m)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: nomeMemoria(g.d, 'xlsx') });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
   });
 
   // clicar num dado destacado na prévia leva ao campo correspondente

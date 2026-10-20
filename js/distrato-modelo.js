@@ -18,6 +18,7 @@
   const EMPRESAS = {
     cia: {
       nome: 'Antoniazzi & Cia Ltda',
+      cnpj: '95.597.647/0001-59',
       distratoParte: '**ANTONIAZZI & CIA LTDA.**, inscrita no CNPJ sob o nº 95.597.647/0001-59, empresa estabelecida ' +
         'na Rua Aristides Lobo, 290, Bairro Rosário, Santa Maria/RS, neste ato representada por seu sócio, ' +
         'Sr. José Celestino Montagner Antoniazzi, doravante designada **REPRESENTADA**, e de outro',
@@ -31,6 +32,7 @@
     },
     alimentos: {
       nome: 'Antoniazzi Ind. e Com. de Alimentos Ltda',
+      cnpj: '11.780.083/0001-03',
       distratoParte: '**ANTONIAZZI INDUSTRIA E COMERCIO DE ALIMENTOS LTDA.**, inscrita no CNPJ sob o nº ' +
         '11.780.083/0001-03, empresa estabelecida na Rua Castro Alves, 88, Vila Fernandes - Canoas/RS, neste ato ' +
         'representada por seu sócio, Sr. José Celestino Montagner Antoniazzi, doravante designada ' +

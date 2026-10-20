@@ -209,6 +209,18 @@ Prévio** no modelo de cada empresa representada (Antoniazzi & Cia ou Antoniazzi
 O total é a soma das parcelas já arredondadas em centavos, para fechar com os valores listados no termo.
 O valor por extenso é gerado automaticamente.
 
+### Memória de cálculo
+
+No editor do distrato, **Memória de cálculo** gera o demonstrativo para enviar junto com o distrato:
+
+- **Imprimir / PDF**: página A4 com os dados das partes, a lista das comissões mês a mês (comissão, IGP-M do mês,
+  IGP-M acumulado, fator e valor atualizado, com os 3 meses do aviso destacados), as comissões a receber e sobre
+  títulos pendentes com os períodos, o cálculo da indenização (1/12), do aviso prévio e o total por extenso.
+- **Planilha Excel (.xlsx)**: o mesmo conteúdo, com **fórmulas** no valor atualizado (`ROUND(comissão × fator; 2)`),
+  nos totais, na base e na indenização (`base ÷ 12`), na média do aviso e no total — para a conferência de quem recebe.
+
+A geração fica registrada no histórico de alterações.
+
 ### IGP-M
 
 A tabela do IGP-M (FGV) é obtida da API pública do Banco Central (SGS, série 189) pelo botão
@@ -311,6 +323,7 @@ js/contrato-docx.js  gerador do arquivo Word (.docx), sem dependências
 js/contratos.js      tela de contratos: cadastro, prévia, PDF e Word
 js/distrato-calculo.js  cálculo do distrato (IGP-M, indenização, aviso prévio, valor por extenso)
 js/distrato-modelo.js   termos de distrato e aviso prévio das duas empresas
+js/distrato-memoria.js  memória de cálculo do distrato (PDF e planilha .xlsx com fórmulas)
 js/distratos.js      tela de distratos
 js/documento-html.js prévia, impressão (PDF) e Word compartilhados pelos documentos
 js/planilha.js       leitura de planilhas .xls, .xlsx e .csv (sem dependências)
