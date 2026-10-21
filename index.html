@@ -458,7 +458,10 @@
     <!-- EMPRESAS -->
     <section id="aba-empresas" class="painel" data-modulo="cadastros">
       <form id="form-empresa" class="cartao formulario" novalidate>
-        <h2 id="titulo-form-empresa">Nova empresa</h2>
+        <div class="cab-cartao">
+          <h2 id="titulo-form-empresa">Nova empresa</h2>
+          <button type="button" class="sec mini" id="emp-voltar" hidden>← Voltar ao cadastro</button>
+        </div>
         <input type="hidden" name="id">
         <label>Razão social<input name="razao" required maxlength="150"></label>
         <div class="duas-colunas">
@@ -475,12 +478,13 @@
         </div>
         <fieldset id="emp-arquivos">
           <legend>Modelos e logotipo</legend>
-          <p class="dica" id="emp-arquivos-dica">Salve a empresa para anexar os modelos e o logotipo.</p>
+          <p class="dica" id="emp-arquivos-dica">Escolha os modelos e o logotipo; eles são enviados ao salvar a empresa.</p>
           <div id="emp-lista-arquivos" class="emp-arquivos"></div>
         </fieldset>
         <div class="linha-botoes so-edicao">
-          <button type="submit">Salvar empresa</button>
-          <button type="reset" class="sec">Cancelar</button>
+          <button type="submit" id="emp-salvar">Salvar empresa</button>
+          <button type="button" id="emp-editar" hidden>Editar cadastro</button>
+          <button type="button" class="sec" id="emp-cancelar">Cancelar</button>
         </div>
       </form>
       <div class="cartao">

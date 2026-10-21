@@ -489,3 +489,5 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .emp-item img { max-height: 48px; max-width: 120px; background: #ffffff; border-radius: 4px; }
 .emp-logo-lista { width: 44px; height: 44px; object-fit: contain; background: #ffffff; border-radius: 4px; border: 1px solid var(--borda); }
 .chip.mini { font-size: .7rem; }
+#lista-empresas td.acoes { width: 6.5rem; }
+#lista-empresas td.acoes button { display: block; width: 100%; margin: .15rem 0; }

@@ -189,6 +189,10 @@ endereço, telefone, cidade, estado e CEP) e os arquivos dela:
   (por exemplo, contrato de SP e contrato de RS/SC). Word, PDF, ODT; a planilha também em Excel, ODS ou CSV.
 - **Logotipo**: um por empresa (PNG ou JPG); enviar outro substitui o anterior.
 
+Os arquivos podem ser escolhidos já no cadastro da nova empresa: eles são enviados ao salvar. Na lista,
+**Exibir** mostra o cadastro só para consulta (com os arquivos para baixar), **Editar** permite alterar dados e
+arquivos, e **Voltar ao cadastro** retorna ao formulário de nova empresa em branco.
+
 Os arquivos ficam guardados para consulta e download (até 10 MB cada) e entram no backup. Os documentos
 gerados pelo sistema (contratos, distratos e memória de cálculo) continuam usando os modelos já embutidos.
 
