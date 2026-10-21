@@ -275,7 +275,7 @@
               <select id="ct-situacao"><option value="ativo">Ativo</option><option value="encerrado">Encerrado</option></select>
             </label>
           </fieldset>
-          <fieldset><legend>Documentos do pacote</legend><div id="ct-documentos" class="ct-docs"></div></fieldset>
+          <fieldset><legend>Documentos legais</legend><div id="ct-documentos" class="ct-docs"></div></fieldset>
           <div class="ct-pendencias" id="ct-pendencias" role="alert" hidden></div>
           <div class="ct-acoes">
             <button type="submit" class="sec so-edicao">Salvar</button>
@@ -388,7 +388,7 @@
             </div>
           </fieldset>
 
-          <fieldset><legend>9. Documentos</legend>
+          <fieldset><legend>9. Documentos legais</legend>
             <label class="check"><input type="checkbox" name="dt-documento" value="distrato" checked> Termo de distrato</label>
             <label class="check"><input type="checkbox" name="dt-documento" value="aviso" checked> Aviso prévio</label>
           </fieldset>
@@ -469,6 +469,8 @@
           <label>Regime tributário<select name="regime" id="sel-regime-empresa"></select></label>
         </div>
         <label>Nome fantasia<input name="fantasia" maxlength="150"></label>
+        <label class="check"><input type="checkbox" name="representada"> <span><b>Empresa representada</b><br>
+          <small class="suave">Marcada, os modelos de contrato dela aparecem em Documentos legais no cadastro de representantes.</small></span></label>
         <label>Endereço<input name="endereco" maxlength="200" placeholder="Rua, número, complemento e bairro"></label>
         <div class="duas-colunas">
           <label>Telefone<input name="telefone" maxlength="30" inputmode="tel" placeholder="(55) 0000-0000"></label>

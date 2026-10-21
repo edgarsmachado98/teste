@@ -189,6 +189,11 @@ endereço, telefone, cidade, estado e CEP) e os arquivos dela:
   (por exemplo, contrato de SP e contrato de RS/SC). Word, PDF, ODT; a planilha também em Excel, ODS ou CSV.
 - **Logotipo**: um por empresa (PNG ou JPG); enviar outro substitui o anterior.
 
+**Empresa representada**: marcada, a empresa aparece em **Documentos legais** no cadastro de representantes.
+Para a Antoniazzi & Cia e a Antoniazzi Alimentos, a marcação libera o contrato de representação de cada uma; para
+as demais, os modelos de contrato anexados aparecem para seleção e, escolhidos, ficam para baixar acima da prévia
+(não entram no PDF/Word gerado pelo sistema).
+
 Os arquivos podem ser escolhidos já no cadastro da nova empresa: eles são enviados ao salvar. Na lista,
 **Exibir** mostra o cadastro só para consulta (com os arquivos para baixar), **Editar** permite alterar dados e
 arquivos, e **Voltar ao cadastro** retorna ao formulário de nova empresa em branco.
@@ -228,7 +233,7 @@ representadas) — alterações no modelo da empresa devem ser feitas ali.
 ### Estado de atuação e modelo do contrato
 
 No cadastro do contrato, escolha o **estado de atuação** do representante (Rio Grande do Sul, Santa Catarina ou
-São Paulo — apenas um). A informação fica só no cadastro (não aparece nos documentos) e define o modelo do pacote:
+São Paulo — apenas um). A informação fica só no cadastro (não aparece nos documentos) e define o modelo dos documentos legais:
 
 | Atuação | Modelo | Documentos |
 |---------|--------|------------|

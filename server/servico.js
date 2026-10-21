@@ -945,7 +945,15 @@ function criarServico(db, opcoes = {}) {
     }
     // só os documentos do modelo do estado de atuação (RS/SC não tem o contrato da Antoniazzi Alimentos)
     const disponiveis = CT.documentosDaRegiao(out);
-    const docs = Array.isArray(d.documentos) ? d.documentos.filter((x) => disponiveis.some((y) => y.id === x)) : [];
+    // modelos de contrato anexados por empresas representadas entram como 'arq:<id do arquivo>'
+    const anexoValido = (x) => {
+      const id = /^arq:([\w-]{1,64})$/.exec(x);
+      const l = id && q(`SELECT e.dados FROM empresas_arquivos a JOIN empresas e ON e.id = a.empresa_id
+        WHERE a.id = ? AND a.tipo = 'contrato'`).get(id[1]);
+      return !!l && JSON.parse(l.dados).representada === true;
+    };
+    const docs = Array.isArray(d.documentos)
+      ? d.documentos.filter((x) => typeof x === 'string' && (disponiveis.some((y) => y.id === x) || anexoValido(x))) : [];
     out.documentos = docs.length ? [...new Set(docs)] : disponiveis.map((x) => x.id);
     out.situacao = SITUACOES.includes(d.situacao) ? d.situacao : 'ativo';
     // para salvar basta identificar o representante; o restante pode ser completado depois
@@ -1484,6 +1492,7 @@ function criarServico(db, opcoes = {}) {
       razao: txt(d.razao, 150, 'a razão social', true), cnpj: CT.formatarCNPJ(cnpj), fantasia: txt(d.fantasia, 150, 'o nome fantasia'),
       regime, endereco: txt(d.endereco, 200, 'o endereço'), telefone: txt(d.telefone, 30, 'o telefone'),
       cidade: txt(d.cidade, 100, 'a cidade'), uf, cep: cep ? CT.formatarCEP(cep) : '',
+      representada: d.representada === true,
     };
   }
 
@@ -1570,6 +1579,16 @@ function criarServico(db, opcoes = {}) {
    * arquivos: { 'nome': { tipo, dados } } por CNPJ, gerados por quem chama (ver server/empresas-padrao.js).
    */
   function semearEmpresas(padrao) {
+    // bancos que já tinham as empresas padrão (versão 4.10): marca-as como representadas uma única vez
+    if (!q("SELECT valor FROM configuracoes WHERE chave = 'empresasRepresentadas'").get()) {
+      db.transacao(() => {
+        for (const em of padrao.filter((x) => x.representada)) {
+          const l = q('SELECT id, dados FROM empresas WHERE cnpj = ?').get(CT.formatarCNPJ(em.cnpj));
+          if (l) q('UPDATE empresas SET dados = ? WHERE id = ?').run(JSON.stringify({ ...JSON.parse(l.dados), representada: true }), l.id);
+        }
+        q("INSERT INTO configuracoes (chave, valor) VALUES ('empresasRepresentadas', 'true')").run();
+      });
+    }
     const ja = q("SELECT valor FROM configuracoes WHERE chave = 'empresasPadrao'").get();
     if (ja || q('SELECT COUNT(*) AS n FROM empresas').get().n) return 0;
     let n = 0;

@@ -99,3 +99,27 @@ test('empresas: rotas HTTP de envio e download', async (t) => {
   assert.strictEqual((await req('DELETE', `/api/empresas/${e.id}/arquivos/${a.id}`)).status, 200);
   assert.strictEqual((await req('GET', `/api/empresas/${e.id}/arquivos/${a.id}`)).status, 404);
 });
+
+test('empresa representada: modelos de contrato dela entram nos documentos legais do representante', () => {
+  const s = novo();
+  s.semearEmpresas(padrao());
+  assert.ok(s.listarEmpresas(CONSULTA).every((e) => e.representada === true));
+  const rep = s.salvarEmpresa(A, { razao: 'Representada Nova', cnpj: '29356095000162', representada: true });
+  const outra = s.salvarEmpresa(A, { razao: 'Só cadastro', cnpj: '11222333000181' });
+  assert.strictEqual(outra.representada, false);
+  const m1 = s.enviarArquivoEmpresa(A, rep.id, 'contrato', { nome: 'Modelo.docx', conteudo: b64('x') }).arquivos[0];
+  const m2 = s.enviarArquivoEmpresa(A, outra.id, 'contrato', { nome: 'Outro.docx', conteudo: b64('y') }).arquivos[0];
+  const c = s.salvarContrato(A, { razao: 'Rep Ltda', cnpj: '45.997.418/0001-53', estados: 'SP',
+    documentos: ['contratoCia', `arq:${m1.id}`, `arq:${m2.id}`, 'arq:inexistente'] });
+  // só o modelo da empresa marcada como representada é aceito
+  assert.deepStrictEqual(c.documentos, ['contratoCia', `arq:${m1.id}`]);
+});
+
+test('bancos da versão 4.10: empresas padrão passam a ser representadas', () => {
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  s.semearEmpresas(padrao().map((e) => ({ ...e, representada: false })));
+  db.prepare("DELETE FROM configuracoes WHERE chave = 'empresasRepresentadas'").run();
+  s.semearEmpresas(padrao());
+  assert.ok(s.listarEmpresas(CONSULTA).every((e) => e.representada === true));
+});

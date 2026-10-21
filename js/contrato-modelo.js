@@ -69,16 +69,16 @@
     { id: 'resUf', grupo: 'residencia', rotulo: 'UF', obrigSe: 'residencia', tipo: 'uf' },
     { id: 'resCep', grupo: 'residencia', rotulo: 'CEP', obrigSe: 'residencia', tipo: 'cep' },
 
-    // só para o cadastro (não aparece no contrato): define o modelo do pacote de documentos
+    // só para o cadastro (não aparece no contrato): define o modelo dos documentos legais
     { id: 'estados', grupo: 'contrato', rotulo: 'Estado de atuação do representante', obrig: true, tipo: 'estados' },
     { id: 'zona', grupo: 'contrato', rotulo: 'Zona de influência/clientes (Anexo I)', obrig: true, tipo: 'texto', max: 2000 },
     { id: 'dataContrato', grupo: 'contrato', rotulo: 'Data do contrato', obrig: true, tipo: 'data' },
   ];
 
-  /** Documentos do pacote, na ordem do modelo. */
+  /** Documentos legais, na ordem do modelo (empresa: CNPJ da representada a que o contrato pertence). */
   const DOCUMENTOS = [
-    { id: 'contratoCia', nome: 'Contrato de representação — Antoniazzi & Cia Ltda (com Anexos I a IV)', regioes: ['sp', 'rssc'] },
-    { id: 'contratoAlimentos', nome: 'Contrato de representação — Antoniazzi Ind. e Com. de Alimentos Ltda (com Anexos I a IV)', regioes: ['sp'] },
+    { id: 'contratoCia', nome: 'Contrato de representação — Antoniazzi & Cia Ltda (com Anexos I a IV)', regioes: ['sp', 'rssc'], empresa: '95.597.647/0001-59' },
+    { id: 'contratoAlimentos', nome: 'Contrato de representação — Antoniazzi Ind. e Com. de Alimentos Ltda (com Anexos I a IV)', regioes: ['sp'], empresa: '11.780.083/0001-03' },
     { id: 'politica', nome: 'Política de Privacidade Geral', regioes: ['sp', 'rssc'] },
     { id: 'aditivo', nome: 'Termo Aditivo (comissão diferenciada)', regioes: ['sp', 'rssc'] },
     { id: 'termo', nome: 'Termo de Ciência e Adesão à Política de Privacidade', regioes: ['sp', 'rssc'] },
@@ -104,7 +104,7 @@
     return sul ? 'rssc' : '';
   }
 
-  /** Documentos do pacote disponíveis para o estado de atuação (sem estado: os do modelo São Paulo). */
+  /** Documentos legais disponíveis para o estado de atuação (sem estado: os do modelo São Paulo). */
   const documentosDaRegiao = (d) => {
     const r = regiao(d);
     return DOCUMENTOS.filter((x) => x.regioes.includes(r === 'rssc' ? 'rssc' : 'sp'));

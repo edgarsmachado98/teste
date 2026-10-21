@@ -10,6 +10,7 @@
 
   let usuario = null;
   let contratos = [];
+  let empresas = []; // cadastro de empresas: as representadas definem os documentos legais disponíveis
   let atual = null; // contrato em edição ({} = novo)
   const podeEditar = () => !!usuario && usuario.perfil !== 'consulta';
 
@@ -18,7 +19,16 @@
 
   // ---------------------------------------------------------------- lista
 
+  async function carregarEmpresas() {
+    try {
+      empresas = await api.get('/api/empresas');
+    } catch (e) {
+      empresas = [];
+    }
+  }
+
   async function carregar() {
+    carregarEmpresas();
     try {
       contratos = await api.get('/api/contratos');
     } catch (e) {
@@ -216,21 +226,44 @@
   }
   const estadosMarcados = () => [...form.querySelectorAll('#ct-estados input[data-estado]:checked')].map((x) => x.dataset.estado).join(',');
 
-  /** Lista de documentos do pacote conforme o estado de atuação, mantendo o que estava marcado. */
+  /** Lista de documentos legais conforme o estado de atuação, mantendo o que estava marcado. */
+  const CNPJS_MODELO = C.DOCUMENTOS.filter((x) => x.empresa).map((x) => x.empresa);
+  // documento embutido de uma empresa cadastrada e não marcada como representada fica fora da lista
+  const docVisivel = (x) => !x.empresa || !empresas.some((e) => e.cnpj === x.empresa && !e.representada);
+  /** Modelos de contrato anexados pelas demais empresas representadas ('arq:<id>'). */
+  const anexos = () => empresas.filter((e) => e.representada && !CNPJS_MODELO.includes(e.cnpj)).map((e) => ({
+    empresa: e,
+    modelos: (e.arquivos || []).filter((a) => a.tipo === 'contrato').map((a) => ({ valor: `arq:${a.id}`, arquivo: a })),
+  }));
+
   function renderDocumentos(marcados) {
     const d = { estados: estadosMarcados() };
     const reg = C.regiao(d);
     const atuais = marcados || [...form.querySelectorAll('input[name=documento]')].filter((x) => x.checked).map((x) => x.value);
     const antes = [...form.querySelectorAll('input[name=documento]')].map((x) => x.value);
-    const lista = C.documentosDaRegiao(d);
-    $('#ct-documentos').innerHTML = lista.map((x) => {
+    const lista = C.documentosDaRegiao(d).filter(docVisivel);
+    const caixa = (valor, nome, marcado) =>
+      `<label class="check"><input type="checkbox" name="documento" value="${esc(valor)}"${marcado ? ' checked' : ''}${podeEditar() ? '' : ' disabled'}> ${esc(nome)}</label>`;
+    $('#ct-documentos').innerHTML = lista.map((x) =>
       // documento que aparece agora (ex.: contrato da Alimentos ao marcar SP) já vem marcado
-      const marcado = atuais.includes(x.id) || (!marcados && !antes.includes(x.id));
-      return `<label class="check"><input type="checkbox" name="documento" value="${x.id}"${marcado ? ' checked' : ''}> ${esc(x.nome)}</label>`;
-    }).join('');
+      caixa(x.id, x.nome, atuais.includes(x.id) || (!marcados && !antes.includes(x.id)))).join('') +
+      anexos().map((g) => `<div class="ct-docs-empresa"><b>${esc(g.empresa.fantasia || g.empresa.razao)}</b>
+        ${g.modelos.map((m) => caixa(m.valor, `Modelo de contrato — ${m.arquivo.nome}`, atuais.includes(m.valor))).join('')
+          || '<small class="suave">Nenhum modelo de contrato anexado no cadastro de empresas.</small>'}</div>`).join('');
     $('#ct-modelo-regiao').innerHTML = `Escolha um estado. Fica só no cadastro (não aparece no contrato). ${reg && reg !== 'conflito'
       ? `Modelo usado: <b>${esc(C.REGIOES[reg])}</b>.`
       : 'São Paulo usa o modelo com a Antoniazzi Alimentos; Rio Grande do Sul e Santa Catarina usam o modelo só da Antoniazzi &amp; Cia.'}`;
+  }
+
+  /** Modelos anexados escolhidos: ficam para baixar ao lado da prévia (não entram no PDF/Word gerado). */
+  function anexosHTML(docs) {
+    const itens = anexos().flatMap((g) => g.modelos.filter((m) => docs.includes(m.valor)).map((m) => ({ ...m, empresa: g.empresa })));
+    if (!itens.length) return '';
+    return `<div class="ct-anexos"><b>Modelos anexados no cadastro de empresas</b>
+      <small>Baixe e preencha separadamente; eles não entram no PDF/Word gerado pelo sistema.</small>
+      ${itens.map((m) => `<div><span>${esc(m.empresa.fantasia || m.empresa.razao)} — ${esc(m.arquivo.nome)}</span>
+        <a class="botao sec mini" href="/api/empresas/${encodeURIComponent(m.empresa.id)}/arquivos/${encodeURIComponent(m.arquivo.id)}" download="${esc(m.arquivo.nome)}">Baixar</a></div>`).join('')}
+    </div>`;
   }
 
   renderDocumentos(C.DOCUMENTOS.map((x) => x.id));
@@ -269,7 +302,8 @@
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
   }
 
-  function abrir(c) {
+  async function abrir(c) {
+    await carregarEmpresas();
     atual = c;
     const novo = !c.id;
     preencher(novo ? { sexo: 'M', nacionalidade: 'brasileiro', mesmoEndereco: true, dataContrato: hoje(), situacao: 'ativo' } : c);
@@ -311,8 +345,8 @@
     clearTimeout(temporizador);
     temporizador = setTimeout(() => {
       // sem o estado de atuação não se sabe o modelo: a prévia fica em branco
-      $('#ct-previa').innerHTML = C.regiao(d) ? documentoHTML(d, true)
-        : previaProvisoria();
+      $('#ct-previa').innerHTML = anexosHTML(d.documentos) + (C.regiao(d) ? documentoHTML(d, true)
+        : previaProvisoria());
       $('#ct-previa').querySelectorAll('[data-largura]').forEach((x) => { x.style.width = `${x.dataset.largura}%`; });
       const n = d.documentos.length;
       const pend = C.pendencias(d).length;
@@ -389,7 +423,7 @@
   async function prepararGeracao(formato) {
     const d = lerFormulario();
     const pend = C.pendencias(d);
-    if (!d.documentos.length) pend.push({ campo: 'documentos', mensagem: 'Escolha ao menos um documento do pacote.' });
+    if (!d.documentos.length) pend.push({ campo: 'documentos', mensagem: 'Escolha ao menos um documento legal.' });
     mostrarPendencias(pend);
     if (pend.length) return null;
     try {

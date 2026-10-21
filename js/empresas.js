@@ -54,7 +54,7 @@
         }).join(' ');
       return `<tr>
         <td>${logoDe(e) ? `<img src="${urlArquivo(e, logoDe(e))}" alt="" class="emp-logo-lista">` : ''}</td>
-        <td><b>${esc(e.razao)}</b>${e.fantasia ? `<br><small class="suave">${esc(e.fantasia)}</small>` : ''}</td>
+        <td><b>${esc(e.razao)}</b>${e.fantasia ? `<br><small class="suave">${esc(e.fantasia)}</small>` : ''}${e.representada ? '<br><span class="chip mini">Empresa representada</span>' : ''}</td>
         <td>${esc(e.cnpj)}</td><td>${esc(e.regime || '—')}</td>
         <td>${esc([e.cidade, e.uf].filter(Boolean).join('-'))}</td>
         <td>${chips || '<small class="suave">nenhum modelo</small>'}</td>
@@ -117,6 +117,7 @@
     form.reset();
     const f = form.elements;
     for (const k of ['id', 'razao', 'cnpj', 'fantasia', 'regime', 'endereco', 'telefone', 'cidade', 'uf', 'cep']) f[k].value = (e && e[k]) || '';
+    f.representada.checked = !!(e && e.representada);
     $('#titulo-form-empresa').textContent = modo === 'novo' ? 'Nova empresa' : `${modo === 'editar' ? 'Editar empresa' : 'Empresa'} — ${e.razao}`;
     const leitura = !podeEditar() || modo === 'exibir';
     form.querySelectorAll('input:not([type=file]), select').forEach((el) => { el.disabled = leitura; });
@@ -163,6 +164,7 @@
     const f = form.elements;
     const dados = {};
     for (const k of ['razao', 'cnpj', 'fantasia', 'regime', 'endereco', 'telefone', 'cidade', 'uf', 'cep']) dados[k] = f[k].value.trim();
+    dados.representada = f.representada.checked;
     const novo = modo === 'novo';
     try {
       let salvo = novo ? await api.post('/api/empresas', dados) : await api.put(`/api/empresas/${f.id.value}`, dados);

@@ -245,3 +245,8 @@ a.botao { text-decoration: none; }
 .ct-sim-linha { display: block; height: .55rem; border-radius: 3px; background: #eceef3; }
 .ct-sim-espaco { display: block; height: .4rem; }
 .ct-sim-aviso { margin: 1rem 0 0; text-align: center; font-size: .9rem; }
+.ct-docs-empresa { display: grid; gap: .3rem; padding: .4rem .5rem; border: 1px dashed var(--borda); border-radius: 6px; }
+.ct-anexos { display: grid; gap: .35rem; margin-bottom: .8rem; padding: .6rem .75rem; border: 1px solid var(--borda); border-radius: 8px; background: var(--cartao); }
+.ct-anexos small { color: var(--suave); }
+.ct-anexos div { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+@media print { .ct-anexos { display: none; } }

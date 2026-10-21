@@ -39,7 +39,7 @@ module.exports = function empresasPadrao() {
 
   return [
     {
-      razao: 'ANTONIAZZI & CIA LTDA', cnpj: '95.597.647/0001-59', fantasia: 'Moinho Santa Maria',
+      razao: 'ANTONIAZZI & CIA LTDA', cnpj: '95.597.647/0001-59', fantasia: 'Moinho Santa Maria', representada: true,
       endereco: 'Rua Aristides Lobo, 290, Bairro Rosário', cidade: 'Santa Maria', uf: 'RS', cep: '97010-050',
       arquivos: [
         { tipo: 'contrato', nome: 'Contrato_Representante_SP.docx', dados: contrato('SP', ['contratoCia', 'politica', 'aditivo', 'termo']) },
@@ -50,7 +50,7 @@ module.exports = function empresasPadrao() {
       ],
     },
     {
-      razao: 'ANTONIAZZI INDÚSTRIA E COMÉRCIO DE ALIMENTOS LTDA', cnpj: '11.780.083/0001-03', fantasia: 'Antoniazzi Alimentos',
+      razao: 'ANTONIAZZI INDÚSTRIA E COMÉRCIO DE ALIMENTOS LTDA', cnpj: '11.780.083/0001-03', fantasia: 'Antoniazzi Alimentos', representada: true,
       endereco: 'Rua Castro Alves, 88, Vila Fernandes', cidade: 'Canoas', uf: 'RS', cep: '92114-430',
       arquivos: [
         { tipo: 'contrato', nome: 'Contrato_Representante_SP_Antoniazzi_Alimentos.docx', dados: contrato('SP', ['contratoAlimentos', 'politica', 'termo']) },
