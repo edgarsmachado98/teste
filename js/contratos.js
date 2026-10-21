@@ -292,6 +292,18 @@
   $('#ct-voltar').addEventListener('click', fechar);
   document.querySelector('[data-voltar="ct"]').addEventListener('click', fechar);
 
+  /** Folha provisória (logotipo e linhas simuladas) enquanto o estado de atuação não é escolhido. */
+  function previaProvisoria() {
+    const linhas = [100, 96, 98, 72, 0, 100, 94, 99, 97, 60, 0, 100, 92, 98, 85, 0, 97, 100, 66]
+      .map((w) => (w ? `<span class="ct-sim-linha" data-largura="${w}"></span>` : '<span class="ct-sim-espaco"></span>')).join('');
+    return `<div class="ct-previa-vazia"><div class="ct-sim-folha">
+        <img src="img/logo-moinho-santa-maria.png" alt="" class="ct-sim-logo" width="170" height="198">
+        <p class="ct-sim-titulo">CONTRATO DE REPRESENTAÇÃO COMERCIAL</p>
+        <div class="ct-sim-linhas">${linhas}</div>
+        <p class="ct-sim-aviso">Prévia provisória. Selecione o <b>estado de atuação do representante</b> para ver o documento.</p>
+      </div></div>`;
+  }
+
   let temporizador = null;
   function atualizar() {
     const d = lerFormulario();
@@ -300,7 +312,8 @@
     temporizador = setTimeout(() => {
       // sem o estado de atuação não se sabe o modelo: a prévia fica em branco
       $('#ct-previa').innerHTML = C.regiao(d) ? documentoHTML(d, true)
-        : '<div class="ct-previa-vazia"><p>Selecione o <b>estado de atuação do representante</b> para ver a prévia do documento.</p></div>';
+        : previaProvisoria();
+      $('#ct-previa').querySelectorAll('[data-largura]').forEach((x) => { x.style.width = `${x.dataset.largura}%`; });
       const n = d.documentos.length;
       const pend = C.pendencias(d).length;
       $('#ct-resumo-docs').textContent = `${n} documento(s)` + (pend ? ` · ${pend} campo(s) a preencher` : ' · pronto para gerar');
