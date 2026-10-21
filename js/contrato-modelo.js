@@ -205,9 +205,8 @@
       const obrig = c.obrig || (c.obrigSe === 'residencia' && d.mesmoEndereco === false);
       if (obrig && (v == null || String(v).trim() === '')) out.push({ campo: c.id, mensagem: `Preencha: ${c.rotulo}.` });
     }
-    if (regiao(d) === 'conflito') {
-      out.push({ campo: 'estados', mensagem: 'Estado de atuação: São Paulo usa um modelo de contrato e RS/SC usam outro. ' +
-        'Marque São Paulo ou Rio Grande do Sul/Santa Catarina (para os dois, cadastre contratos separados).' });
+    if (listaEstados(d.estados).length > 1) {
+      out.push({ campo: 'estados', mensagem: 'Estado de atuação: selecione apenas um estado.' });
     }
     if (d.cpf && !validarCPF(d.cpf)) out.push({ campo: 'cpf', mensagem: 'CPF inválido (confira os dígitos).' });
     if (d.cnpj && !validarCNPJ(d.cnpj)) out.push({ campo: 'cnpj', mensagem: 'CNPJ inválido (confira os dígitos).' });

@@ -911,7 +911,12 @@ function criarServico(db, opcoes = {}) {
     const out = {};
     for (const c of CT.CAMPOS) {
       if (c.tipo === 'check') { out[c.id] = d[c.id] !== false; continue; }
-      if (c.tipo === 'estados') { out[c.id] = CT.listaEstados(Array.isArray(d[c.id]) ? d[c.id].join(',') : d[c.id]).join(','); continue; }
+      if (c.tipo === 'estados') {
+        const lista = CT.listaEstados(Array.isArray(d[c.id]) ? d[c.id].join(',') : d[c.id]);
+        if (lista.length > 1) falhar(400, 'Estado de atuação: selecione apenas um estado.');
+        out[c.id] = lista.join('');
+        continue;
+      }
       let v = d[c.id] == null ? '' : String(d[c.id]).trim();
       if (c.max && v.length > c.max) falhar(400, `${c.rotulo}: no máximo ${c.max} caracteres.`);
       if (c.tipo === 'cpf') v = v ? CT.formatarCPF(v) : '';

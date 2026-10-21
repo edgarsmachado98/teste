@@ -207,8 +207,8 @@ representadas) — alterações no modelo da empresa devem ser feitas ali.
 
 ### Estado de atuação e modelo do contrato
 
-No cadastro do contrato, marque o **estado de atuação** do representante (Rio Grande do Sul, Santa Catarina e/ou
-São Paulo). A informação fica só no cadastro (não aparece nos documentos) e define o modelo do pacote:
+No cadastro do contrato, escolha o **estado de atuação** do representante (Rio Grande do Sul, Santa Catarina ou
+São Paulo — apenas um). A informação fica só no cadastro (não aparece nos documentos) e define o modelo do pacote:
 
 | Atuação | Modelo | Documentos |
 |---------|--------|------------|
@@ -219,7 +219,7 @@ São Paulo). A informação fica só no cadastro (não aparece nos documentos) e
 (busca e filtro Todos/Ativos/Encerrados) em **PDF**, **Excel (.xlsx)** ou **XML**. Ao salvar um distrato, o contrato
 do representante passa automaticamente para **Encerrado**; excluindo o último distrato, ele volta a **Ativo**.
 
-São Paulo junto com RS/SC não é aceito (os modelos são diferentes): cadastre contratos separados. O campo
+Só um estado pode ser selecionado; enquanto ele não é escolhido, a prévia do documento fica em branco. O campo
 **Código do representante** é opcional.
 
 ## Distratos

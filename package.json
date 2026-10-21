@@ -1,6 +1,6 @@
 {
   "name": "gestao-pessoal-rh",
-  "version": "4.9.0",
+  "version": "4.9.1",
   "description": "CORE RH: rotinas do departamento pessoal conforme a legislação trabalhista brasileira",
   "private": true,
   "engines": {

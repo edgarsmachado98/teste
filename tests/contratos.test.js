@@ -151,10 +151,11 @@ test('estado de atuação: SP usa o pacote atual; RS e SC usam o modelo só da A
     C.regiao({ estados: 'RS,SP' }), C.regiao({})], ['sp', 'rssc', 'rssc', 'conflito', '']);
   assert.deepStrictEqual(C.documentosDaRegiao({ estados: 'RS,SC' }).map((x) => x.id), ['contratoCia', 'politica', 'aditivo', 'termo']);
   assert.ok(C.documentosDaRegiao({ estados: 'SP' }).some((x) => x.id === 'contratoAlimentos'));
-  assert.match(C.pendencias({ ...REP, estados: 'RS,SP' }).map((p) => p.mensagem).join(' '), /modelo de contrato e RS\/SC usam outro/);
+  assert.match(C.pendencias({ ...REP, estados: 'RS,SP' }).map((p) => p.mensagem).join(' '), /selecione apenas um estado/);
+  assert.match(C.pendencias({ ...REP, estados: 'RS,SC' }).map((p) => p.mensagem).join(' '), /selecione apenas um estado/);
   assert.match(C.pendencias({ ...REP, estados: '' }).map((p) => p.mensagem).join(' '), /Estado de atuação/);
 
-  const rs = { ...REP, estados: 'RS,SC', zona: 'RIO GRANDE DO SUL E SANTA CATARINA', documentos: [] };
+  const rs = { ...REP, estados: 'SC', zona: 'RIO GRANDE DO SUL E SANTA CATARINA', documentos: [] };
   const docs = C.montar(rs);
   assert.deepStrictEqual(docs.map((x) => x.id), ['contratoCia', 'politica', 'aditivo', 'termo']); // sem o contrato da Alimentos
   const v = C.valores(rs);

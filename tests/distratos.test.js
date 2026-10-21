@@ -294,6 +294,7 @@ test('salvar o distrato encerra o contrato do representante; excluir o último d
   const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
   const A = { id: 'a', login: 'a', perfil: 'admin' };
   const c = s.salvarContrato(A, { ...CONTRATO, estados: 'SP' });
+  assert.throws(() => s.salvarContrato(A, { ...CONTRATO, cnpj: '11222333000181', estados: 'RS,SC' }), /apenas um estado/);
   assert.strictEqual(c.situacao, 'ativo');
   const base = { contratoId: c.id, dataInicio: '2023-03-08', dataDistrato: '2026-02-11', comissoes: CIA };
   const d1 = s.salvarDistrato(A, { ...base, representada: 'cia' });

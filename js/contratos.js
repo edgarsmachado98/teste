@@ -188,7 +188,7 @@
     switch (c.tipo) {
       case 'estados':
         return `<fieldset class="largo ct-estados" id="${id}"><legend>${esc(c.rotulo)}${obrig}</legend>` +
-          C.ESTADOS_ATUACAO.map((e) => `<label class="check"><input type="checkbox" data-estado="${e.uf}"> ${esc(e.nome)} (${e.uf})</label>`).join('') +
+          C.ESTADOS_ATUACAO.map((e) => `<label class="check"><input type="radio" name="ct-estado" data-estado="${e.uf}"> ${esc(e.nome)} (${e.uf})</label>`).join('') +
           '<small class="dica largo" id="ct-modelo-regiao">Fica só no cadastro (não aparece no contrato). São Paulo usa o modelo com a ' +
           'Antoniazzi Alimentos; Rio Grande do Sul e Santa Catarina usam o modelo só da Antoniazzi &amp; Cia.</small></fieldset>';
       case 'check':
@@ -228,10 +228,9 @@
       const marcado = atuais.includes(x.id) || (!marcados && !antes.includes(x.id));
       return `<label class="check"><input type="checkbox" name="documento" value="${x.id}"${marcado ? ' checked' : ''}> ${esc(x.nome)}</label>`;
     }).join('');
-    $('#ct-modelo-regiao').innerHTML = reg === 'conflito'
-      ? '<b class="ruim">Marque São Paulo ou Rio Grande do Sul/Santa Catarina: os modelos de contrato são diferentes.</b>'
-      : `Fica só no cadastro (não aparece no contrato). ${reg ? `Modelo usado: <b>${esc(C.REGIOES[reg])}</b>.`
-        : 'São Paulo usa o modelo com a Antoniazzi Alimentos; Rio Grande do Sul e Santa Catarina usam o modelo só da Antoniazzi &amp; Cia.'}`;
+    $('#ct-modelo-regiao').innerHTML = `Escolha um estado. Fica só no cadastro (não aparece no contrato). ${reg && reg !== 'conflito'
+      ? `Modelo usado: <b>${esc(C.REGIOES[reg])}</b>.`
+      : 'São Paulo usa o modelo com a Antoniazzi Alimentos; Rio Grande do Sul e Santa Catarina usam o modelo só da Antoniazzi &amp; Cia.'}`;
   }
 
   renderDocumentos(C.DOCUMENTOS.map((x) => x.id));
@@ -255,7 +254,8 @@
       if (c.tipo === 'check') el.checked = d[c.id] !== false;
       else if (c.tipo === 'estados') {
         const lista = C.listaEstados(d[c.id]);
-        el.querySelectorAll('input[data-estado]').forEach((x) => { x.checked = lista.includes(x.dataset.estado); });
+        // um único estado de atuação (cadastros antigos com mais de um ficam com o primeiro)
+        el.querySelectorAll('input[data-estado]').forEach((x) => { x.checked = x.dataset.estado === lista[0]; });
       } else el.value = d[c.id] == null ? '' : d[c.id];
       el.classList.remove('invalido');
     }
@@ -298,7 +298,9 @@
     $('#ct-fs-residencia').hidden = d.mesmoEndereco;
     clearTimeout(temporizador);
     temporizador = setTimeout(() => {
-      $('#ct-previa').innerHTML = documentoHTML(d, true);
+      // sem o estado de atuação não se sabe o modelo: a prévia fica em branco
+      $('#ct-previa').innerHTML = C.regiao(d) ? documentoHTML(d, true)
+        : '<div class="ct-previa-vazia"><p>Selecione o <b>estado de atuação do representante</b> para ver a prévia do documento.</p></div>';
       const n = d.documentos.length;
       const pend = C.pendencias(d).length;
       $('#ct-resumo-docs').textContent = `${n} documento(s)` + (pend ? ` · ${pend} campo(s) a preencher` : ' · pronto para gerar');
