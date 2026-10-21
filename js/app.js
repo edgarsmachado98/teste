@@ -150,10 +150,11 @@
 
   function mostrarModulo(mod) {
     const abas = abasDoModulo(mod);
-    mostrarAba(abas.length ? ultimaAba[mod] || abas[0].dataset.aba : mod);
+    // no celular, módulo com seções mantém a gaveta aberta para escolher a seção
+    mostrarAba(abas.length ? ultimaAba[mod] || abas[0].dataset.aba : mod, abas.length > 0);
   }
 
-  function mostrarAba(nome) {
+  function mostrarAba(nome, manterMenu) {
     const painel = document.getElementById('aba-' + nome);
     if (!painel) return;
     const mod = painel.dataset.modulo;
@@ -169,10 +170,11 @@
     // título da página: módulo e, quando houver, a seção dentro dele
     const nomeModulo = $(`.modulo[data-modulo="${mod}"] .rotulo`).textContent;
     const aba = abas.find((b) => b.dataset.aba === nome);
+    $('#menu-titulo-modulo').textContent = nomeModulo;
     $('#titulo-pagina').textContent = aba ? aba.textContent : nomeModulo;
     $('#caminho-pagina').textContent = aba ? nomeModulo : 'CORE RH';
     document.title = mod === 'inicio' ? 'CORE RH' : `${$('#titulo-pagina').textContent} · CORE RH`;
-    abrirMenu(false);
+    if (!manterMenu) abrirMenu(false);
     if (mod === 'inicio') renderInicio();
   }
 

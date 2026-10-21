@@ -87,11 +87,18 @@
 
   // ------------------------------------------------------------- sessão
 
+  /** Iniciais do nome para o avatar da barra de ícones (primeiro e último nome). */
+  const iniciais = (nome) => {
+    const p = String(nome || '').trim().split(/\s+/).filter(Boolean);
+    return ((p[0] || '')[0] || '').concat(p.length > 1 ? p[p.length - 1][0] : '').toUpperCase();
+  };
+
   async function entrar(u) {
     usuario = u;
     $('#tela-acesso').hidden = true;
     $('#app').hidden = false;
     $('#usuario-nome').textContent = u.nome;
+    $('#usuario-avatar').textContent = iniciais(u.nome);
     $('#usuario-perfil').textContent = PERFIS[u.perfil].nome;
     await App.iniciar(u);
     if (u.perfil === 'admin') renderUsuarios();
@@ -232,6 +239,7 @@
           if (u.id === usuario.id) {
             usuario = u;
             $('#usuario-nome').textContent = u.nome;
+            $('#usuario-avatar').textContent = iniciais(u.nome);
           }
         } else {
           await api.post('/api/usuarios', {
