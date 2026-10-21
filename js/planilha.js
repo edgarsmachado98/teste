@@ -196,7 +196,7 @@
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let fim = bytes.length - 22;
     while (fim >= 0 && dv.getUint32(fim, true) !== 0x06054b50) fim--;
-    if (fim < 0) throw new Error('Arquivo .xlsx inválido.');
+    if (fim < 0) throw new Error('Arquivo compactado inválido (.xlsx/.docx).');
     const n = dv.getUint16(fim + 10, true);
     let p = dv.getUint32(fim + 16, true);
     const arquivos = {};
@@ -218,6 +218,11 @@
         const a = arquivos[nome];
         if (!a) return null;
         return dec.decode(a.metodo === 8 ? await inflar(a.dados) : a.dados);
+      },
+      async bytes(nome) {
+        const a = arquivos[nome];
+        if (!a) return null;
+        return a.metodo === 8 ? inflar(a.dados) : a.dados;
       },
       nomes: Object.keys(arquivos),
     };
@@ -328,5 +333,5 @@
   /** Texto de célula: números inteiros sem casas decimais (códigos como 0010 vêm como 10). */
   const texto = (v) => (v == null ? '' : typeof v === 'number' ? (Number.isInteger(v) ? String(v) : String(v)) : String(v).trim());
 
-  return { ler, lerXLS, lerXLSX, lerCSV, lerData, texto };
+  return { ler, lerXLS, lerXLSX, lerCSV, lerData, texto, lerZip };
 });

@@ -491,3 +491,7 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .chip.mini { font-size: .7rem; }
 #lista-empresas td.acoes { width: 6.5rem; }
 #lista-empresas td.acoes button { display: block; width: 100%; margin: .15rem 0; }
+.emp-marcadores { margin-top: .6rem; }
+.emp-marcadores summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
+.emp-marcadores code { white-space: nowrap; }
+.emp-marcadores td { padding: .2rem .4rem; font-size: .85rem; }

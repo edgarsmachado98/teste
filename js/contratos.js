@@ -260,11 +260,57 @@
     const itens = anexos().flatMap((g) => g.modelos.filter((m) => docs.includes(m.valor)).map((m) => ({ ...m, empresa: g.empresa })));
     if (!itens.length) return '';
     return `<div class="ct-anexos"><b>Modelos anexados no cadastro de empresas</b>
-      <small>Baixe e preencha separadamente; eles não entram no PDF/Word gerado pelo sistema.</small>
+      <small>Modelos Word (.docx) com marcadores, como {razão social}, saem preenchidos com os dados deste cadastro.
+        Os demais formatos ficam só para baixar.</small>
       ${itens.map((m) => `<div><span>${esc(m.empresa.fantasia || m.empresa.razao)} — ${esc(m.arquivo.nome)}</span>
-        <a class="botao sec mini" href="/api/empresas/${encodeURIComponent(m.empresa.id)}/arquivos/${encodeURIComponent(m.arquivo.id)}" download="${esc(m.arquivo.nome)}">Baixar</a></div>`).join('')}
+        <span class="linha-botoes">
+          ${/\.docx$/i.test(m.arquivo.nome) ? `<button type="button" class="mini" data-preencher="${esc(m.valor)}">Gerar Word preenchido</button>` : ''}
+          <a class="botao sec mini" href="${urlAnexo(m)}" download="${esc(m.arquivo.nome)}">Baixar modelo</a>
+        </span></div>`).join('')}
     </div>`;
   }
+
+  const urlAnexo = (m) => `/api/empresas/${encodeURIComponent(m.empresa.id)}/arquivos/${encodeURIComponent(m.arquivo.id)}`;
+
+  /** Gera o .docx a partir do modelo da empresa, trocando os marcadores pelos dados do representante. */
+  async function gerarModelo(valor) {
+    const m = anexos().flatMap((g) => g.modelos.map((x) => ({ ...x, empresa: g.empresa }))).find((x) => x.valor === valor);
+    if (!m) return;
+    const d = lerFormulario();
+    try {
+      const r = await fetch(urlAnexo(m), { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('Não foi possível baixar o modelo.');
+      const res = await window.EscalaModeloPreenchido.preencher(new Uint8Array(await r.arrayBuffer()), d, m.empresa);
+      // salva e registra no histórico quando possível; um cadastro ainda incompleto não impede o preenchimento
+      try {
+        if (podeEditar()) await salvar();
+        if (atual && atual.id) await api.post(`/api/contratos/${atual.id}/documento`, { formato: 'modelo' });
+      } catch (e) {
+        if (e.status === 401) throw e;
+      }
+      const base = m.arquivo.nome.replace(/\.docx$/i, '');
+      const blob = new Blob([res.bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement('a'), { href: url, download: `${base}_${C.nomeArquivo(d, 'docx').replace(/^Contrato_Representante_/, '')}` });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      const avisos = [];
+      if (!res.usados.length) avisos.push('O modelo não tem nenhum marcador reconhecido; o arquivo saiu igual ao modelo. Veja a lista de marcadores em Cadastros › Empresas.');
+      if (res.vazios.length) avisos.push(`Campos em branco no cadastro (saíram como ${'_'.repeat(10)}): ${res.vazios.join(', ')}.`);
+      if (res.desconhecidos.length) avisos.push(`Marcadores não reconhecidos (ficaram como estão): ${res.desconhecidos.join(', ')}.`);
+      if (avisos.length) App.avisar(avisos.join('\n\n'));
+    } catch (e) {
+      if (e.status !== 401) App.avisar(e.message);
+    }
+  }
+  $('#ct-previa').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-preencher]');
+    if (b) gerarModelo(b.dataset.preencher);
+  });
+
+
 
   renderDocumentos(C.DOCUMENTOS.map((x) => x.id));
 

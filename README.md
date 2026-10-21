@@ -191,8 +191,15 @@ endereço, telefone, cidade, estado e CEP) e os arquivos dela:
 
 **Empresa representada**: marcada, a empresa aparece em **Documentos legais** no cadastro de representantes.
 Para a Antoniazzi & Cia e a Antoniazzi Alimentos, a marcação libera o contrato de representação de cada uma; para
-as demais, os modelos de contrato anexados aparecem para seleção e, escolhidos, ficam para baixar acima da prévia
-(não entram no PDF/Word gerado pelo sistema).
+as demais, os modelos de contrato anexados aparecem para seleção e, escolhidos, ficam acima da prévia.
+
+**Modelos Word com marcadores**: um modelo de contrato em Word (.docx) pode ter marcadores entre chaves, como
+`{razão social}`, `{CNPJ}`, `{responsável}`, `{CPF}`, `{endereço completo}`, `{data do contrato por extenso}` ou
+`{empresa razão social}` (a lista completa fica em Cadastros › Empresas › Modelos e logotipo). No contrato do
+representante, **Gerar Word preenchido** troca cada marcador pelo dado do cadastro (maiúsculas e acentos não
+importam, e o marcador é reconhecido mesmo com formatação no meio). Campos em branco saem como `__________` e
+marcadores desconhecidos ficam como estão; o sistema avisa os dois casos. Modelos em PDF, DOC ou ODT ficam só
+para baixar.
 
 Os arquivos podem ser escolhidos já no cadastro da nova empresa: eles são enviados ao salvar. Na lista,
 **Exibir** mostra o cadastro só para consulta (com os arquivos para baixar), **Editar** permite alterar dados e
@@ -407,6 +414,7 @@ js/custos-calculo.js custo mensal, encargos, provisões e relatórios da folha (
 js/custos.js         tela de custos: lançamentos, relatórios e parâmetros
 js/tema.js           modo claro/escuro
 js/empresas.js       cadastro de empresas, modelos e logotipo
+js/modelo-preenchido.js  preenche os marcadores {…} dos modelos Word das empresas
 img/                 logotipos usados nos contratos
 server/server.js     servidor HTTP, rotas da API, sessão e segurança
 server/servico.js    regras de negócio e permissões

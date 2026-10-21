@@ -482,6 +482,12 @@
           <legend>Modelos e logotipo</legend>
           <p class="dica" id="emp-arquivos-dica">Escolha os modelos e o logotipo; eles são enviados ao salvar a empresa.</p>
           <div id="emp-lista-arquivos" class="emp-arquivos"></div>
+          <details class="emp-marcadores">
+            <summary>Marcadores para preencher o modelo de contrato (Word .docx)</summary>
+            <p class="dica">Escreva o marcador entre chaves no modelo Word, por exemplo <b>{razão social}</b>. Ao gerar o
+              contrato do representante, o sistema troca cada marcador pelo dado do cadastro. Maiúsculas e acentos não importam.</p>
+            <table class="tabela"><tbody id="emp-lista-marcadores"></tbody></table>
+          </details>
         </fieldset>
         <div class="linha-botoes so-edicao">
           <button type="submit" id="emp-salvar">Salvar empresa</button>
@@ -831,6 +837,7 @@
   <script src="js/distrato-modelo.js"></script>
   <script src="js/distrato-memoria.js"></script>
   <script src="js/documento-html.js"></script>
+  <script src="js/modelo-preenchido.js"></script>
   <script src="js/app.js"></script>
   <script src="js/contratos.js"></script>
   <script src="js/distratos.js"></script>

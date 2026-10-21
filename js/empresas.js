@@ -28,6 +28,8 @@
     : `${Math.max(1, Math.round(n / 1024))} KB`);
   const quando = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '');
 
+  $('#emp-lista-marcadores').innerHTML = window.EscalaModeloPreenchido.MARCADORES
+    .map(([m, desc]) => `<tr><td><code>{${esc(m)}}</code></td><td>${esc(desc)}</td></tr>`).join('');
   $('#sel-regime-empresa').innerHTML = '<option value="">Selecione</option>' + REGIMES.map((r) => `<option>${esc(r)}</option>`).join('');
   $('#sel-uf-empresa').innerHTML = '<option value=""></option>' + C.UFS.map((u) => `<option>${u}</option>`).join('');
 

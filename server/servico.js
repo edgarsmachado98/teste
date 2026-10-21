@@ -1015,8 +1015,9 @@ function criarServico(db, opcoes = {}) {
   function registrarDocumento(ator, id, formato) {
     exigir(ator, 'consulta');
     const l = q('SELECT * FROM contratos_representante WHERE id = ?').get(id) || falhar(404, 'Contrato não encontrado.');
-    if (!['pdf', 'docx'].includes(formato)) falhar(400, 'Formato inválido.');
-    auditar(ator, 'contrato.documento', `${l.razao_social}: ${formato === 'pdf' ? 'PDF' : 'Word'}`);
+    const nomes = { pdf: 'PDF', docx: 'Word', modelo: 'Word preenchido a partir do modelo da empresa' };
+    if (!nomes[formato]) falhar(400, 'Formato inválido.');
+    auditar(ator, 'contrato.documento', `${l.razao_social}: ${nomes[formato]}`);
   }
 
   // ------------------------------------------------------------- índices
