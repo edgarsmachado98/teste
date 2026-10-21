@@ -178,8 +178,6 @@ Todos com filtro de período e setor, impressão/PDF (A4 paisagem) e exportaçã
 | Produtividade | Absenteísmo geral | horas perdidas (faltas, atrasos, atestados) ÷ horas previstas |
 | | Banco de horas | saldos por colaborador e passivo se pagos como hora extra |
 
-**Carregar exemplo** traz seis meses de folha fictícia para conhecer os relatórios.
-
 ## Empresas
 
 **Cadastros › Empresas** guarda os dados de cada empresa (razão social, CNPJ, nome fantasia, regime tributário,
@@ -334,7 +332,10 @@ O botão **Conferir no Cálculo Exato** abre o site para conferência.
    produção) são marcados na ficha e ficam fora da escala enquanto a caixa *Excluir colaboradores sem controle de
    jornada* estiver marcada; desmarque para incluí-los. A lista de colaboradores tem o filtro *Sem controle de jornada*.
 
-Clique em **Carregar exemplo** para ver o sistema funcionando com dados fictícios (substitui os dados atuais).
+### Ferramentas (só administradores)
+
+O módulo **Ferramentas**, na barra de ícones acima de Usuários, reúne o **backup** (baixar os dados em .json),
+a **restauração** de um backup e o **Limpar tudo**. Ele aparece só para usuários administradores.
 
 ### Jornadas disponíveis
 

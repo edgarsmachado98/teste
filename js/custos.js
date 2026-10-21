@@ -956,8 +956,7 @@
     }
     if (de > ate) [de, ate] = [ate, de];
     if (!dados.lancamentos.length && !['turnover', 'turnover-tipo', 'motivos', 'quadro'].includes(tipo)) {
-      saida.innerHTML = `<div class="cartao vazio">Ainda não há lançamentos de folha. Abra uma competência em <b>Lançamentos</b>${
-        App.podeEditar() ? ' ou use <b>Carregar exemplo</b> para conhecer os relatórios' : ''}.</div>`;
+      saida.innerHTML = `<div class="cartao vazio">Ainda não há lançamentos de folha. Abra uma competência em <b>Lançamentos</b>.</div>`;
       ultimoRelatorio = null;
       return;
     }

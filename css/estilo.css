@@ -87,7 +87,7 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
 }
 .modulos { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
 .modulo {
-  flex-direction: column; justify-content: center; gap: .2rem; width: 3.5rem; height: 3.5rem; padding: 0;
+  flex-direction: column; justify-content: center; gap: .2rem; width: 4.4rem; height: 3.5rem; padding: 0;
   background: transparent; color: var(--topo-suave); border: 0; border-radius: .9rem;
   font-size: .64rem; font-weight: 600; line-height: 1.1; position: relative;
 }
@@ -117,18 +117,13 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
 }
 .subitens { display: flex; flex-direction: column; gap: .2rem; }
 .menu-desc { margin: 0; padding: 0 .85rem; color: var(--topo-suave); font-size: .85rem; line-height: 1.5; }
-.aba, .item-menu {
+.aba {
   justify-content: flex-start; width: 100%; text-align: left;
   background: transparent; color: #dadcf0; border: 0; border-radius: .6rem;
   padding: .65rem .85rem; font-weight: 500; font-size: .92rem; cursor: pointer;
 }
-.aba:hover, .item-menu:hover { background: rgba(255, 255, 255, .07); color: var(--topo-texto); }
+.aba:hover { background: rgba(255, 255, 255, .07); color: var(--topo-texto); }
 .aba.ativa { color: var(--topo-texto); font-weight: 700; background: var(--abas); box-shadow: inset 3px 0 0 var(--dourado); }
-.item-menu { display: flex; font-size: .84rem; padding: .55rem .85rem; }
-.item-menu.perigo { color: #ffb4ab; border: 0; background: transparent; }
-.item-menu.perigo:hover { background: rgba(255, 120, 110, .12); }
-.ferramentas { display: flex; flex-direction: column; gap: .1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--abas); }
-
 .btn-tema { justify-content: flex-start; gap: .5rem; width: 100%; }
 .lateral-rodape { margin-top: auto; display: grid; gap: .5rem; padding: 1rem .35rem 0; border-top: 1px solid var(--abas); }
 .usuario-lateral { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
@@ -513,3 +508,9 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .emp-marcadores summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
 .emp-marcadores code { white-space: nowrap; }
 .emp-marcadores td { padding: .2rem .4rem; font-size: .85rem; }
+
+/* ferramentas (só administradores) */
+.ferramentas-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+.ferramenta { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
+.ferramenta h2 { margin: 0; }
+.ferramenta p { margin: 0 0 .25rem; flex: 1; }

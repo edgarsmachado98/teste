@@ -960,12 +960,6 @@
     await executar(() => api.del('/api/dados'));
   });
 
-  $('#btn-exemplo').addEventListener('click', async () => {
-    if (!exigirEdicao()) return;
-    if ((estado.setores.length || estado.colaboradores.length) && !(await confirmar('Substituir os dados atuais pelo exemplo?'))) return;
-    await executar(() => api.post('/api/exemplo'));
-  });
-
   // ------------------------------------------------------------- render
 
   function render() {
