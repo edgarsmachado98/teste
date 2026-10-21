@@ -12,6 +12,22 @@ const CU = require('../js/custos-calculo.js');
 
 /** Séries de índices disponíveis (Sistema Gerenciador de Séries do Banco Central). */
 const SERIES = { igpm: { sgs: 189, nome: 'IGP-M (FGV)' } };
+
+/** Cadastro de empresas: regimes tributários e arquivos que podem ser anexados (extensões aceitas). */
+const REGIMES_EMPRESA = ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI', 'Outro'];
+const ARQUIVOS_EMPRESA = {
+  contrato: { nome: 'Modelo de contrato', extensoes: ['docx', 'doc', 'pdf', 'odt'] },
+  distrato: { nome: 'Modelo de distrato', extensoes: ['docx', 'doc', 'pdf', 'odt'] },
+  planilha: { nome: 'Modelo de planilha de comissões para distrato', extensoes: ['xlsx', 'xls', 'ods', 'csv', 'pdf'] },
+  logo: { nome: 'Logotipo', extensoes: ['png', 'jpg', 'jpeg'] },
+};
+const TIPOS_MIME = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', doc: 'application/msword',
+  pdf: 'application/pdf', odt: 'application/vnd.oasis.opendocument.text',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet', csv: 'text/csv', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+};
+const MAX_ARQUIVO = 10 * 1024 * 1024;
 const senhas = require('./senhas.js');
 
 const PERFIS = {
@@ -1433,6 +1449,146 @@ function criarServico(db, opcoes = {}) {
     return custos(ator);
   }
 
+  // ------------------------------------------------------------- empresas
+
+  const arquivosDe = (id) => q('SELECT id, tipo, nome, mime, tamanho, enviado_por, enviado_em FROM empresas_arquivos WHERE empresa_id = ? ORDER BY enviado_em')
+    .all(id).map((a) => ({ id: a.id, tipo: a.tipo, nome: a.nome, mime: a.mime, tamanho: a.tamanho, enviadoPor: a.enviado_por, enviadoEm: a.enviado_em }));
+
+  const empresaDeLinha = (l) => ({
+    id: l.id, ...JSON.parse(l.dados), razao: l.razao_social, cnpj: l.cnpj,
+    criadoEm: l.criado_em, atualizadoEm: l.atualizado_em, arquivos: arquivosDe(l.id),
+  });
+
+  function listarEmpresas(ator) {
+    exigir(ator, 'consulta');
+    return q('SELECT * FROM empresas ORDER BY razao_social COLLATE NOCASE').all().map(empresaDeLinha);
+  }
+
+  function normalizarEmpresa(d) {
+    const txt = (v, max, rotulo, obrig) => {
+      const s = String(v == null ? '' : v).trim();
+      if (obrig && !s) falhar(400, `Informe ${rotulo}.`);
+      if (s.length > max) falhar(400, `${rotulo[0].toUpperCase() + rotulo.slice(1)}: no máximo ${max} caracteres.`);
+      return s;
+    };
+    const cnpj = CT.soDigitos(d.cnpj);
+    if (!cnpj) falhar(400, 'Informe o CNPJ.');
+    if (!CT.validarCNPJ(cnpj)) falhar(400, 'CNPJ inválido (confira os dígitos).');
+    const uf = String(d.uf || '').trim().toUpperCase();
+    if (uf && !CT.UFS.includes(uf)) falhar(400, 'Estado (UF) inválido.');
+    const cep = CT.soDigitos(d.cep);
+    if (cep && cep.length !== 8) falhar(400, 'CEP deve ter 8 dígitos.');
+    const regime = String(d.regime || '').trim();
+    if (regime && !REGIMES_EMPRESA.includes(regime)) falhar(400, 'Regime tributário inválido.');
+    return {
+      razao: txt(d.razao, 150, 'a razão social', true), cnpj: CT.formatarCNPJ(cnpj), fantasia: txt(d.fantasia, 150, 'o nome fantasia'),
+      regime, endereco: txt(d.endereco, 200, 'o endereço'), telefone: txt(d.telefone, 30, 'o telefone'),
+      cidade: txt(d.cidade, 100, 'a cidade'), uf, cep: cep ? CT.formatarCEP(cep) : '',
+    };
+  }
+
+  function salvarEmpresa(ator, d) {
+    exigir(ator, 'operador');
+    const e = normalizarEmpresa(d);
+    const repetida = q('SELECT id FROM empresas WHERE cnpj = ?').get(e.cnpj);
+    if (repetida && repetida.id !== d.id) falhar(409, `Já existe uma empresa cadastrada com o CNPJ ${e.cnpj}.`);
+    const { razao, cnpj, ...resto } = e;
+    let id = d.id;
+    if (id) {
+      if (!q('UPDATE empresas SET razao_social = ?, cnpj = ?, dados = ?, atualizado_em = ? WHERE id = ?')
+        .run(razao, cnpj, JSON.stringify(resto), iso(), id).changes) falhar(404, 'Empresa não encontrada.');
+      auditar(ator, 'empresa.alterar', `${razao} (${cnpj})`);
+    } else {
+      id = novoId();
+      q('INSERT INTO empresas (id, razao_social, cnpj, dados, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, razao, cnpj, JSON.stringify(resto), iso(), iso());
+      auditar(ator, 'empresa.criar', `${razao} (${cnpj})`);
+    }
+    return empresaDeLinha(q('SELECT * FROM empresas WHERE id = ?').get(id));
+  }
+
+  function removerEmpresa(ator, id) {
+    exigir(ator, 'operador');
+    const l = q('SELECT * FROM empresas WHERE id = ?').get(id) || falhar(404, 'Empresa não encontrada.');
+    q('DELETE FROM empresas WHERE id = ?').run(id);
+    auditar(ator, 'empresa.excluir', `${l.razao_social} (${l.cnpj})`);
+  }
+
+  function gravarArquivoEmpresa(empresaId, tipo, nome, dados, por, em) {
+    const ext = String((nome.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
+    // logotipo: um só por empresa (o novo substitui o anterior); modelos: vários por tipo
+    if (tipo === 'logo') q("DELETE FROM empresas_arquivos WHERE empresa_id = ? AND tipo = 'logo'").run(empresaId);
+    q(`INSERT INTO empresas_arquivos (id, empresa_id, tipo, nome, mime, tamanho, dados, enviado_por, enviado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(novoId(), empresaId, tipo, nome, TIPOS_MIME[ext] || 'application/octet-stream',
+      dados.length, dados, por, em);
+  }
+
+  /** Anexa um modelo (ou substitui o logotipo). d = { nome, conteudo (base64) }. */
+  function enviarArquivoEmpresa(ator, id, tipo, d) {
+    exigir(ator, 'operador');
+    const l = q('SELECT * FROM empresas WHERE id = ?').get(id) || falhar(404, 'Empresa não encontrada.');
+    const def = ARQUIVOS_EMPRESA[tipo] || falhar(400, 'Tipo de arquivo inválido.');
+    const nome = String((d && d.nome) || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().slice(0, 150);
+    const ext = (nome.match(/\.([a-z0-9]+)$/i) || [])[1];
+    if (!nome || !ext || !def.extensoes.includes(ext.toLowerCase())) {
+      falhar(400, `${def.nome}: envie um arquivo ${def.extensoes.map((x) => `.${x}`).join(', ')}.`);
+    }
+    const dados = Buffer.from(String((d && d.conteudo) || ''), 'base64');
+    if (!dados.length) falhar(400, 'Arquivo vazio.');
+    if (dados.length > MAX_ARQUIVO) falhar(413, 'O arquivo deve ter no máximo 10 MB.');
+    if (tipo === 'logo') {
+      const png = dados[0] === 0x89 && dados[1] === 0x50 && dados[2] === 0x4e && dados[3] === 0x47;
+      const jpg = dados[0] === 0xff && dados[1] === 0xd8;
+      if (!png && !jpg) falhar(400, 'O logotipo deve ser uma imagem PNG ou JPG.');
+    }
+    gravarArquivoEmpresa(id, tipo, nome, dados, ator.login, iso());
+    auditar(ator, 'empresa.arquivo', `${l.razao_social}: ${def.nome.toLowerCase()} (${nome})`);
+    return empresaDeLinha(l);
+  }
+
+  /** Arquivo para download: { binario, nome, mime, inline }. */
+  function baixarArquivoEmpresa(ator, id, arquivoId) {
+    exigir(ator, 'consulta');
+    const a = q('SELECT * FROM empresas_arquivos WHERE empresa_id = ? AND id = ?').get(id, String(arquivoId)) ||
+      falhar(404, 'Arquivo não encontrado.');
+    return { binario: Buffer.from(a.dados), nome: a.nome, mime: a.mime, inline: a.tipo === 'logo' };
+  }
+
+  function removerArquivoEmpresa(ator, id, arquivoId) {
+    exigir(ator, 'operador');
+    const l = q('SELECT * FROM empresas WHERE id = ?').get(id) || falhar(404, 'Empresa não encontrada.');
+    const a = q('SELECT tipo, nome FROM empresas_arquivos WHERE empresa_id = ? AND id = ?').get(id, String(arquivoId)) ||
+      falhar(404, 'Arquivo não encontrado.');
+    q('DELETE FROM empresas_arquivos WHERE id = ?').run(String(arquivoId));
+    auditar(ator, 'empresa.arquivo', `${l.razao_social}: ${a.nome} removido`);
+    return empresaDeLinha(l);
+  }
+
+  /**
+   * Cadastra as empresas já usadas pelo sistema (Antoniazzi & Cia e Antoniazzi Alimentos) com os modelos atuais
+   * em Word, o modelo da planilha de comissões e o logotipo. Só roda uma vez, com o cadastro vazio.
+   * arquivos: { 'nome': { tipo, dados } } por CNPJ, gerados por quem chama (ver server/empresas-padrao.js).
+   */
+  function semearEmpresas(padrao) {
+    const ja = q("SELECT valor FROM configuracoes WHERE chave = 'empresasPadrao'").get();
+    if (ja || q('SELECT COUNT(*) AS n FROM empresas').get().n) return 0;
+    let n = 0;
+    db.transacao(() => {
+      for (const em of padrao) {
+        const e = normalizarEmpresa(em);
+        const { razao, cnpj, ...resto } = e;
+        const id = novoId();
+        q('INSERT INTO empresas (id, razao_social, cnpj, dados, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(id, razao, cnpj, JSON.stringify(resto), iso(), iso());
+        for (const a of em.arquivos || []) gravarArquivoEmpresa(id, a.tipo, a.nome, Buffer.from(a.dados), 'sistema', iso());
+        n++;
+      }
+      q("INSERT INTO configuracoes (chave, valor) VALUES ('empresasPadrao', 'true')").run();
+    });
+    if (n) auditar(null, 'empresa.criar', `${n} empresa(s) já existentes cadastradas com os modelos atuais`);
+    return n;
+  }
+
   function backup(ator) {
     exigir(ator, 'admin');
     const d = dados(ator);
@@ -1445,7 +1601,13 @@ function criarServico(db, opcoes = {}) {
       lancamentos: q('SELECT * FROM folha_lancamentos ORDER BY competencia').all().map(lancamentoDeLinha),
     };
     auditar(ator, 'dados.backup', null);
-    return { versao: 5, exportadoEm: iso(), ...d, contratos, distratos, indices: indicesSalvos, folha };
+    const empresas = q('SELECT * FROM empresas').all().map((l) => ({
+      ...empresaDeLinha(l),
+      arquivos: q('SELECT * FROM empresas_arquivos WHERE empresa_id = ?').all(l.id).map((a) => ({
+        tipo: a.tipo, nome: a.nome, conteudo: Buffer.from(a.dados).toString('base64'), enviadoPor: a.enviado_por, enviadoEm: a.enviado_em,
+      })),
+    }));
+    return { versao: 6, exportadoEm: iso(), ...d, contratos, distratos, indices: indicesSalvos, folha, empresas };
   }
 
   function restaurar(ator, b) {
@@ -1536,6 +1698,23 @@ function criarServico(db, opcoes = {}) {
         }
       });
     }
+    if (Array.isArray(b.empresas)) {
+      db.transacao(() => {
+        q('DELETE FROM empresas').run();
+        for (const em of b.empresas) {
+          const e = normalizarEmpresa(em);
+          const { razao, cnpj, ...resto } = e;
+          const id = novoId();
+          q('INSERT INTO empresas (id, razao_social, cnpj, dados, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(id, razao, cnpj, JSON.stringify(resto), em.criadoEm || iso(), iso());
+          for (const a of Array.isArray(em.arquivos) ? em.arquivos : []) {
+            if (!ARQUIVOS_EMPRESA[a.tipo] || !a.conteudo) continue;
+            const dados = Buffer.from(String(a.conteudo), 'base64');
+            gravarArquivoEmpresa(id, a.tipo, String(a.nome).slice(0, 150), dados, a.enviadoPor || ator.login, a.enviadoEm || iso());
+          }
+        }
+      });
+    }
     if (Array.isArray(b.indices)) {
       db.transacao(() => {
         const st = q(`INSERT INTO indices (serie, mes, valor, fonte, atualizado_em) VALUES (?, ?, ?, ?, ?)
@@ -1563,7 +1742,8 @@ function criarServico(db, opcoes = {}) {
     listarDistratos, salvarDistrato, removerDistrato, registrarDocumentoDistrato, consultarSimples,
     custos, salvarParametrosCustos, abrirCompetencia, salvarFolha, importarFolha, removerCompetencia,
     salvarCentroCusto, removerCentroCusto, importarCentrosCusto,
+    listarEmpresas, salvarEmpresa, removerEmpresa, enviarArquivoEmpresa, baixarArquivoEmpresa, removerArquivoEmpresa, semearEmpresas,
   };
 }
 
-module.exports = { criarServico, ErroApp, PERFIS };
+module.exports = { criarServico, ErroApp, PERFIS, REGIMES_EMPRESA, ARQUIVOS_EMPRESA };

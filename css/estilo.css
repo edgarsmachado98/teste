@@ -134,7 +134,7 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
 main { padding-block: 1rem 2rem; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 100%; }
 .painel { display: none; gap: 1rem; }
 .painel.ativo { display: grid; grid-template-columns: minmax(0, 1fr); }
-#aba-setores.ativo, #aba-colaboradores.ativo, #aba-regras.ativo {
+#aba-setores.ativo, #aba-colaboradores.ativo, #aba-regras.ativo, #aba-centros.ativo, #aba-empresas.ativo {
   grid-template-columns: minmax(260px, 360px) 1fr; align-items: start;
 }
 
@@ -246,7 +246,7 @@ button.mini { padding: .2rem .5rem; font-size: .8rem; }
   .btn-menu { display: inline-flex; }
   .topo { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; }
   .acoes-topo { width: 100%; }
-  #aba-setores.ativo, #aba-colaboradores.ativo, #aba-regras.ativo { grid-template-columns: 1fr; }
+  #aba-setores.ativo, #aba-colaboradores.ativo, #aba-regras.ativo, #aba-centros.ativo, #aba-empresas.ativo { grid-template-columns: 1fr; }
   .tabela { display: block; overflow-x: auto; }
 }
 
@@ -479,3 +479,13 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .rl-filtros .rl-tipo { grid-column: span 2; }
 .rl-filtros .linha-botoes { grid-column: 1 / -1; justify-content: flex-end; }
 #busca-colab { width: 14rem; }
+.emp-arquivos { display: grid; gap: .5rem; }
+.emp-arquivo { display: grid; gap: .35rem; padding: .45rem .55rem; border: 1px solid var(--borda); border-radius: 6px; }
+.emp-arquivo > b { font-size: .85rem; }
+.emp-arquivo small { color: var(--suave); overflow-wrap: anywhere; }
+.emp-item { display: grid; grid-template-columns: 1fr auto; gap: .2rem .5rem; align-items: center; padding-top: .3rem; border-top: 1px dashed var(--borda); }
+.emp-item small b { color: var(--texto); font-size: inherit; }
+.emp-item .linha-botoes { grid-column: 2; grid-row: 1 / span 2; justify-content: flex-end; }
+.emp-item img { max-height: 48px; max-width: 120px; background: #ffffff; border-radius: 4px; }
+.emp-logo-lista { width: 44px; height: 44px; object-fit: contain; background: #ffffff; border-radius: 4px; border: 1px solid var(--borda); }
+.chip.mini { font-size: .7rem; }

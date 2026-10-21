@@ -34,7 +34,7 @@ const TIPOS = {
 const COOKIE = 'escala_sid';
 const VERSAO = require('../package.json').version;
 const LIMITE_CORPO = 1024 * 1024;
-const LIMITE_CORPO_BACKUP = 20 * 1024 * 1024;
+const LIMITE_CORPO_BACKUP = 64 * 1024 * 1024; // o backup leva os arquivos anexados às empresas
 
 // ------------------------------------------------- limite de tentativas por IP
 
@@ -166,6 +166,14 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
     { limiteCorpo: LIMITE_CORPO_BACKUP });
   rota('PUT', '/api/colaboradores/:id', ({ usuario, corpo, p }) => servico.salvarColaborador(usuario, { ...corpo, id: p.id }));
   rota('DELETE', '/api/colaboradores/:id', ({ usuario, p }) => servico.removerColaborador(usuario, p.id));
+  rota('GET', '/api/empresas', ({ usuario }) => servico.listarEmpresas(usuario));
+  rota('POST', '/api/empresas', ({ usuario, corpo }) => servico.salvarEmpresa(usuario, { ...corpo, id: null }));
+  rota('PUT', '/api/empresas/:id', ({ usuario, corpo, p }) => servico.salvarEmpresa(usuario, { ...corpo, id: p.id }));
+  rota('DELETE', '/api/empresas/:id', ({ usuario, p }) => servico.removerEmpresa(usuario, p.id));
+  rota('POST', '/api/empresas/:id/arquivos/:tipo', ({ usuario, corpo, p }) => servico.enviarArquivoEmpresa(usuario, p.id, p.tipo, corpo),
+    { limiteCorpo: 16 * 1024 * 1024 });
+  rota('GET', '/api/empresas/:id/arquivos/:arquivo', ({ usuario, p }) => servico.baixarArquivoEmpresa(usuario, p.id, p.arquivo));
+  rota('DELETE', '/api/empresas/:id/arquivos/:arquivo', ({ usuario, p }) => servico.removerArquivoEmpresa(usuario, p.id, p.arquivo));
   rota('POST', '/api/centros-custo', ({ usuario, corpo }) => servico.salvarCentroCusto(usuario, corpo));
   rota('POST', '/api/centros-custo/importar', ({ usuario, corpo }) => servico.importarCentrosCusto(usuario, corpo.linhas));
   rota('DELETE', '/api/centros-custo/:codigo', ({ usuario, p }) => servico.removerCentroCusto(usuario, p.codigo));
@@ -232,6 +240,16 @@ function criarApp({ servico, cookieSeguro = false, confiarProxy = false, limiteL
     const usuario = servico.sessao(token);
     const corpo = metodo === 'GET' ? {} : await lerCorpo(req, achou.limiteCorpo || LIMITE_CORPO);
     const resultado = await achou.fn({ req, res, url, p: params, corpo, token, usuario });
+    if (resultado && resultado.binario) {
+      // arquivo anexado: imagens abrem no navegador; os demais são baixados
+      res.writeHead(200, {
+        'Content-Type': resultado.mime || 'application/octet-stream',
+        'Content-Disposition': `${resultado.inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(resultado.nome)}`,
+        'Content-Length': resultado.binario.length, 'Cache-Control': 'no-store',
+        'Content-Security-Policy': "default-src 'none'; img-src 'self'; sandbox",
+      });
+      return res.end(resultado.binario);
+    }
     return json(res, 200, resultado);
   }
 
@@ -314,8 +332,16 @@ if (require.main === module) {
     console.error('Aviso: não foi possível fazer a cópia de segurança do banco:', e.message);
   }
   const db = abrirBanco(arquivo);
+  const servico = criarServico(db);
+  try {
+    // primeira inicialização: cadastra as empresas já existentes com os modelos atuais
+    const n = servico.semearEmpresas(require('./empresas-padrao.js')());
+    if (n) console.log(`Empresas cadastradas com os modelos atuais: ${n}`);
+  } catch (e) {
+    console.error('Aviso: não foi possível cadastrar as empresas padrão:', e.message);
+  }
   const servidor = criarApp({
-    servico: criarServico(db),
+    servico,
     cookieSeguro: process.env.COOKIE_SECURE === '1',
     confiarProxy: process.env.TRUST_PROXY === '1',
   });

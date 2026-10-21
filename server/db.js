@@ -118,6 +118,29 @@ CREATE TABLE IF NOT EXISTS distratos (
   UNIQUE (contrato_id, representada)
 );
 
+CREATE TABLE IF NOT EXISTS empresas (
+  id            TEXT PRIMARY KEY,
+  razao_social  TEXT NOT NULL,
+  cnpj          TEXT NOT NULL UNIQUE,
+  dados         TEXT NOT NULL,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
+
+-- modelos (contrato, distrato, planilha de comissões; vários por tipo) e logotipo (um) de cada empresa
+CREATE TABLE IF NOT EXISTS empresas_arquivos (
+  id          TEXT PRIMARY KEY,
+  empresa_id  TEXT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+  tipo        TEXT NOT NULL,
+  nome        TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  tamanho     INTEGER NOT NULL,
+  dados       BLOB NOT NULL,
+  enviado_por TEXT,
+  enviado_em  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_empresas_arquivos ON empresas_arquivos(empresa_id);
+
 CREATE TABLE IF NOT EXISTS centros_custo (
   codigo        TEXT PRIMARY KEY,
   nome          TEXT NOT NULL,

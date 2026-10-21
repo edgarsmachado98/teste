@@ -56,6 +56,7 @@
         <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Colaboradores</button>
         <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores</button>
         <button type="button" class="aba" data-modulo="cadastros" data-aba="centros">Centros de custo</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="empresas">Empresas</button>
       </div>
       <button type="button" class="modulo" data-modulo="escalas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/></svg><span class="rotulo">Escalas de trabalho</span></button>
       <div class="subitens" data-modulo="escalas">
@@ -454,6 +455,46 @@
       </div>
     </section>
 
+    <!-- EMPRESAS -->
+    <section id="aba-empresas" class="painel" data-modulo="cadastros">
+      <form id="form-empresa" class="cartao formulario" novalidate>
+        <h2 id="titulo-form-empresa">Nova empresa</h2>
+        <input type="hidden" name="id">
+        <label>Razão social<input name="razao" required maxlength="150"></label>
+        <div class="duas-colunas">
+          <label>CNPJ<input name="cnpj" required inputmode="numeric" placeholder="00.000.000/0000-00" autocomplete="off"></label>
+          <label>Regime tributário<select name="regime" id="sel-regime-empresa"></select></label>
+        </div>
+        <label>Nome fantasia<input name="fantasia" maxlength="150"></label>
+        <label>Endereço<input name="endereco" maxlength="200" placeholder="Rua, número, complemento e bairro"></label>
+        <div class="duas-colunas">
+          <label>Telefone<input name="telefone" maxlength="30" inputmode="tel" placeholder="(55) 0000-0000"></label>
+          <label>CEP<input name="cep" inputmode="numeric" placeholder="00.000-000" autocomplete="off"></label>
+          <label>Cidade<input name="cidade" maxlength="100"></label>
+          <label>Estado<select name="uf" id="sel-uf-empresa"></select></label>
+        </div>
+        <fieldset id="emp-arquivos">
+          <legend>Modelos e logotipo</legend>
+          <p class="dica" id="emp-arquivos-dica">Salve a empresa para anexar os modelos e o logotipo.</p>
+          <div id="emp-lista-arquivos" class="emp-arquivos"></div>
+        </fieldset>
+        <div class="linha-botoes so-edicao">
+          <button type="submit">Salvar empresa</button>
+          <button type="reset" class="sec">Cancelar</button>
+        </div>
+      </form>
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Empresas</h2>
+          <input type="search" id="busca-empresa" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar empresa">
+        </div>
+        <table class="tabela">
+          <thead><tr><th></th><th>Empresa</th><th>CNPJ</th><th>Regime</th><th>Cidade/UF</th><th>Arquivos</th><th></th></tr></thead>
+          <tbody id="lista-empresas"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- CENTROS DE CUSTO -->
     <section id="aba-centros" class="painel" data-modulo="cadastros">
       <form id="form-centro" class="cartao formulario so-edicao">
@@ -788,6 +829,7 @@
   <script src="js/contratos.js"></script>
   <script src="js/distratos.js"></script>
   <script src="js/custos.js"></script>
+  <script src="js/empresas.js"></script>
   <script src="js/acesso.js"></script>
 </body>
 </html>

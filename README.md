@@ -11,7 +11,7 @@ cada uma com seu login e perfil, e todas as alterações ficam registradas no hi
 
 | Módulo | Situação | O que faz |
 |--------|----------|-----------|
-| Cadastros | Disponível | Colaboradores (nome, matrícula, sexo, setor, jornada e horário) e setores. Base de todos os módulos |
+| Cadastros | Disponível | Colaboradores (nome, matrícula, sexo, setor, jornada e horário), setores, centros de custo e empresas (com modelos e logotipo). Base de todos os módulos |
 | Escalas de trabalho | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
 | Custos de pessoal | Disponível | Folha mensal com encargos, provisões e benefícios, e 12 relatórios de custos, benefícios, turnover e produtividade |
 | Contratos de representantes | Disponível | Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, em PDF e Word |
@@ -179,6 +179,22 @@ Todos com filtro de período e setor, impressão/PDF (A4 paisagem) e exportaçã
 | | Banco de horas | saldos por colaborador e passivo se pagos como hora extra |
 
 **Carregar exemplo** traz seis meses de folha fictícia para conhecer os relatórios.
+
+## Empresas
+
+**Cadastros › Empresas** guarda os dados de cada empresa (razão social, CNPJ, nome fantasia, regime tributário,
+endereço, telefone, cidade, estado e CEP) e os arquivos dela:
+
+- **Modelos de contrato, de distrato e de planilha de comissões para distrato**: vários por tipo
+  (por exemplo, contrato de SP e contrato de RS/SC). Word, PDF, ODT; a planilha também em Excel, ODS ou CSV.
+- **Logotipo**: um por empresa (PNG ou JPG); enviar outro substitui o anterior.
+
+Os arquivos ficam guardados para consulta e download (até 10 MB cada) e entram no backup. Os documentos
+gerados pelo sistema (contratos, distratos e memória de cálculo) continuam usando os modelos já embutidos.
+
+Na primeira vez que esta versão é iniciada, as empresas já usadas pelo sistema (Antoniazzi & Cia e Antoniazzi
+Alimentos) são cadastradas com os modelos atuais (gerados com os campos do representante em branco) e os
+logotipos. Isso acontece uma única vez: empresas alteradas ou excluídas depois não são recriadas.
 
 ## Contratos de representantes
 
@@ -381,10 +397,12 @@ js/planilha.js       leitura de planilhas .xls, .xlsx e .csv (sem dependências)
 js/custos-calculo.js custo mensal, encargos, provisões e relatórios da folha (navegador e servidor)
 js/custos.js         tela de custos: lançamentos, relatórios e parâmetros
 js/tema.js           modo claro/escuro
+js/empresas.js       cadastro de empresas, modelos e logotipo
 img/                 logotipos usados nos contratos
 server/server.js     servidor HTTP, rotas da API, sessão e segurança
 server/servico.js    regras de negócio e permissões
 server/db.js         banco de dados SQLite (esquema)
+server/empresas-padrao.js  empresas já existentes, cadastradas na primeira inicialização
 server/senhas.js     hash de senhas (scrypt)
 tests/               testes automatizados
 ```

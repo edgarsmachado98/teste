@@ -170,7 +170,7 @@ test('competência, lançamentos, importação, desligamento e permissões', () 
 
   // backup e restauração mantêm a folha e os dados contratuais
   const b = JSON.parse(JSON.stringify(s.backup(ADMIN)));
-  assert.strictEqual(b.versao, 5);
+  assert.strictEqual(b.versao, 6);
   s.restaurar(ADMIN, b);
   const depois = s.custos(ADMIN);
   assert.strictEqual(depois.lancamentos.length, 3);
