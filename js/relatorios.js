@@ -27,6 +27,7 @@
     }
     renderDistratos();
     renderContratos();
+    renderEscalas();
   }
 
   // ---------------------------------------------------------------- distratos
@@ -132,6 +133,129 @@
     }
   });
 
+  // ---------------------------------------------------------------- escalas
+
+  const M = window.EscalaMotor;
+  const SITUACAO = { T: 'Trabalhando', F: 'Folga', FER: 'Feriado' };
+  const NOMES_DIA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+
+  /**
+   * Um registro por colaborador e dia de todas as escalas geradas. Quando o colaborador está numa escala de
+   * centro de custo e também na escala de todos, vale a do centro de custo (é a mais específica).
+   */
+  function registrosEscala() {
+    const est = App.estado();
+    const colab = new Map(est.colaboradores.map((c) => [c.id, c]));
+    const setor = new Map(est.setores.map((x) => [x.id, x]));
+    const vistos = new Map();
+    const escalas = Object.entries(est.escalas || {}).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1));
+    for (const [escopo, e] of escalas) {
+      for (const [id, cels] of Object.entries(e.celulas || {})) {
+        const c = colab.get(id);
+        if (!c) continue;
+        cels.forEach((t, i) => {
+          const d = e.dias[i];
+          if (!d || vistos.has(`${id}|${d.data}`)) return;
+          const chave = `${id}|${d.data}`;
+          vistos.set(chave, { data: d.data, dow: d.dow, feriado: d.feriado, c, setor: setor.get(c.setorId), escopo, t });
+        });
+      }
+    }
+    return [...vistos.values()];
+  }
+
+  function periodoPadrao() {
+    const est = App.estado();
+    const todas = Object.values(est.escalas || {});
+    if ($('#re-de').value || !todas.length) return;
+    const hoje = new Date().toISOString().slice(0, 10);
+    const ini = todas.map((e) => e.inicio).sort()[0];
+    const fim = todas.map((e) => e.fim).sort().slice(-1)[0];
+    const de = hoje >= ini && hoje <= fim ? hoje : ini;
+    $('#re-de').value = de;
+    $('#re-ate').value = de;
+  }
+
+  function filtrarEscala() {
+    const de = $('#re-de').value;
+    const ate = $('#re-ate').value || de;
+    const setorId = $('#re-setor').value;
+    const sit = $('#re-situacao').value;
+    const busca = $('#re-busca').value.trim();
+    return registrosEscala().filter((r) => (!de || r.data >= de) && (!ate || r.data <= ate) &&
+      (!setorId || r.c.setorId === setorId) && (!sit || r.t.tipo === sit) &&
+      (contem(r.c.nome, busca) || String(r.c.matricula).includes(busca)))
+      .sort((a, b) => a.data.localeCompare(b.data) || String(a.setor ? a.setor.nome : '').localeCompare(String(b.setor ? b.setor.nome : '')) ||
+        (a.t.tipo === 'T' ? 0 : 1) - (b.t.tipo === 'T' ? 0 : 1) || (a.t.inicio || 0) - (b.t.inicio || 0) || a.c.nome.localeCompare(b.c.nome));
+  }
+
+  const horario = (t) => (t.tipo === 'T' ? `${M.horaDeMinutos(t.inicio)} às ${M.horaDeMinutos(t.fim % 1440)}` : '—');
+  const centro = (r) => (r.c.centroCustoCodigo ? `${r.c.centroCustoCodigo} · ${App.nomeCentro(r.c.centroCustoCodigo)}` : '—');
+  const rotuloDia = (r) => `${NOMES_DIA[r.dow]}, ${dataBR(r.data)}${r.feriado ? ` — ${r.feriado.nome}` : ''}`;
+
+  function renderEscalas() {
+    const est = App.estado();
+    const sel = $('#re-setor');
+    const atual = sel.value;
+    sel.innerHTML = '<option value="">Todos os setores</option>' +
+      est.setores.map((x) => `<option value="${x.id}">${esc(x.nome)}</option>`).join('');
+    sel.value = atual;
+    periodoPadrao();
+    const lista = filtrarEscala();
+    const geradas = Object.keys(est.escalas || {}).length;
+    // contagem de quem trabalha por dia e setor (sem os filtros de situação e de nome)
+    const trabalham = {};
+    for (const r of registrosEscala()) if (r.t.tipo === 'T') {
+      const k = `${r.data}|${r.c.setorId}`;
+      trabalham[k] = (trabalham[k] || 0) + 1;
+    }
+    let html = '';
+    let dia = '';
+    let set = null;
+    for (const r of lista) {
+      if (r.data !== dia) {
+        dia = r.data; set = null;
+        html += `<tr class="re-dia"><th colspan="6">${esc(rotuloDia(r))}</th></tr>`;
+      }
+      if (r.c.setorId !== set) {
+        set = r.c.setorId;
+        const n = trabalham[`${r.data}|${set}`] || 0;
+        const min = r.setor ? r.setor.minimoPorDia || 0 : 0;
+        // setor fechado no dia (dia da semana sem funcionamento ou feriado em que não abre): sem mínimo a cumprir
+        const fechado = r.setor && (!r.setor.diasFuncionamento[r.dow] || (r.feriado && !r.setor.funcionaFeriados));
+        html += `<tr class="re-setor"><th colspan="6">${esc(r.setor ? r.setor.nome : 'Sem setor')}
+          <small class="${!fechado && n < min ? 'baixo' : ''}">${fechado ? 'setor fechado neste dia' : `${n} trabalhando · mínimo ${min}`}</small></th></tr>`;
+      }
+      html += `<tr><td>${esc(r.c.matricula)}</td><td>${esc(r.c.nome)}</td>
+        <td><span class="re-sit ${r.t.tipo}">${SITUACAO[r.t.tipo] || r.t.tipo}</span></td>
+        <td>${esc(horario(r.t))}</td><td>${esc(r.c.jornada)}</td><td>${esc(centro(r))}</td></tr>`;
+    }
+    $('#re-lista').innerHTML = html || `<tr><td colspan="6" class="vazio">${geradas
+      ? 'Nenhum colaborador escalado com esses filtros. Confira o período: ele deve estar dentro das escalas geradas.'
+      : 'Nenhuma escala gerada. Gere a escala em Escalas de trabalho.'}</td></tr>`;
+    const dias = new Set(lista.map((r) => r.data)).size;
+    $('#re-resumo').textContent = lista.length ? `· ${dias} dia(s) · ${lista.filter((r) => r.t.tipo === 'T').length} turno(s) de trabalho` : '';
+  }
+  ['#re-de', '#re-ate', '#re-setor', '#re-situacao', '#re-busca'].forEach((s) => $(s).addEventListener('input', renderEscalas));
+  $('#re-de').addEventListener('change', () => { if ($('#re-ate').value < $('#re-de').value) $('#re-ate').value = $('#re-de').value; renderEscalas(); });
+
+  const COLS_E = [
+    ['Data', (r) => dataBR(r.data), 12],
+    ['Dia', (r) => NOMES_DIA[r.dow] + (r.feriado ? ` (${r.feriado.nome})` : ''), 22],
+    ['Setor', (r) => (r.setor ? r.setor.nome : ''), 20],
+    ['Matrícula', (r) => r.c.matricula, 11],
+    ['Colaborador', (r) => r.c.nome, 30],
+    ['Situação', (r) => SITUACAO[r.t.tipo] || r.t.tipo, 13],
+    ['Horário', (r) => horario(r.t), 16],
+    ['Jornada', (r) => r.c.jornada, 10],
+    ['Centro de custo', (r) => centro(r), 26],
+  ];
+  const tituloEscala = () => {
+    const de = $('#re-de').value; const ate = $('#re-ate').value || de;
+    const s = $('#re-setor');
+    return `Escala ${de === ate ? `de ${dataBR(de)}` : `de ${dataBR(de)} a ${dataBR(ate)}`}${s.value ? ` — ${s.options[s.selectedIndex].text}` : ''}`;
+  };
+
   // ---------------------------------------------------------------- exportação
 
   const hoje = () => new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -181,6 +305,8 @@
   $('#rd-pdf').addEventListener('click', () => imprimir('Relatório de distratos', COLS_D, filtrarDistratos()));
   $('#rc-xlsx').addEventListener('click', () => exportarXlsx('Contratos de representantes', COLS_C, filtrarContratos(), 'relatorio_contratos'));
   $('#rc-pdf').addEventListener('click', () => imprimir('Contratos de representantes', COLS_C, filtrarContratos()));
+  $('#re-xlsx').addEventListener('click', () => exportarXlsx(tituloEscala(), COLS_E, filtrarEscala(), 'relatorio_escala'));
+  $('#re-pdf').addEventListener('click', () => imprimir(tituloEscala(), COLS_E, filtrarEscala()));
 
   window.addEventListener('app-iniciado', (ev) => { usuario = ev.detail; });
   window.addEventListener('app-encerrado', () => { usuario = null; distratos = []; contratos = []; });

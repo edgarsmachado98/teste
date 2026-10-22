@@ -540,3 +540,13 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .rel-rolagem { overflow-x: auto; }
 .rel-rolagem td.num, .rel-rolagem th.num { white-space: nowrap; }
 .rel-rolagem tfoot td { font-weight: 700; border-top: 2px solid var(--borda); }
+
+/* relatório de escalas: cabeçalhos de data e de setor dentro da tabela */
+.rel-escala tr.re-dia th { background: var(--topo); color: var(--topo-texto); text-align: left; font-size: .95rem; padding: .55rem .75rem; }
+.rel-escala tr.re-setor th { background: var(--cabecalho); text-align: left; font-weight: 700; }
+.rel-escala tr.re-setor small { font-weight: 500; color: var(--suave); margin-left: .4rem; }
+.rel-escala tr.re-setor small.baixo { color: var(--erro); font-weight: 700; }
+.re-sit { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+.re-sit.T { background: var(--trabalho); color: var(--trabalho-texto); }
+.re-sit.F { background: var(--folga); color: var(--folga-texto); }
+.re-sit.FER { background: var(--feriado); color: var(--feriado-texto); }

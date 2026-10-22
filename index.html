@@ -83,6 +83,7 @@
       <div class="subitens" data-modulo="relatorios">
         <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-distratos">Distratos</button>
         <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-contratos">Contratos de representantes</button>
+        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-escalas">Escalas por data e setor</button>
       </div>
       <div class="subitens so-edicao" data-modulo="custos">
         <button type="button" class="aba" data-modulo="custos" data-aba="folha">Lançamentos</button>
@@ -796,6 +797,35 @@
             <thead><tr><th>Representante</th><th>CNPJ</th><th>Cidade</th><th>Estado de atuação</th><th>Data do contrato</th>
               <th>Situação</th><th>Distratos</th><th></th></tr></thead>
             <tbody id="rc-lista"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="aba-rel-escalas" class="painel" data-modulo="relatorios">
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Escalas por data e setor <small id="re-resumo"></small></h2>
+          <div class="linha-botoes">
+            <button type="button" id="re-xlsx" class="sec">Exportar Excel</button>
+            <button type="button" id="re-pdf" class="sec">Imprimir / PDF</button>
+          </div>
+        </div>
+        <div class="rel-filtros">
+          <label>De<input type="date" id="re-de"></label>
+          <label>Até<input type="date" id="re-ate"></label>
+          <label>Setor<select id="re-setor"></select></label>
+          <label>Situação<select id="re-situacao">
+            <option value="">Todos</option><option value="T">Trabalhando</option><option value="F">Folga</option><option value="FER">Feriado</option>
+          </select></label>
+          <label>Colaborador<input type="search" id="re-busca" placeholder="Nome ou matrícula"></label>
+        </div>
+        <p class="dica">Quem trabalha e quem folga em cada dia, por setor, conforme as escalas geradas em Escalas de trabalho.
+          Ao lado de cada setor aparece quantos trabalham e o mínimo por dia do setor.</p>
+        <div class="rel-rolagem">
+          <table class="tabela rel-escala">
+            <thead><tr><th>Matrícula</th><th>Colaborador</th><th>Situação</th><th>Horário</th><th>Jornada</th><th>Centro de custo</th></tr></thead>
+            <tbody id="re-lista"></tbody>
           </table>
         </div>
       </div>

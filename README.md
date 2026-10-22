@@ -342,6 +342,10 @@ O módulo **Relatórios** tem duas seções, com pesquisa e exportação para Ex
   memória de cálculo; o "Voltar" retorna ao relatório.
 - **Contratos de representantes**: pesquisa por representante, CNPJ e cidade, com a situação e os distratos de
   cada contrato.
+- **Escalas por data e setor**: para um dia ou período (De/Até), quem trabalha (com horário) e quem está de folga
+  ou feriado, agrupado por data e setor, com o número de pessoas trabalhando frente ao mínimo do setor (ou
+  "setor fechado neste dia"). Filtros por setor, situação e colaborador. Usa as escalas geradas em Escalas de
+  trabalho; se o colaborador estiver numa escala de centro de custo e na de todos, vale a do centro de custo.
 
 Na tela de Distratos, o representante com distrato em mais de uma empresa representada aparece em uma linha só.
 Ao exibir ou editar, os botões **Empresa representada** alternam entre os distratos de cada empresa (e, na
