@@ -128,7 +128,7 @@
     $('#dt-naturalidade').value = d.naturalidade || '';
     const docs = d.documentos && d.documentos.length ? d.documentos : ['distrato', 'aviso'];
     form.querySelectorAll('input[name=dt-documento]').forEach((x) => { x.checked = docs.includes(x.value); });
-    $('#dt-titulo').textContent = d.id ? `Distrato — ${d.razao} (${nomeEmpresa(d.representada)})` : 'Novo distrato';
+    $('#dt-titulo').textContent = d.id ? `Distrato — ${d.razao} (${nomeEmpresa(d.representada)})` : 'Nova rescisão';
     form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !editavel(); });
     $('#dt-modo').hidden = !exibindo;
     renderEmpresas();
@@ -210,7 +210,7 @@
       .sort((a, b) => (a.situacao === 'ativo' ? -1 : 1) - (b.situacao === 'ativo' ? -1 : 1) || String(b.dataContrato).localeCompare(a.dataContrato));
     if (!achados.length) {
       contrato = null;
-      renderRepresentante('Nenhum contrato cadastrado com este CNPJ. Cadastre-o em Contratos de representantes.');
+      renderRepresentante('Nenhum contrato cadastrado com este CNPJ. Cadastre-o em Representação Comercial.');
       return;
     }
     const outro = !contrato || contrato.id !== achados[0].id;
@@ -241,7 +241,7 @@
         <dt>Responsável</dt><dd>${esc(contrato.responsavel || '—')} · CPF ${esc(contrato.cpf || '—')}</dd>
         <dt>Endereço</dt><dd>${esc(C.valores(contrato).endEmpresa || '—')}</dd>
         <dt>Contrato</dt><dd>desde ${dataBR(contrato.dataContrato) || '—'} · ${contrato.situacao === 'encerrado' ? 'encerrado' : 'ativo'}</dd>
-      </dl>` + (pend.length ? `<p class="aviso">O cadastro deste contrato está incompleto (${pend.length} campo(s)). Complete-o em Contratos de representantes para gerar os documentos.</p>` : '');
+      </dl>` + (pend.length ? `<p class="aviso">O cadastro deste contrato está incompleto (${pend.length} campo(s)). Complete-o em Representação Comercial para gerar os documentos.</p>` : '');
   }
 
   // ------------------------------------------------- Simples Nacional / IR
@@ -664,7 +664,7 @@
       periodoPendentes: 'dt-pend-inicio', aReceber: 'dt-rec-valor', periodoReceber: 'dt-rec-inicio' }[m.dataset.campo];
     const el = alvo ? document.getElementById(alvo) : null;
     if (el) { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-    else App.avisar('Este dado vem do cadastro do contrato (Contratos de representantes) ou do cálculo.');
+    else App.avisar('Este dado vem do cadastro do contrato (Representação Comercial) ou do cálculo.');
   });
 
   // ------------------------------------------------------------ ciclo de vida

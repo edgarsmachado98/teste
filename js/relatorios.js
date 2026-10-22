@@ -232,7 +232,7 @@
     }
     $('#re-lista').innerHTML = html || `<tr><td colspan="6" class="vazio">${geradas
       ? 'Nenhum colaborador escalado com esses filtros. Confira o período: ele deve estar dentro das escalas geradas.'
-      : 'Nenhuma escala gerada. Gere a escala em Escalas de trabalho.'}</td></tr>`;
+      : 'Nenhuma escala gerada. Gere a escala em Gestão de Jornada.'}</td></tr>`;
     const dias = new Set(lista.map((r) => r.data)).size;
     $('#re-resumo').textContent = lista.length ? `· ${dias} dia(s) · ${lista.filter((r) => r.t.tipo === 'T').length} turno(s) de trabalho` : '';
   }
@@ -301,10 +301,10 @@
     if (img.complete) window.print(); else { img.onload = () => window.print(); img.onerror = () => window.print(); }
   }
 
-  $('#rd-xlsx').addEventListener('click', () => exportarXlsx('Relatório de distratos', COLS_D, filtrarDistratos(), 'relatorio_distratos'));
-  $('#rd-pdf').addEventListener('click', () => imprimir('Relatório de distratos', COLS_D, filtrarDistratos()));
-  $('#rc-xlsx').addEventListener('click', () => exportarXlsx('Contratos de representantes', COLS_C, filtrarContratos(), 'relatorio_contratos'));
-  $('#rc-pdf').addEventListener('click', () => imprimir('Contratos de representantes', COLS_C, filtrarContratos()));
+  $('#rd-xlsx').addEventListener('click', () => exportarXlsx('Rescisões Realizadas', COLS_D, filtrarDistratos(), 'relatorio_distratos'));
+  $('#rd-pdf').addEventListener('click', () => imprimir('Rescisões Realizadas', COLS_D, filtrarDistratos()));
+  $('#rc-xlsx').addEventListener('click', () => exportarXlsx('Carteira de Representantes', COLS_C, filtrarContratos(), 'relatorio_contratos'));
+  $('#rc-pdf').addEventListener('click', () => imprimir('Carteira de Representantes', COLS_C, filtrarContratos()));
   $('#re-xlsx').addEventListener('click', () => exportarXlsx(tituloEscala(), COLS_E, filtrarEscala(), 'relatorio_escala'));
   $('#re-pdf').addEventListener('click', () => imprimir(tituloEscala(), COLS_E, filtrarEscala()));
 

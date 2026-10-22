@@ -96,6 +96,7 @@ code { background: var(--codigo); padding: 0 .3em; border-radius: 3px; }
 .modulo:hover { background: rgba(255, 255, 255, .08); color: var(--topo-texto); }
 .modulo.ativo { background: var(--dourado); color: #14163f; font-weight: 700; }
 .modulo .chip.breve { font-size: .62rem; }
+.grupo-trilho { font-size: .5rem; font-weight: 800; letter-spacing: .12em; color: #7e83b8; margin-top: .35rem; }
 .trilho-rodape { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: .6rem; }
 .avatar {
   width: 2.5rem; height: 2.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;

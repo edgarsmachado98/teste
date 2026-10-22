@@ -9,13 +9,17 @@ cada uma com seu login e perfil, e todas as alterações ficam registradas no hi
 
 ## Módulos
 
+A barra de ícones agrupa os módulos em **Pessoas** (Cadastros Gerais, Gestão de Jornada), **Comercial**
+(Representação Comercial, Rescisões Contratuais), **Gestão** (Relatórios Gerenciais, Gestão de Custos) e
+**Sistema** (Configurações, Acessos e Permissões). Os nomes são só de tela: os dados e o banco não mudam.
+
 | Módulo | Situação | O que faz |
 |--------|----------|-----------|
-| Cadastros | Disponível | Colaboradores (nome, matrícula, sexo, setor, jornada e horário), setores, centros de custo e empresas (com modelos e logotipo). Base de todos os módulos |
-| Escalas de trabalho | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
-| Custos de pessoal | Disponível | Folha mensal com encargos, provisões e benefícios, e 12 relatórios de custos, benefícios, turnover e produtividade |
-| Contratos de representantes | Disponível | Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, em PDF e Word |
-| Distratos | Disponível | Cálculo do distrato com correção pelo IGP-M e termo de distrato e aviso prévio em PDF e Word |
+| Cadastros Gerais | Disponível | Colaboradores (nome, matrícula, sexo, setor, jornada e horário), setores, centros de custo e empresas (com modelos e logotipo). Base de todos os módulos |
+| Gestão de Jornada | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
+| Gestão de Custos | Disponível | Folha mensal com encargos, provisões e benefícios, e 12 relatórios de custos, benefícios, turnover e produtividade |
+| Representação Comercial | Disponível | Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, em PDF e Word |
+| Rescisões Contratuais (distratos) | Disponível | Cálculo do distrato com correção pelo IGP-M e termo de distrato e aviso prévio em PDF e Word |
 
 ## Instalação e execução
 
@@ -332,17 +336,17 @@ O botão **Conferir no Cálculo Exato** abre o site para conferência.
    produção) são marcados na ficha e ficam fora da escala enquanto a caixa *Excluir colaboradores sem controle de
    jornada* estiver marcada; desmarque para incluí-los. A lista de colaboradores tem o filtro *Sem controle de jornada*.
 
-### Relatórios
+### Relatórios Gerenciais
 
-O módulo **Relatórios** tem duas seções, com pesquisa e exportação para Excel e PDF:
+O módulo **Relatórios Gerenciais** tem três seções, com pesquisa e exportação para Excel e PDF:
 
-- **Distratos**: os distratos salvos com o resultado gravado no momento em que foram salvos (indenização,
+- **Rescisões Realizadas**: os distratos salvos com o resultado gravado no momento em que foram salvos (indenização,
   aviso prévio, títulos pendentes, a receber, IR retido e total líquido). Pesquisa por representante, CNPJ,
   empresa representada e cidade. **Exibir** abre o distrato para conferir e baixar de novo os documentos e a
   memória de cálculo; o "Voltar" retorna ao relatório.
-- **Contratos de representantes**: pesquisa por representante, CNPJ e cidade, com a situação e os distratos de
+- **Carteira de Representantes**: pesquisa por representante, CNPJ e cidade, com a situação e os distratos de
   cada contrato.
-- **Escala**: para um dia ou período (De/Até), quem trabalha (com horário) e quem está de folga
+- **Escala Diária por Setor**: para um dia ou período (De/Até), quem trabalha (com horário) e quem está de folga
   ou feriado, agrupado por data e setor, com o número de pessoas trabalhando frente ao mínimo do setor (ou
   "setor fechado neste dia"). Filtros por setor, situação e colaborador. Usa as escalas geradas em Escalas de
   trabalho; se o colaborador estiver numa escala de centro de custo e na de todos, vale a do centro de custo.
@@ -351,9 +355,9 @@ Na tela de Distratos, o representante com distrato em mais de uma empresa repres
 Ao exibir ou editar, os botões **Empresa representada** alternam entre os distratos de cada empresa (e, na
 edição, permitem iniciar o da outra empresa com as mesmas datas).
 
-### Ferramentas (só administradores)
+### Configurações (só administradores)
 
-O módulo **Ferramentas**, na barra de ícones acima de Usuários, reúne o **backup** (baixar os dados em .json),
+O módulo **Configurações** (rótulo *Ajustes*), na barra de ícones acima de Usuários, reúne o **backup** (baixar os dados em .json),
 e a **restauração** de um backup. Ele aparece só para usuários administradores.
 
 ### Jornadas disponíveis

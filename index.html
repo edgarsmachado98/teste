@@ -49,17 +49,21 @@
     <div class="trilho">
       <div class="marca"><img src="img/logo-moinho-santa-maria.png" alt="Moinho Santa Maria" class="marca-logo" width="170" height="198"></div>
       <nav class="modulos" aria-label="Módulos do sistema">
-      <button type="button" class="modulo ativo" data-modulo="inicio" title="Início"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span class="curto" aria-hidden="true">Início</span><span class="rotulo">Início</span></button>
-      <button type="button" class="modulo" data-modulo="cadastros" title="Cadastros"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg><span class="curto" aria-hidden="true">Cadastros</span><span class="rotulo">Cadastros</span></button>
-      <button type="button" class="modulo" data-modulo="escalas" title="Escalas de trabalho"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/></svg><span class="curto" aria-hidden="true">Escalas</span><span class="rotulo">Escalas de trabalho</span></button>
-      <button type="button" class="modulo" data-modulo="contratos" title="Contratos de representantes"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="curto" aria-hidden="true">Contratos</span><span class="rotulo">Contratos de representantes</span></button>
-      <button type="button" class="modulo" data-modulo="distratos" title="Distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="curto" aria-hidden="true">Distratos</span><span class="rotulo">Distratos</span></button>
-      <button type="button" class="modulo" data-modulo="relatorios" title="Relatórios"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="curto" aria-hidden="true">Relatórios</span><span class="rotulo">Relatórios</span></button>
-      <button type="button" class="modulo so-edicao" data-modulo="custos" title="Custos de pessoal"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="curto" aria-hidden="true">Custos</span><span class="rotulo">Custos de pessoal</span></button>
+      <button type="button" class="modulo ativo" data-modulo="inicio" data-grupo="CORE RH" title="Painel"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span class="curto" aria-hidden="true">Painel</span><span class="rotulo">Painel</span></button>
+      <span class="grupo-trilho" aria-hidden="true">PESSOAS</span>
+      <button type="button" class="modulo" data-modulo="cadastros" data-grupo="Pessoas" title="Cadastros Gerais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg><span class="curto" aria-hidden="true">Cadastros</span><span class="rotulo">Cadastros Gerais</span></button>
+      <button type="button" class="modulo" data-modulo="escalas" data-grupo="Pessoas" title="Gestão de Jornada"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg><span class="curto" aria-hidden="true">Jornada</span><span class="rotulo">Gestão de Jornada</span></button>
+      <span class="grupo-trilho" aria-hidden="true">COMERCIAL</span>
+      <button type="button" class="modulo" data-modulo="contratos" data-grupo="Comercial" title="Representação Comercial"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="curto" aria-hidden="true">Comercial</span><span class="rotulo">Representação Comercial</span></button>
+      <button type="button" class="modulo" data-modulo="distratos" data-grupo="Comercial" title="Rescisões Contratuais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="curto" aria-hidden="true">Rescisões</span><span class="rotulo">Rescisões Contratuais</span></button>
+      <span class="grupo-trilho" aria-hidden="true">GESTÃO</span>
+      <button type="button" class="modulo" data-modulo="relatorios" data-grupo="Gestão" title="Relatórios Gerenciais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="curto" aria-hidden="true">Relatórios</span><span class="rotulo">Relatórios Gerenciais</span></button>
+      <button type="button" class="modulo so-edicao" data-modulo="custos" data-grupo="Gestão" title="Gestão de Custos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="curto" aria-hidden="true">Custos</span><span class="rotulo">Gestão de Custos</span></button>
       </nav>
       <div class="trilho-rodape">
-        <button type="button" class="modulo so-admin" data-modulo="ferramentas" title="Ferramentas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.5 17.5a1.8 1.8 0 0 0 2.5 2.5l5.8-5.8a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.3-.3-.3-2.3z"/></svg><span class="curto" aria-hidden="true">Ferramentas</span><span class="rotulo">Ferramentas</span></button>
-        <button type="button" class="modulo so-admin" data-modulo="usuarios" title="Usuários"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg><span class="curto" aria-hidden="true">Usuários</span><span class="rotulo">Usuários</span></button>
+        <span class="grupo-trilho so-admin" aria-hidden="true">SISTEMA</span>
+        <button type="button" class="modulo so-admin" data-modulo="ferramentas" data-grupo="Sistema" title="Configurações"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span class="curto" aria-hidden="true">Ajustes</span><span class="rotulo">Configurações</span></button>
+        <button type="button" class="modulo so-admin" data-modulo="usuarios" data-grupo="Sistema" title="Acessos e Permissões"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg><span class="curto" aria-hidden="true">Acessos</span><span class="rotulo">Acessos e Permissões</span></button>
         <span class="avatar" id="usuario-avatar" aria-hidden="true"></span>
       </div>
     </div>
@@ -67,34 +71,34 @@
     <!-- painel do módulo aberto: seções, ferramentas e usuário -->
     <div class="painel-menu">
       <div class="painel-menu-topo">
-        <small>CORE RH</small>
-        <b id="menu-titulo-modulo">Início</b>
+        <small id="menu-grupo">CORE RH</small>
+        <b id="menu-titulo-modulo">Painel</b>
       </div>
       <div class="subitens" data-modulo="cadastros">
-        <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Colaboradores</button>
-        <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores</button>
-        <button type="button" class="aba" data-modulo="cadastros" data-aba="centros">Centros de custo</button>
-        <button type="button" class="aba" data-modulo="cadastros" data-aba="empresas">Empresas</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="colaboradores">Quadro de Pessoal</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="setores">Setores e Áreas</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="centros">Centros de Custo</button>
+        <button type="button" class="aba" data-modulo="cadastros" data-aba="empresas">Empresas do Grupo</button>
       </div>
       <div class="subitens" data-modulo="escalas">
-        <button type="button" class="aba" data-modulo="escalas" data-aba="escala">Escala</button>
-        <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Regras e feriados</button>
+        <button type="button" class="aba" data-modulo="escalas" data-aba="escala">Escala de Trabalho</button>
+        <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Parâmetros e Feriados</button>
       </div>
       <div class="subitens" data-modulo="relatorios">
-        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-distratos">Distratos</button>
-        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-contratos">Contratos de representantes</button>
-        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-escalas">Escala</button>
+        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-distratos">Rescisões Realizadas</button>
+        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-contratos">Carteira de Representantes</button>
+        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-escalas">Escala Diária por Setor</button>
       </div>
       <div class="subitens so-edicao" data-modulo="custos">
-        <button type="button" class="aba" data-modulo="custos" data-aba="folha">Lançamentos</button>
-        <button type="button" class="aba" data-modulo="custos" data-aba="relatorios">Relatórios</button>
-        <button type="button" class="aba" data-modulo="custos" data-aba="parametros-custos">Encargos e alertas</button>
+        <button type="button" class="aba" data-modulo="custos" data-aba="folha">Lançamentos da Folha</button>
+        <button type="button" class="aba" data-modulo="custos" data-aba="relatorios">Análises de Custos</button>
+        <button type="button" class="aba" data-modulo="custos" data-aba="parametros-custos">Encargos e Parâmetros</button>
       </div>
-      <p class="subitens menu-desc" data-modulo="inicio">Resumo do sistema e acesso rápido aos módulos.</p>
+      <p class="subitens menu-desc" data-modulo="inicio">Visão geral do sistema e acesso rápido aos módulos.</p>
       <p class="subitens menu-desc" data-modulo="contratos">Contratos de representação comercial (Lei 4.886/1965) e documentos legais em PDF e Word.</p>
-      <p class="subitens menu-desc" data-modulo="distratos">Cálculo do distrato com correção pelo IGP-M, termo, aviso prévio e memória de cálculo.</p>
-      <p class="subitens menu-desc" data-modulo="ferramentas">Backup e restauração dos dados. Disponível só para administradores.</p>
-      <p class="subitens menu-desc" data-modulo="usuarios">Usuários, perfis de acesso e histórico de alterações.</p>
+      <p class="subitens menu-desc" data-modulo="distratos">Rescisão do contrato de representação (distrato): cálculo com correção pelo IGP-M, termo, aviso prévio e demonstrativo de cálculo.</p>
+      <p class="subitens menu-desc" data-modulo="ferramentas">Cópia de segurança e restauração de dados. Disponível só para administradores.</p>
+      <p class="subitens menu-desc" data-modulo="usuarios">Usuários, perfis de acesso e trilha de auditoria.</p>
 
       <div class="lateral-rodape">
         <div class="usuario-lateral">
@@ -141,26 +145,26 @@
       <h3 class="titulo-secao">Módulos</h3>
       <div class="cards-modulos">
         <button type="button" class="card-modulo" data-ir="cadastros">
-          <span class="card-topo"><b>Cadastros</b><span class="chip bom">Disponível</span></span>
+          <span class="card-topo"><b>Cadastros Gerais</b><span class="chip bom">Disponível</span></span>
           <span>Colaboradores (nome, matrícula, sexo, setor, jornada e horário) e setores da empresa.
             Base usada por todos os módulos.</span>
         </button>
         <button type="button" class="card-modulo" data-ir="escalas">
-          <span class="card-topo"><b>Escalas de trabalho</b><span class="chip bom">Disponível</span></span>
+          <span class="card-topo"><b>Gestão de Jornada</b><span class="chip bom">Disponível</span></span>
           <span>Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação de jornada,
             descanso semanal e interjornada.</span>
         </button>
         <button type="button" class="card-modulo so-edicao" data-ir="custos">
-          <span class="card-topo"><b>Custos de pessoal</b><span class="chip bom">Disponível</span></span>
+          <span class="card-topo"><b>Gestão de Custos</b><span class="chip bom">Disponível</span></span>
           <span>Folha mensal com encargos, provisões e benefícios, e relatórios de custos, benefícios, turnover,
             absenteísmo e banco de horas.</span>
         </button>
         <button type="button" class="card-modulo" data-ir="contratos">
-          <span class="card-topo"><b>Contratos de representantes</b><span class="chip bom">Disponível</span></span>
+          <span class="card-topo"><b>Representação Comercial</b><span class="chip bom">Disponível</span></span>
           <span>Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, com geração em PDF e Word.</span>
         </button>
         <button type="button" class="card-modulo" data-ir="distratos">
-          <span class="card-topo"><b>Distratos</b><span class="chip bom">Disponível</span></span>
+          <span class="card-topo"><b>Rescisões Contratuais</b><span class="chip bom">Disponível</span></span>
           <span>Cálculo da indenização (1/12) e do aviso prévio com correção pelo IGP-M, e termo de distrato e aviso prévio em PDF e Word.</span>
         </button>
       </div>
@@ -314,10 +318,10 @@
     <section id="aba-distratos" class="painel" data-modulo="distratos">
       <div class="cartao" id="dt-lista-cartao">
         <div class="cab-cartao">
-          <h2>Distratos de representação comercial</h2>
+          <h2>Rescisões contratuais (distratos)</h2>
           <div class="linha-botoes">
             <input type="search" id="dt-busca" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar distrato">
-            <button type="button" id="dt-novo" class="so-edicao">Novo distrato</button>
+            <button type="button" id="dt-novo" class="so-edicao">Nova rescisão</button>
           </div>
         </div>
         <table class="tabela">
@@ -329,7 +333,7 @@
       <div id="dt-editor" class="ct-editor dt-editor" hidden>
         <div class="barra-voltar">
           <button type="button" id="dt-voltar" class="sec">← Voltar à lista</button>
-          <h2 id="dt-titulo">Novo distrato</h2>
+          <h2 id="dt-titulo">Nova rescisão</h2>
           <span class="modo-chip" id="dt-modo" hidden>Somente leitura</span>
           <button type="button" id="dt-editar" class="so-edicao" hidden>Editar</button>
           <div class="dt-empresas" id="dt-empresas" role="group" aria-label="Empresa representada" hidden></div>
@@ -422,7 +426,7 @@
             <button type="button" id="dt-docx">Gerar Word (.docx)</button>
           </div>
           <div class="ct-acoes dt-memoria-acoes">
-            <span><b>Memória de cálculo</b> (comissões corrigidas, indenização, aviso e totais)</span>
+            <span><b>Demonstrativo de cálculo</b> (comissões corrigidas, indenização, aviso e totais)</span>
             <button type="button" id="dt-memoria-pdf" class="sec">Imprimir / PDF</button>
             <button type="button" id="dt-memoria-xlsx" class="sec">Planilha Excel (.xlsx)</button>
           </div>
@@ -566,7 +570,7 @@
         <button type="button" id="colab-editar" class="so-edicao" hidden>Editar</button>
       </div>
       <form id="form-colab" class="cartao formulario">
-        <h2 id="titulo-form-colab">Novo colaborador</h2>
+        <h2 id="titulo-form-colab">Admissão de colaborador</h2>
         <input type="hidden" name="id">
         <label>Nome completo<input name="nome" required maxlength="100"></label>
         <label>Matrícula<input name="matricula" required maxlength="20"></label>
@@ -636,7 +640,7 @@
         <div class="cab-cartao">
           <h2>Colaboradores</h2>
           <div class="linha-botoes">
-            <button type="button" id="colab-novo" class="so-edicao">+ Novo colaborador</button>
+            <button type="button" id="colab-novo" class="so-edicao">+ Admitir colaborador</button>
             <select id="filtro-situacao-colab" aria-label="Filtrar por situação">
               <option value="ativos">Ativos</option>
               <option value="desligados">Desligados</option>
@@ -646,7 +650,7 @@
             <input type="search" id="busca-colab" placeholder="Buscar nome ou matrícula" aria-label="Buscar colaborador">
             <select id="filtro-setor-colab" aria-label="Filtrar por setor"></select>
             <select id="filtro-centro-colab" aria-label="Filtrar por centro de custo"></select>
-            <label class="botao sec so-edicao">Importar planilha<input type="file" id="arq-csv" accept=".xls,.xlsx,.csv,.txt" hidden></label>
+            <label class="botao sec so-edicao">Importar da folha<input type="file" id="arq-csv" accept=".xls,.xlsx,.csv,.txt" hidden></label>
           </div>
         </div>
         <p class="dica">Importe a planilha de empregados do sistema de folha (.xls, .xlsx ou .csv), como o relatório
@@ -753,7 +757,7 @@
     <section id="aba-rel-distratos" class="painel" data-modulo="relatorios">
       <div class="cartao">
         <div class="cab-cartao">
-          <h2>Distratos salvos <small id="rd-resumo"></small></h2>
+          <h2>Rescisões Realizadas <small id="rd-resumo"></small></h2>
           <div class="linha-botoes">
             <button type="button" id="rd-xlsx" class="sec">Exportar Excel</button>
             <button type="button" id="rd-pdf" class="sec">Imprimir / PDF</button>
@@ -765,7 +769,7 @@
           <label>Empresa representada<select id="rd-empresa"><option value="">Todas</option><option value="cia">Antoniazzi &amp; Cia</option><option value="alimentos">Antoniazzi Alimentos</option></select></label>
           <label>Cidade<input type="search" id="rd-cidade" placeholder="Cidade"></label>
         </div>
-        <p class="dica">Valores gravados quando o distrato foi salvo. Em <b>Exibir</b> você abre o distrato para conferir, imprimir e baixar de novo os documentos e a memória de cálculo.</p>
+        <p class="dica">Valores gravados quando o distrato foi salvo. Em <b>Exibir</b> você abre o distrato para conferir, imprimir e baixar de novo os documentos e o demonstrativo de cálculo.</p>
         <div class="rel-rolagem">
           <table class="tabela">
             <thead><tr><th>Representante</th><th>CNPJ</th><th>Empresa representada</th><th>Cidade</th><th>Data do distrato</th>
@@ -781,7 +785,7 @@
     <section id="aba-rel-contratos" class="painel" data-modulo="relatorios">
       <div class="cartao">
         <div class="cab-cartao">
-          <h2>Contratos de representantes <small id="rc-resumo"></small></h2>
+          <h2>Carteira de Representantes <small id="rc-resumo"></small></h2>
           <div class="linha-botoes">
             <button type="button" id="rc-xlsx" class="sec">Exportar Excel</button>
             <button type="button" id="rc-pdf" class="sec">Imprimir / PDF</button>
@@ -795,7 +799,7 @@
         <div class="rel-rolagem">
           <table class="tabela">
             <thead><tr><th>Representante</th><th>CNPJ</th><th>Cidade</th><th>Estado de atuação</th><th>Data do contrato</th>
-              <th>Situação</th><th>Distratos</th><th></th></tr></thead>
+              <th>Situação</th><th>Rescisões (distratos)</th><th></th></tr></thead>
             <tbody id="rc-lista"></tbody>
           </table>
         </div>
@@ -805,7 +809,7 @@
     <section id="aba-rel-escalas" class="painel" data-modulo="relatorios">
       <div class="cartao">
         <div class="cab-cartao">
-          <h2>Escala <small id="re-resumo"></small></h2>
+          <h2>Escala Diária por Setor <small id="re-resumo"></small></h2>
           <div class="linha-botoes">
             <button type="button" id="re-xlsx" class="sec">Exportar Excel</button>
             <button type="button" id="re-pdf" class="sec">Imprimir / PDF</button>
@@ -820,7 +824,7 @@
           </select></label>
           <label>Colaborador<input type="search" id="re-busca" placeholder="Nome ou matrícula"></label>
         </div>
-        <p class="dica">Quem trabalha e quem folga em cada dia, por setor, conforme as escalas geradas em Escalas de trabalho.
+        <p class="dica">Quem trabalha e quem folga em cada dia, por setor, conforme as escalas geradas em Gestão de Jornada.
           Ao lado de cada setor aparece quantos trabalham e o mínimo por dia do setor.</p>
         <div class="rel-rolagem">
           <table class="tabela rel-escala">
@@ -835,12 +839,12 @@
     <section id="aba-ferramentas" class="painel so-admin" data-modulo="ferramentas">
       <div class="ferramentas-grade">
         <div class="cartao ferramenta">
-          <h2>Backup (JSON)</h2>
+          <h2>Cópia de Segurança</h2>
           <p class="dica">Baixa uma cópia de todos os dados do sistema em um arquivo .json. Guarde-o em local seguro.</p>
           <button type="button" id="btn-exportar-json">Baixar backup</button>
         </div>
         <div class="cartao ferramenta">
-          <h2>Restaurar backup</h2>
+          <h2>Restauração de Dados</h2>
           <p class="dica">Substitui os dados atuais pelos do arquivo de backup escolhido.</p>
           <label class="botao sec">Escolher arquivo de backup<input type="file" id="arq-json" accept=".json" hidden></label>
         </div>
@@ -878,7 +882,7 @@
       </div>
       <div class="cartao historico">
         <div class="cab-cartao">
-          <h2>Histórico de alterações</h2>
+          <h2>Trilha de Auditoria</h2>
           <button type="button" id="btn-auditoria" class="sec mini">Atualizar</button>
         </div>
         <div class="rolagem-vertical">

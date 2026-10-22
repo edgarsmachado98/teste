@@ -300,7 +300,7 @@
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
       const avisos = [];
-      if (!res.usados.length) avisos.push('O modelo não tem nenhum marcador reconhecido; o arquivo saiu igual ao modelo. Veja a lista de marcadores em Cadastros › Empresas.');
+      if (!res.usados.length) avisos.push('O modelo não tem nenhum marcador reconhecido; o arquivo saiu igual ao modelo. Veja a lista de marcadores em Cadastros Gerais › Empresas do Grupo.');
       if (res.vazios.length) avisos.push(`Campos em branco no cadastro (saíram como ${'_'.repeat(10)}): ${res.vazios.join(', ')}.`);
       if (res.desconhecidos.length) avisos.push(`Marcadores não reconhecidos (ficaram como estão): ${res.desconhecidos.join(', ')}.`);
       if (avisos.length) App.avisar(avisos.join('\n\n'));

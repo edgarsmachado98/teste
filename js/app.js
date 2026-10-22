@@ -168,11 +168,15 @@
     });
     document.querySelectorAll('.painel').forEach((p) => p.classList.toggle('ativo', p === painel));
     // título da página: módulo e, quando houver, a seção dentro dele
-    const nomeModulo = $(`.modulo[data-modulo="${mod}"] .rotulo`).textContent;
+    const botaoModulo = $(`.modulo[data-modulo="${mod}"]`);
+    const nomeModulo = botaoModulo.querySelector('.rotulo').textContent;
+    const grupo = botaoModulo.dataset.grupo || 'CORE RH';
     const aba = abas.find((b) => b.dataset.aba === nome);
+    $('#menu-grupo').textContent = grupo.toUpperCase();
     $('#menu-titulo-modulo').textContent = nomeModulo;
     $('#titulo-pagina').textContent = aba ? aba.textContent : nomeModulo;
-    $('#caminho-pagina').textContent = aba ? nomeModulo : 'CORE RH';
+    // caminho: grupo › módulo (quando a página é uma seção do módulo)
+    $('#caminho-pagina').textContent = aba ? `${grupo} › ${nomeModulo}` : grupo;
     document.title = mod === 'inicio' ? 'CORE RH' : `${$('#titulo-pagina').textContent} · CORE RH`;
     if (!manterMenu) abrirMenu(false);
     if (mod === 'inicio') renderInicio();
@@ -211,7 +215,7 @@
     const mulheres = ativos.filter((c) => c.sexo === 'F').length;
     const total = ativos.length;
     let escalaValor = 'Nenhuma';
-    let escalaDetalhe = podeEditar() ? 'Gere a primeira em Escalas de trabalho' : 'Ainda não há escala gerada';
+    let escalaDetalhe = podeEditar() ? 'Gere a primeira em Gestão de Jornada' : 'Ainda não há escala gerada';
     let escalaClasse = '';
     const geradas = Object.entries(estado.escalas || {});
     if (geradas.length) {
@@ -484,12 +488,12 @@
     if (!aberto) return;
     const leitura = modo === 'exibir' || !podeEditar();
     formColab.querySelectorAll('input, select, textarea').forEach((el) => { if (el.type !== 'hidden') el.disabled = leitura; });
-    $('#colab-barra-titulo').textContent = c ? `${c.nome} (matrícula ${c.matricula})` : 'Novo colaborador';
+    $('#colab-barra-titulo').textContent = c ? `${c.nome} (matrícula ${c.matricula})` : 'Admissão de colaborador';
     $('#colab-modo').hidden = modo !== 'exibir';
     $('#colab-editar').hidden = $('#colab-editar-fim').hidden = modo !== 'exibir' || !podeEditar();
     $('#colab-salvar').hidden = leitura;
     $('#colab-cancelar').textContent = 'Voltar';
-    $('#titulo-form-colab').textContent = modo === 'novo' ? 'Novo colaborador' : modo === 'exibir' ? 'Dados do colaborador' : 'Editar colaborador';
+    $('#titulo-form-colab').textContent = modo === 'novo' ? 'Admissão de colaborador' : modo === 'exibir' ? 'Dados do colaborador' : 'Editar colaborador';
   }
   const voltarColab = () => { formColab.reset(); window.scrollTo(0, 0); };
   $('#colab-voltar').addEventListener('click', voltarColab);
