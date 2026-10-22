@@ -22,6 +22,8 @@
   const valoresMes = {}; // 'AAAA-MM' -> texto digitado
   let simples = {};      // situação no Simples Nacional: { situacao, fonte, consultadoEm, detalhe }
   const podeEditar = () => !!usuario && usuario.perfil !== 'consulta';
+  let exibindo = false; // aberto com "Exibir": só leitura
+  const editavel = () => podeEditar() && !exibindo;
 
   // ------------------------------------------------------------------ lista
 
@@ -47,7 +49,8 @@
         <td><b>${esc(d.razao)}</b></td><td>${esc(d.cnpj)}</td><td>${nomeEmpresa(d.representada)}</td>
         <td>${dataBR(d.dataDistrato)}</td><td class="num">R$ ${K.moeda(d.resultado.total)}</td>
         <td class="acoes">
-          <button type="button" class="mini sec" data-acao="abrir" data-id="${d.id}">${podeEditar() ? 'Editar' : 'Ver'}</button>
+          <button type="button" class="mini sec" data-acao="exibir" data-id="${d.id}">Exibir</button>
+          ${podeEditar() ? `<button type="button" class="mini sec" data-acao="abrir" data-id="${d.id}">Editar</button>` : ''}
           ${podeEditar() ? `<button type="button" class="mini perigo" data-acao="excluir" data-id="${d.id}">Excluir</button>` : ''}
         </td></tr>`).join('') ||
       `<tr><td colspan="6" class="vazio">${distratos.length ? 'Nenhum distrato encontrado.' : 'Nenhum distrato registrado.'}</td></tr>`;
@@ -60,7 +63,7 @@
     if (!b) return;
     const d = distratos.find((x) => x.id === b.dataset.id);
     if (!d) return;
-    if (b.dataset.acao === 'abrir') abrir(d);
+    if (b.dataset.acao === 'abrir' || b.dataset.acao === 'exibir') abrir(d, b.dataset.acao === 'exibir');
     else if (await App.confirmar(`Excluir o distrato de ${d.razao} (${nomeEmpresa(d.representada)})?`)) {
       try { await api.del(`/api/distratos/${d.id}`); } catch (e) { App.avisar(e.message); }
       carregar();
@@ -75,8 +78,9 @@
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
   };
 
-  function abrir(d) {
+  function abrir(d, soLeitura) {
     atual = d;
+    exibindo = !!soLeitura && !!d.id;
     Object.keys(valoresMes).forEach((k) => delete valoresMes[k]);
     for (const c of d.comissoes || []) valoresMes[c.mes] = K.moeda(c.valor);
     contrato = d.contratoId ? contratos.find((c) => c.id === d.contratoId) || null : null;
@@ -103,7 +107,10 @@
     const docs = d.documentos && d.documentos.length ? d.documentos : ['distrato', 'aviso'];
     form.querySelectorAll('input[name=dt-documento]').forEach((x) => { x.checked = docs.includes(x.value); });
     $('#dt-titulo').textContent = d.id ? `Distrato — ${d.razao} (${nomeEmpresa(d.representada)})` : 'Novo distrato';
-    form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !podeEditar(); });
+    form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !editavel(); });
+    $('#dt-modo').hidden = !exibindo;
+    $('#dt-editar').hidden = !exibindo || !podeEditar();
+    form.querySelectorAll('.dt-so-edicao').forEach((el) => { el.hidden = !editavel(); });
     $('#dt-pendencias').hidden = true;
     $('#dt-lista-cartao').hidden = true;
     $('#dt-editor').hidden = false;
@@ -111,17 +118,19 @@
     renderMeses();
     atualizar();
     window.scrollTo(0, 0);
-    if (podeEditar() && !contrato) $('#dt-cnpj').focus();
+    if (editavel() && !contrato) $('#dt-cnpj').focus({ preventScroll: true });
   }
 
   function fechar() {
     atual = null;
+    exibindo = false;
     contrato = null;
     $('#dt-editor').hidden = true;
     $('#dt-lista-cartao').hidden = false;
     renderLista();
   }
   $('#dt-voltar').addEventListener('click', fechar);
+  $('#dt-editar').addEventListener('click', () => { if (atual) abrir(atual, false); });
   document.querySelector('[data-voltar="dt"]').addEventListener('click', fechar);
 
   // ------------------------------------------------- busca do representante
@@ -188,7 +197,7 @@
   }
 
   async function consultarSimples(automatica) {
-    if (!contrato || !podeEditar()) return;
+    if (!contrato || !editavel()) return;
     const botao = $('#dt-consultar-simples');
     botao.disabled = true;
     $('#dt-simples-resultado').textContent = 'Consultando a Receita Federal…';
@@ -241,7 +250,7 @@
     const meses = mesesDoPeriodo();
     $('#dt-meses').innerHTML = meses.map((m) => `<tr data-mes="${m}">
         <td>${K.rotuloMes(m)}</td>
-        <td class="num"><input class="dt-valor" data-mes="${m}" inputmode="decimal" value="${esc(valoresMes[m] || '')}" aria-label="Comissão de ${K.rotuloMes(m)}"${podeEditar() ? '' : ' disabled'}></td>
+        <td class="num"><input class="dt-valor" data-mes="${m}" inputmode="decimal" value="${esc(valoresMes[m] || '')}" aria-label="Comissão de ${K.rotuloMes(m)}"${editavel() ? '' : ' disabled'}></td>
         <td class="num dt-fator"></td><td class="num dt-atualizado"></td></tr>`).join('') ||
       '<tr><td colspan="4" class="vazio">Informe o início do contrato e a data do distrato.</td></tr>';
   }
@@ -360,8 +369,8 @@
     const falt = $('#dt-faltando');
     falt.hidden = !r.indicesFaltando.length;
     falt.innerHTML = r.indicesFaltando.length ? `<p><b>Faltam ${r.indicesFaltando.length} mês(es) do IGP-M</b> para corrigir as comissões.
-        ${podeEditar() ? 'Atualize pelo Banco Central ou informe a variação mensal (%) abaixo:' : 'Peça a um operador para atualizar o IGP-M.'}</p>` +
-      (podeEditar() ? '<div class="dt-faltando-grade">' + r.indicesFaltando.slice(0, 24).map((m) =>
+        ${editavel() ? 'Atualize pelo Banco Central ou informe a variação mensal (%) abaixo:' : podeEditar() ? 'Clique em Editar para informá-los.' : 'Peça a um operador para atualizar o IGP-M.'}</p>` +
+      (editavel() ? '<div class="dt-faltando-grade">' + r.indicesFaltando.slice(0, 24).map((m) =>
         `<label><span>${K.rotuloMes(m)}</span><input data-indice="${m}" inputmode="decimal" placeholder="0,00"></label>`).join('') + '</div>' : '') : '';
 
     // resultado
@@ -481,7 +490,7 @@
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (!podeEditar()) return;
+    if (!editavel()) return;
     try {
       const salvo = await salvar();
       App.avisar(salvo.contratoEncerrado ? 'Distrato salvo. O contrato do representante passou para a situação Encerrado.' : 'Distrato salvo.');
@@ -496,7 +505,7 @@
     mostrarPendencias(pend);
     if (pend.length) return null;
     try {
-      if (podeEditar()) await salvar();
+      if (editavel()) await salvar();
       if (atual && atual.id) await api.post(`/api/distratos/${atual.id}/documento`, { formato });
     } catch (e) {
       App.avisar(e.message);
@@ -532,7 +541,7 @@
     if (r.indicesFaltando.length && !(await App.confirmar(`Faltam ${r.indicesFaltando.length} mês(es) do IGP-M; a correção ficará incompleta. ` +
       'Gerar a memória mesmo assim?'))) return null;
     try {
-      if (podeEditar()) await salvar();
+      if (editavel()) await salvar();
       if (atual && atual.id) await api.post(`/api/distratos/${atual.id}/documento`, { formato });
     } catch (e) {
       App.avisar(e.message);

@@ -270,11 +270,13 @@
       </div>
 
       <div id="ct-editor" class="ct-editor" hidden>
+        <div class="barra-voltar">
+          <button type="button" id="ct-voltar" class="sec">← Voltar à lista</button>
+          <h2 id="ct-titulo">Novo contrato</h2>
+          <span class="modo-chip" id="ct-modo" hidden>Somente leitura</span>
+          <button type="button" id="ct-editar" class="so-edicao" hidden>Editar</button>
+        </div>
         <form id="ct-form" class="cartao formulario ct-form" novalidate>
-          <div class="cab-cartao">
-            <h2 id="ct-titulo">Novo contrato</h2>
-            <button type="button" id="ct-voltar" class="sec mini">Voltar à lista</button>
-          </div>
           <p class="dica">Preencha os dados do <b>REPRESENTANTE</b>; o restante do texto segue o modelo da empresa.
             Na prévia, os dados preenchidos aparecem destacados — clique em um deles para editá-lo.</p>
           <fieldset><legend>Empresa representante</legend><div class="ct-grade" id="ct-grupo-empresa"></div></fieldset>
@@ -289,7 +291,7 @@
           <fieldset><legend>Documentos legais</legend><div id="ct-documentos" class="ct-docs"></div></fieldset>
           <div class="ct-pendencias" id="ct-pendencias" role="alert" hidden></div>
           <div class="ct-acoes">
-            <button type="submit" class="sec so-edicao">Salvar</button>
+            <button type="submit" id="ct-salvar" class="sec so-edicao">Salvar</button>
             <button type="button" id="ct-pdf">Gerar PDF</button>
             <button type="button" id="ct-docx">Gerar Word (.docx)</button>
             <button type="button" class="sec ct-voltar-fim" data-voltar="ct">Voltar à lista</button>
@@ -319,22 +321,24 @@
       </div>
 
       <div id="dt-editor" class="ct-editor dt-editor" hidden>
+        <div class="barra-voltar">
+          <button type="button" id="dt-voltar" class="sec">← Voltar à lista</button>
+          <h2 id="dt-titulo">Novo distrato</h2>
+          <span class="modo-chip" id="dt-modo" hidden>Somente leitura</span>
+          <button type="button" id="dt-editar" class="so-edicao" hidden>Editar</button>
+        </div>
         <form id="dt-form" class="cartao formulario ct-form" novalidate>
-          <div class="cab-cartao">
-            <h2 id="dt-titulo">Novo distrato</h2>
-            <button type="button" id="dt-voltar" class="sec mini">Voltar à lista</button>
-          </div>
 
           <fieldset><legend>1. Representante</legend>
             <div class="dt-busca-linha">
               <label>CNPJ do representante<input id="dt-cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" autocomplete="off"></label>
-              <button type="button" id="dt-buscar" class="sec">Buscar</button>
+              <button type="button" id="dt-buscar" class="sec dt-so-edicao">Buscar</button>
             </div>
             <div id="dt-representante" class="dt-representante" hidden></div>
             <div id="dt-simples" class="dt-simples" hidden>
               <div class="dt-simples-topo">
                 <b>Simples Nacional</b>
-                <button type="button" id="dt-consultar-simples" class="sec mini so-edicao">Consultar situação na Receita</button>
+                <button type="button" id="dt-consultar-simples" class="sec mini so-edicao dt-so-edicao">Consultar situação na Receita</button>
                 <a href="https://www8.receita.fazenda.gov.br/SimplesNacional/aplicacoes.aspx?id=21" target="_blank" rel="noopener noreferrer">Conferir na Consulta Optantes ↗</a>
               </div>
               <p id="dt-simples-resultado" class="dica"></p>
@@ -359,8 +363,8 @@
           <fieldset><legend>4. Comissões recebidas por mês</legend>
             <p class="dica">Informe o valor total recebido em cada mês de vigência. Meses em branco não entram no cálculo.</p>
             <div class="linha-botoes">
-              <button type="button" id="dt-colar" class="sec mini">Colar da planilha</button>
-              <button type="button" id="dt-limpar-meses" class="sec mini">Limpar valores</button>
+              <button type="button" id="dt-colar" class="sec mini dt-so-edicao">Colar da planilha</button>
+              <button type="button" id="dt-limpar-meses" class="sec mini dt-so-edicao">Limpar valores</button>
             </div>
             <div class="dt-meses-rolagem"><table class="tabela dt-meses">
               <thead><tr><th>Mês</th><th class="num">Comissão (R$)</th><th class="num">IGP-M acum.</th><th class="num">Atualizada (R$)</th></tr></thead>
@@ -406,7 +410,7 @@
 
           <div class="ct-pendencias" id="dt-pendencias" role="alert" hidden></div>
           <div class="ct-acoes">
-            <button type="submit" class="sec so-edicao">Salvar</button>
+            <button type="submit" id="dt-salvar" class="sec so-edicao dt-so-edicao">Salvar</button>
             <button type="button" id="dt-pdf">Gerar PDF</button>
             <button type="button" id="dt-docx">Gerar Word (.docx)</button>
           </div>
@@ -548,7 +552,13 @@
 
     <!-- COLABORADORES -->
     <section id="aba-colaboradores" class="painel" data-modulo="cadastros">
-      <form id="form-colab" class="cartao formulario so-edicao">
+      <div class="barra-voltar" id="colab-barra" hidden>
+        <button type="button" id="colab-voltar" class="sec">← Voltar</button>
+        <h2 id="colab-barra-titulo"></h2>
+        <span class="modo-chip" id="colab-modo" hidden>Somente leitura</span>
+        <button type="button" id="colab-editar" class="so-edicao" hidden>Editar</button>
+      </div>
+      <form id="form-colab" class="cartao formulario">
         <h2 id="titulo-form-colab">Novo colaborador</h2>
         <input type="hidden" name="id">
         <label>Nome completo<input name="nome" required maxlength="100"></label>
@@ -610,8 +620,9 @@
           </details>
         </fieldset>
         <div class="linha-botoes">
-          <button type="submit">Salvar colaborador</button>
-          <button type="reset" class="sec">Cancelar</button>
+          <button type="submit" id="colab-salvar" class="so-edicao">Salvar colaborador</button>
+          <button type="button" id="colab-editar-fim" class="so-edicao" hidden>Editar</button>
+          <button type="reset" class="sec" id="colab-cancelar">Cancelar</button>
         </div>
       </form>
       <div class="cartao">

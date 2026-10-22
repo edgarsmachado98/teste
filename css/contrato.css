@@ -1,7 +1,8 @@
 /* Módulo Contratos de representantes: editor, prévia em folhas e impressão (PDF). */
 
 .ct-editor { display: grid; grid-template-columns: minmax(300px, 420px) minmax(0, 1fr); gap: 1rem; align-items: start; }
-.ct-form { position: sticky; top: .5rem; max-height: calc(100vh - 1rem); overflow-y: auto; }
+/* abaixo da barra com "Voltar" (fixa no topo) */
+.ct-form { position: sticky; top: 4.6rem; max-height: calc(100vh - 5.1rem); overflow-y: auto; }
 .ct-form fieldset { display: grid; gap: .6rem; }
 .ct-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
 .ct-grade .largo, .ct-grade .check { grid-column: 1 / -1; }

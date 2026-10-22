@@ -13,6 +13,8 @@
   let empresas = []; // cadastro de empresas: as representadas definem os documentos legais disponíveis
   let atual = null; // contrato em edição ({} = novo)
   const podeEditar = () => !!usuario && usuario.perfil !== 'consulta';
+  let exibindo = false; // aberto com "Exibir": só leitura
+  const editavel = () => podeEditar() && !exibindo;
 
   const Doc = window.EscalaDocHTML;
   const documentoHTML = (dados, editavel) => Doc.renderizar(C.montar(dados), C.valores(dados), editavel);
@@ -60,7 +62,8 @@
         <td>${c.situacao === 'encerrado' ? '<span class="chip">Encerrado</span>' : '<span class="chip bom">Ativo</span>'}
           ${c.pendencias ? `<span class="chip breve" title="Faltam dados para gerar o documento">${c.pendencias} pendência(s)</span>` : ''}</td>
         <td class="acoes">
-          <button type="button" class="mini sec" data-acao="abrir" data-id="${c.id}">${podeEditar() ? 'Editar' : 'Ver'}</button>
+          <button type="button" class="mini sec" data-acao="exibir" data-id="${c.id}">Exibir</button>
+          ${podeEditar() ? `<button type="button" class="mini sec" data-acao="abrir" data-id="${c.id}">Editar</button>` : ''}
           ${podeEditar() ? `<button type="button" class="mini perigo" data-acao="excluir" data-id="${c.id}">Excluir</button>` : ''}
         </td></tr>`).join('') ||
       `<tr><td colspan="7" class="vazio">${contratos.length ? 'Nenhum contrato encontrado.' : 'Nenhum contrato cadastrado.'}</td></tr>`;
@@ -172,7 +175,7 @@
     if (!b) return;
     const c = contratos.find((x) => x.id === b.dataset.id);
     if (!c) return;
-    if (b.dataset.acao === 'abrir') abrir(c);
+    if (b.dataset.acao === 'abrir' || b.dataset.acao === 'exibir') abrir(c, b.dataset.acao === 'exibir');
     else if (b.dataset.acao === 'excluir') {
       if (!(await App.confirmar(`Excluir o contrato de ${c.razao}? Esta ação não pode ser desfeita.`))) return;
       try {
@@ -243,7 +246,7 @@
     const antes = [...form.querySelectorAll('input[name=documento]')].map((x) => x.value);
     const lista = C.documentosDaRegiao(d).filter(docVisivel);
     const caixa = (valor, nome, marcado) =>
-      `<label class="check"><input type="checkbox" name="documento" value="${esc(valor)}"${marcado ? ' checked' : ''}${podeEditar() ? '' : ' disabled'}> ${esc(nome)}</label>`;
+      `<label class="check"><input type="checkbox" name="documento" value="${esc(valor)}"${marcado ? ' checked' : ''}${editavel() ? '' : ' disabled'}> ${esc(nome)}</label>`;
     $('#ct-documentos').innerHTML = lista.map((x) =>
       // documento que aparece agora (ex.: contrato da Alimentos ao marcar SP) já vem marcado
       caixa(x.id, x.nome, atuais.includes(x.id) || (!marcados && !antes.includes(x.id)))).join('') +
@@ -283,7 +286,7 @@
       const res = await window.EscalaModeloPreenchido.preencher(new Uint8Array(await r.arrayBuffer()), d, m.empresa);
       // salva e registra no histórico quando possível; um cadastro ainda incompleto não impede o preenchimento
       try {
-        if (podeEditar()) await salvar();
+        if (editavel()) await salvar();
         if (atual && atual.id) await api.post(`/api/contratos/${atual.id}/documento`, { formato: 'modelo' });
       } catch (e) {
         if (e.status === 401) throw e;
@@ -348,28 +351,34 @@
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
   }
 
-  async function abrir(c) {
+  async function abrir(c, soLeitura) {
     await carregarEmpresas();
     atual = c;
+    exibindo = !!soLeitura && !!c.id;
     const novo = !c.id;
     preencher(novo ? { sexo: 'M', nacionalidade: 'brasileiro', mesmoEndereco: true, dataContrato: hoje(), situacao: 'ativo' } : c);
     $('#ct-titulo').textContent = novo ? 'Novo contrato' : `Contrato — ${c.razao}`;
-    form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !podeEditar(); });
+    form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !editavel(); });
+    $('#ct-modo').hidden = !exibindo;
+    $('#ct-editar').hidden = !exibindo || !podeEditar();
+    $('#ct-salvar').hidden = !editavel();
     $('#ct-lista-cartao').hidden = true;
     $('#ct-editor').hidden = false;
     $('#ct-pendencias').hidden = true;
     atualizar();
     window.scrollTo(0, 0);
-    if (podeEditar()) $('#ct-razao').focus();
+    if (editavel()) $('#ct-razao').focus({ preventScroll: true });
   }
 
   function fechar() {
     atual = null;
+    exibindo = false;
     $('#ct-editor').hidden = true;
     $('#ct-lista-cartao').hidden = false;
     renderLista();
   }
   $('#ct-voltar').addEventListener('click', fechar);
+  $('#ct-editar').addEventListener('click', () => { if (atual) abrir(atual, false); });
   document.querySelector('[data-voltar="ct"]').addEventListener('click', fechar);
 
   /** Folha provisória (logotipo e linhas simuladas) enquanto o estado de atuação não é escolhido. */
@@ -426,7 +435,7 @@
   // clicar num dado destacado na prévia leva ao campo correspondente
   $('#ct-previa').addEventListener('click', (ev) => {
     const m = ev.target.closest('mark[data-campo]');
-    if (!m || !podeEditar()) return;
+    if (!m || !editavel()) return;
     let alvo = C.ALVO[m.dataset.campo] || m.dataset.campo;
     if (alvo === 'resEndereco' && $('#ct-mesmoEndereco').checked) alvo = 'endereco';
     const el = $(`#ct-${alvo}`);
@@ -456,7 +465,7 @@
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (!podeEditar()) return;
+    if (!editavel()) return;
     try {
       const s = await salvar();
       App.avisar(s.pendencias ? `Contrato salvo. Ainda faltam ${s.pendencias} campo(s) para gerar o documento.` : 'Contrato salvo.');
@@ -473,7 +482,7 @@
     mostrarPendencias(pend);
     if (pend.length) return null;
     try {
-      if (podeEditar()) await salvar();
+      if (editavel()) await salvar();
       if (atual && atual.id) await api.post(`/api/contratos/${atual.id}/documento`, { formato });
     } catch (e) {
       App.avisar(e.message);

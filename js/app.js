@@ -178,6 +178,13 @@
     if (mod === 'inicio') renderInicio();
   }
 
+  // altura do cabeçalho fixo (celular): as barras com "Voltar" ficam logo abaixo dele
+  const topo = $('.topo');
+  const medirTopo = () => document.documentElement.style.setProperty('--altura-topo',
+    getComputedStyle(topo).position === 'sticky' ? `${topo.offsetHeight}px` : '0px');
+  new ResizeObserver(medirTopo).observe(topo);
+  window.addEventListener('resize', medirTopo);
+
   // menu lateral vira gaveta em telas estreitas
   function abrirMenu(abrir) {
     document.body.classList.toggle('menu-aberto', abrir);
@@ -465,9 +472,34 @@
     if (ok) formColab.reset();
   });
 
+  // modo do formulário: 'novo', 'exibir' (só leitura) ou 'editar'; os dois últimos mostram a barra com "Voltar"
+  let modoColab = 'novo';
+  function modoFormColab(modo, c) {
+    modoColab = modo;
+    const leitura = modo === 'exibir' || !podeEditar();
+    formColab.querySelectorAll('input, select, textarea').forEach((el) => { if (el.type !== 'hidden') el.disabled = leitura; });
+    $('#colab-barra').hidden = modo === 'novo';
+    $('#colab-barra-titulo').textContent = c ? `${c.nome} (matrícula ${c.matricula})` : '';
+    $('#colab-modo').hidden = modo !== 'exibir';
+    $('#colab-editar').hidden = $('#colab-editar-fim').hidden = modo !== 'exibir' || !podeEditar();
+    $('#colab-salvar').hidden = leitura;
+    $('#colab-cancelar').textContent = modo === 'novo' ? 'Cancelar' : 'Voltar';
+    // perfil consulta: o formulário só aparece para exibir um cadastro
+    formColab.hidden = modo === 'novo' && !podeEditar();
+    $('#titulo-form-colab').textContent = modo === 'novo' ? 'Novo colaborador' : modo === 'exibir' ? 'Dados do colaborador' : 'Editar colaborador';
+  }
+  const voltarColab = () => { formColab.reset(); window.scrollTo(0, 0); };
+  $('#colab-voltar').addEventListener('click', voltarColab);
+  const editarColab = () => {
+    const c = estado.colaboradores.find((x) => x.id === formColab.elements.id.value);
+    if (c) { modoFormColab('editar', c); formColab.elements.nome.focus(); }
+  };
+  $('#colab-editar').addEventListener('click', editarColab);
+  $('#colab-editar-fim').addEventListener('click', editarColab);
+
   formColab.addEventListener('reset', () => setTimeout(() => {
     formColab.elements.id.value = '';
-    $('#titulo-form-colab').textContent = 'Novo colaborador';
+    modoFormColab('novo');
     formColab.querySelectorAll('details').forEach((d) => { d.open = false; });
     caixaSemControle.checked = false;
     mostrarMotivoControle();
@@ -478,8 +510,9 @@
     const b = ev.target.closest('button');
     if (!b) return;
     const c = estado.colaboradores.find((x) => x.id === b.dataset.id);
-    if (!c || !exigirEdicao()) return;
-    if (b.dataset.acao === 'editar') {
+    if (!c) return;
+    if (b.dataset.acao !== 'exibir' && !exigirEdicao()) return;
+    if (b.dataset.acao === 'editar' || b.dataset.acao === 'exibir') {
       const f = formColab.elements;
       for (const k of ['id', 'nome', 'matricula', 'sexo', 'setorId', 'jornada', 'entrada']) f[k].value = c[k];
       for (const k of CAMPOS_RH) f[k].value = c[k] || '';
@@ -491,9 +524,10 @@
       mostrarMotivoControle();
       for (const b of CU.BENEFICIOS) f[`ben-${b.id}`].value = moedaCampo(c.beneficios && c.beneficios[b.id]);
       $('#colab-desligamento').open = !!c.desligamento;
-      $('#titulo-form-colab').textContent = 'Editar colaborador';
+      modoFormColab(b.dataset.acao, c);
       atualizarDicaJornada();
-      f.nome.focus();
+      formColab.scrollIntoView({ block: 'start' });
+      if (b.dataset.acao === 'editar') f.nome.focus({ preventScroll: true });
     } else if (b.dataset.acao === 'excluir') {
       if (!(await confirmar(`Excluir ${c.nome} (matrícula ${c.matricula})?\n\nSe a pessoa saiu da empresa, prefira registrar o ` +
         'desligamento no cadastro: assim o histórico de custos e o turnover são mantidos.'))) return;
@@ -532,8 +566,9 @@
         <td>${c.desligamento ? `<span class="chip ${desligado(c) ? 'ruim' : 'breve'}">${desligado(c) ? 'Desligado' : 'Sai'} em ${dataBR(c.desligamento)}</span>`
           : `<span class="chip bom">Ativo</span>${c.admissao ? `<br><small class="suave">desde ${dataBR(c.admissao)}</small>` : ''}`}</td>
         <td class="acoes">
-          <button type="button" class="mini sec" data-acao="editar" data-id="${c.id}">Editar</button>
-          <button type="button" class="mini perigo" data-acao="excluir" data-id="${c.id}">Excluir</button>
+          <button type="button" class="mini sec" data-acao="exibir" data-id="${c.id}">Exibir</button>
+          ${podeEditar() ? `<button type="button" class="mini sec" data-acao="editar" data-id="${c.id}">Editar</button>
+          <button type="button" class="mini perigo" data-acao="excluir" data-id="${c.id}">Excluir</button>` : ''}
         </td></tr>`;
     }).join('') || `<tr><td colspan="8" class="vazio">${estado.colaboradores.length ? 'Nenhum colaborador neste filtro.' : 'Nenhum colaborador cadastrado.'}</td></tr>`;
   }
@@ -980,6 +1015,7 @@
       usuario = u;
       document.body.classList.toggle('perfil-consulta', !podeEditar());
       document.body.classList.toggle('perfil-admin', u.perfil === 'admin');
+      modoFormColab('novo');
       await recarregar();
       periodoPadrao();
       mostrarAba('inicio');
