@@ -373,6 +373,7 @@
   function fechar() {
     atual = null;
     exibindo = false;
+    if (voltarPara) { const aba = voltarPara; voltarPara = null; App.mostrarAba(aba); }
     $('#ct-editor').hidden = true;
     $('#ct-lista-cartao').hidden = false;
     renderLista();
@@ -522,5 +523,14 @@
   });
   document.querySelector('.modulo[data-modulo=contratos]').addEventListener('click', () => { if (usuario && !atual) carregar(); });
 
-  window.EscalaContratosUI = { documentoHTML };
+  /** Abre um contrato pela identificação (usado pelos Relatórios). */
+  let voltarPara = null; // aba de origem (Relatórios) para onde o "Voltar" retorna
+  async function abrirPorId(id, soLeitura, origem) {
+    await carregar();
+    voltarPara = origem || null;
+    const c = contratos.find((x) => x.id === id);
+    if (c) abrir(c, soLeitura);
+  }
+
+  window.EscalaContratosUI = { documentoHTML, abrirPorId };
 })();

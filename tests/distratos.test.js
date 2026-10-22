@@ -317,3 +317,21 @@ test('salvar o distrato encerra o contrato do representante; excluir o último d
     assert.deepStrictEqual(l[4], ['10', 'A']);
   });
 });
+
+test('relatórios: o distrato guarda o resultado de quando foi salvo, por empresa representada', () => {
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  const A = { id: 'a', login: 'adm', perfil: 'admin' };
+  const c = s.salvarContrato(A, { ...CONTRATO, estados: 'SP' });
+  const base = { contratoId: c.id, dataInicio: '2023-03-08', dataDistrato: '2026-02-11', comissoes: CIA };
+  const d1 = s.salvarDistrato(A, { ...base, representada: 'cia' });
+  const d2 = s.salvarDistrato(A, { ...base, representada: 'alimentos', simples: { situacao: 'nao_optante', fonte: 'manual' } });
+  assert.strictEqual(d1.resultadoSalvo.total, d1.resultado.total);
+  assert.strictEqual(d1.resultadoSalvo.liquido, d1.resultado.total);
+  assert.strictEqual(d1.resultadoSalvo.salvoPor, 'adm');
+  assert.ok(d2.resultadoSalvo.ir > 0);
+  assert.strictEqual(d2.resultadoSalvo.liquido, d2.resultado.liquido);
+  assert.strictEqual(d1.cidade, CONTRATO.cidade);
+  const lista = s.listarDistratos(A).filter((d) => d.contratoId === c.id);
+  assert.deepStrictEqual(lista.map((d) => d.representada).sort(), ['alimentos', 'cia']);
+});

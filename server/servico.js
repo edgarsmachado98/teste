@@ -1159,9 +1159,10 @@ function criarServico(db, opcoes = {}) {
 
   const distratoDeLinha = (l, ind) => {
     const dados = JSON.parse(l.dados);
-    const c = q('SELECT razao_social, cnpj FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
+    const c = q('SELECT razao_social, cnpj, dados FROM contratos_representante WHERE id = ?').get(l.contrato_id) || {};
+    const dc = c.dados ? JSON.parse(c.dados) : {};
     return {
-      id: l.id, ...dados, razao: c.razao_social, cnpj: c.cnpj,
+      id: l.id, ...dados, razao: c.razao_social, cnpj: c.cnpj, cidade: dc.cidade || '', uf: dc.uf || '',
       resultado: K.calcular(dados, ind || lerIndices('igpm')),
       criadoPor: l.criado_por, criadoEm: l.criado_em, atualizadoEm: l.atualizado_em,
     };
@@ -1183,6 +1184,12 @@ function criarServico(db, opcoes = {}) {
     }
     const empresa = dados.representada === 'cia' ? 'Antoniazzi & Cia' : 'Antoniazzi Alimentos';
     const detalhe = `${contrato.razao_social} / ${empresa}: total R$ ${K.moeda(r.total)}`;
+    // resultado como estava ao salvar (relatórios): o cálculo ao vivo muda se o IGP-M for revisto
+    dados.resultadoSalvo = {
+      somaNominal: r.somaNominal, somaAtualizada: r.somaAtualizada, pendentes: r.pendentes, aReceber: r.aReceber,
+      indenizacao: r.indenizacao, avisoPrevio: r.avisoPrevio, total: r.total, reterIR: !!r.reterIR, ir: r.ir ? r.ir.total : 0,
+      liquido: r.liquido == null ? r.total : r.liquido, salvoEm: iso(), salvoPor: ator.login,
+    };
     let id = d.id;
     if (id) {
       const res = q('UPDATE distratos SET contrato_id = ?, representada = ?, data_distrato = ?, total = ?, dados = ?, atualizado_em = ? WHERE id = ?')

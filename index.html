@@ -54,6 +54,7 @@
       <button type="button" class="modulo" data-modulo="escalas" title="Escalas de trabalho"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/></svg><span class="curto" aria-hidden="true">Escalas</span><span class="rotulo">Escalas de trabalho</span></button>
       <button type="button" class="modulo" data-modulo="contratos" title="Contratos de representantes"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="curto" aria-hidden="true">Contratos</span><span class="rotulo">Contratos de representantes</span></button>
       <button type="button" class="modulo" data-modulo="distratos" title="Distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="curto" aria-hidden="true">Distratos</span><span class="rotulo">Distratos</span></button>
+      <button type="button" class="modulo" data-modulo="relatorios" title="Relatórios"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="curto" aria-hidden="true">Relatórios</span><span class="rotulo">Relatórios</span></button>
       <button type="button" class="modulo so-edicao" data-modulo="custos" title="Custos de pessoal"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="curto" aria-hidden="true">Custos</span><span class="rotulo">Custos de pessoal</span></button>
       </nav>
       <div class="trilho-rodape">
@@ -78,6 +79,10 @@
       <div class="subitens" data-modulo="escalas">
         <button type="button" class="aba" data-modulo="escalas" data-aba="escala">Escala</button>
         <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Regras e feriados</button>
+      </div>
+      <div class="subitens" data-modulo="relatorios">
+        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-distratos">Distratos</button>
+        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-contratos">Contratos de representantes</button>
       </div>
       <div class="subitens so-edicao" data-modulo="custos">
         <button type="button" class="aba" data-modulo="custos" data-aba="folha">Lançamentos</button>
@@ -315,7 +320,7 @@
           </div>
         </div>
         <table class="tabela">
-          <thead><tr><th>Representante</th><th>CNPJ</th><th>Empresa representada</th><th>Data do distrato</th><th class="num">Total</th><th></th></tr></thead>
+          <thead><tr><th>Representante</th><th>CNPJ</th><th>Empresa representada</th><th>Data do distrato</th><th class="num">Total líquido</th><th></th></tr></thead>
           <tbody id="dt-lista"></tbody>
         </table>
       </div>
@@ -326,6 +331,7 @@
           <h2 id="dt-titulo">Novo distrato</h2>
           <span class="modo-chip" id="dt-modo" hidden>Somente leitura</span>
           <button type="button" id="dt-editar" class="so-edicao" hidden>Editar</button>
+          <div class="dt-empresas" id="dt-empresas" role="group" aria-label="Empresa representada" hidden></div>
         </div>
         <form id="dt-form" class="cartao formulario ct-form" novalidate>
 
@@ -742,6 +748,59 @@
       </div>
     </section>
 
+    <!-- RELATÓRIOS -->
+    <section id="aba-rel-distratos" class="painel" data-modulo="relatorios">
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Distratos salvos <small id="rd-resumo"></small></h2>
+          <div class="linha-botoes">
+            <button type="button" id="rd-xlsx" class="sec">Exportar Excel</button>
+            <button type="button" id="rd-pdf" class="sec">Imprimir / PDF</button>
+          </div>
+        </div>
+        <div class="rel-filtros">
+          <label>Representante<input type="search" id="rd-razao" placeholder="Nome do representante"></label>
+          <label>CNPJ<input type="search" id="rd-cnpj" inputmode="numeric" placeholder="00.000.000/0000-00"></label>
+          <label>Empresa representada<select id="rd-empresa"><option value="">Todas</option><option value="cia">Antoniazzi &amp; Cia</option><option value="alimentos">Antoniazzi Alimentos</option></select></label>
+          <label>Cidade<input type="search" id="rd-cidade" placeholder="Cidade"></label>
+        </div>
+        <p class="dica">Valores gravados quando o distrato foi salvo. Em <b>Exibir</b> você abre o distrato para conferir, imprimir e baixar de novo os documentos e a memória de cálculo.</p>
+        <div class="rel-rolagem">
+          <table class="tabela">
+            <thead><tr><th>Representante</th><th>CNPJ</th><th>Empresa representada</th><th>Cidade</th><th>Data do distrato</th>
+              <th class="num">Indenização (1/12)</th><th class="num">Aviso prévio</th><th class="num">Títulos pendentes</th><th class="num">A receber</th>
+              <th class="num">IR retido</th><th class="num">Total líquido</th><th>Salvo em</th><th></th></tr></thead>
+            <tbody id="rd-lista"></tbody>
+            <tfoot id="rd-total"></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="aba-rel-contratos" class="painel" data-modulo="relatorios">
+      <div class="cartao">
+        <div class="cab-cartao">
+          <h2>Contratos de representantes <small id="rc-resumo"></small></h2>
+          <div class="linha-botoes">
+            <button type="button" id="rc-xlsx" class="sec">Exportar Excel</button>
+            <button type="button" id="rc-pdf" class="sec">Imprimir / PDF</button>
+          </div>
+        </div>
+        <div class="rel-filtros">
+          <label>Representante<input type="search" id="rc-razao" placeholder="Nome do representante"></label>
+          <label>CNPJ<input type="search" id="rc-cnpj" inputmode="numeric" placeholder="00.000.000/0000-00"></label>
+          <label>Cidade<input type="search" id="rc-cidade" placeholder="Cidade"></label>
+        </div>
+        <div class="rel-rolagem">
+          <table class="tabela">
+            <thead><tr><th>Representante</th><th>CNPJ</th><th>Cidade</th><th>Estado de atuação</th><th>Data do contrato</th>
+              <th>Situação</th><th>Distratos</th><th></th></tr></thead>
+            <tbody id="rc-lista"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- FERRAMENTAS (só administradores) -->
     <section id="aba-ferramentas" class="painel so-admin" data-modulo="ferramentas">
       <div class="ferramentas-grade">
@@ -882,6 +941,7 @@
   <script src="js/distratos.js"></script>
   <script src="js/custos.js"></script>
   <script src="js/empresas.js"></script>
+  <script src="js/relatorios.js"></script>
   <script src="js/acesso.js"></script>
 </body>
 </html>

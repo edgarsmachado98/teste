@@ -332,6 +332,21 @@ O botão **Conferir no Cálculo Exato** abre o site para conferência.
    produção) são marcados na ficha e ficam fora da escala enquanto a caixa *Excluir colaboradores sem controle de
    jornada* estiver marcada; desmarque para incluí-los. A lista de colaboradores tem o filtro *Sem controle de jornada*.
 
+### Relatórios
+
+O módulo **Relatórios** tem duas seções, com pesquisa e exportação para Excel e PDF:
+
+- **Distratos**: os distratos salvos com o resultado gravado no momento em que foram salvos (indenização,
+  aviso prévio, títulos pendentes, a receber, IR retido e total líquido). Pesquisa por representante, CNPJ,
+  empresa representada e cidade. **Exibir** abre o distrato para conferir e baixar de novo os documentos e a
+  memória de cálculo; o "Voltar" retorna ao relatório.
+- **Contratos de representantes**: pesquisa por representante, CNPJ e cidade, com a situação e os distratos de
+  cada contrato.
+
+Na tela de Distratos, o representante com distrato em mais de uma empresa representada aparece em uma linha só.
+Ao exibir ou editar, os botões **Empresa representada** alternam entre os distratos de cada empresa (e, na
+edição, permitem iniciar o da outra empresa com as mesmas datas).
+
 ### Ferramentas (só administradores)
 
 O módulo **Ferramentas**, na barra de ícones acima de Usuários, reúne o **backup** (baixar os dados em .json),
@@ -415,6 +430,7 @@ js/custos-calculo.js custo mensal, encargos, provisões e relatórios da folha (
 js/custos.js         tela de custos: lançamentos, relatórios e parâmetros
 js/tema.js           modo claro/escuro
 js/empresas.js       cadastro de empresas, modelos e logotipo
+js/relatorios.js     relatórios de distratos e de contratos de representantes
 js/modelo-preenchido.js  preenche os marcadores {…} dos modelos Word das empresas
 img/                 logotipos usados nos contratos
 server/server.js     servidor HTTP, rotas da API, sessão e segurança

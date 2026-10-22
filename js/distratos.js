@@ -40,19 +40,37 @@
 
   const nomeEmpresa = (r) => (r === 'alimentos' ? 'Antoniazzi Alimentos' : 'Antoniazzi & Cia');
 
+  /** Distratos agrupados por representante (um contrato pode ter distrato com as duas empresas). */
+  function grupos(lista) {
+    const g = new Map();
+    for (const d of lista) {
+      if (!g.has(d.contratoId)) g.set(d.contratoId, []);
+      g.get(d.contratoId).push(d);
+    }
+    return [...g.values()].map((ds) => ds.sort((x, y) => (x.representada === 'cia' ? -1 : 1) - (y.representada === 'cia' ? -1 : 1)));
+  }
+  const totalSalvo = (d) => (d.resultadoSalvo ? d.resultadoSalvo.liquido : d.resultado.liquido != null ? d.resultado.liquido : d.resultado.total);
+
   function renderLista() {
     const busca = $('#dt-busca').value.trim().toLowerCase();
     const dig = C.soDigitos(busca);
     const lista = distratos.filter((d) => !busca || (d.razao || '').toLowerCase().includes(busca) ||
       (dig && C.soDigitos(d.cnpj).includes(dig)));
-    $('#dt-lista').innerHTML = lista.map((d) => `<tr>
-        <td><b>${esc(d.razao)}</b></td><td>${esc(d.cnpj)}</td><td>${nomeEmpresa(d.representada)}</td>
-        <td>${dataBR(d.dataDistrato)}</td><td class="num">R$ ${K.moeda(d.resultado.total)}</td>
+    $('#dt-lista').innerHTML = grupos(lista).map((ds) => {
+      const d = ds[0];
+      const linhas = (f) => ds.map(f).join('<br>');
+      return `<tr>
+        <td><b>${esc(d.razao)}</b>${ds.length > 1 ? `<br><small class="suave">${ds.length} empresas representadas</small>` : ''}</td>
+        <td>${esc(d.cnpj)}</td>
+        <td>${linhas((x) => nomeEmpresa(x.representada))}</td>
+        <td>${linhas((x) => dataBR(x.dataDistrato))}</td>
+        <td class="num">${linhas((x) => `R$ ${K.moeda(totalSalvo(x))}`)}</td>
         <td class="acoes">
           <button type="button" class="mini sec" data-acao="exibir" data-id="${d.id}">Exibir</button>
           ${podeEditar() ? `<button type="button" class="mini sec" data-acao="abrir" data-id="${d.id}">Editar</button>` : ''}
           ${podeEditar() ? `<button type="button" class="mini perigo" data-acao="excluir" data-id="${d.id}">Excluir</button>` : ''}
-        </td></tr>`).join('') ||
+        </td></tr>`;
+    }).join('') ||
       `<tr><td colspan="6" class="vazio">${distratos.length ? 'Nenhum distrato encontrado.' : 'Nenhum distrato registrado.'}</td></tr>`;
   }
 
@@ -64,8 +82,12 @@
     const d = distratos.find((x) => x.id === b.dataset.id);
     if (!d) return;
     if (b.dataset.acao === 'abrir' || b.dataset.acao === 'exibir') abrir(d, b.dataset.acao === 'exibir');
-    else if (await App.confirmar(`Excluir o distrato de ${d.razao} (${nomeEmpresa(d.representada)})?`)) {
-      try { await api.del(`/api/distratos/${d.id}`); } catch (e) { App.avisar(e.message); }
+    else {
+      // um distrato por empresa representada: confirma cada um
+      for (const x of distratos.filter((y) => y.contratoId === d.contratoId)) {
+        if (!(await App.confirmar(`Excluir o distrato de ${x.razao} com ${nomeEmpresa(x.representada)}?`))) continue;
+        try { await api.del(`/api/distratos/${x.id}`); } catch (e) { App.avisar(e.message); }
+      }
       carregar();
     }
   });
@@ -109,6 +131,7 @@
     $('#dt-titulo').textContent = d.id ? `Distrato — ${d.razao} (${nomeEmpresa(d.representada)})` : 'Novo distrato';
     form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !editavel(); });
     $('#dt-modo').hidden = !exibindo;
+    renderEmpresas();
     $('#dt-editar').hidden = !exibindo || !podeEditar();
     form.querySelectorAll('.dt-so-edicao').forEach((el) => { el.hidden = !editavel(); });
     $('#dt-pendencias').hidden = true;
@@ -121,9 +144,50 @@
     if (editavel() && !contrato) $('#dt-cnpj').focus({ preventScroll: true });
   }
 
+  /** Botões das empresas representadas deste representante: troca entre os distratos ou inicia o da outra empresa. */
+  function renderEmpresas() {
+    const caixa = $('#dt-empresas');
+    const meus = atual && atual.contratoId ? distratos.filter((x) => x.contratoId === atual.contratoId) : [];
+    if (!atual || !atual.id || (!meus.length && !editavel())) { caixa.hidden = true; caixa.innerHTML = ''; return; }
+    const botoes = ['cia', 'alimentos'].map((r) => {
+      const d = meus.find((x) => x.representada === r);
+      if (d) {
+        return `<button type="button" class="mini ${d.id === atual.id ? 'ativo' : 'sec'}" data-empresa-distrato="${d.id}"
+          aria-pressed="${d.id === atual.id}">${nomeEmpresa(r)}</button>`;
+      }
+      return editavel() ? `<button type="button" class="mini sec" data-empresa-nova="${r}">+ ${nomeEmpresa(r)}</button>` : '';
+    }).join('');
+    caixa.innerHTML = `<span>Empresa representada:</span>${botoes}`;
+    caixa.hidden = meus.length < 2 && !editavel();
+  }
+  $('#dt-empresas').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b || !atual) return;
+    if (b.dataset.empresaDistrato) {
+      const d = distratos.find((x) => x.id === b.dataset.empresaDistrato);
+      if (d && d.id !== atual.id) abrir(d, exibindo);
+    } else if (b.dataset.empresaNova) {
+      // novo distrato do mesmo representante com a outra empresa, partindo das mesmas datas
+      abrir({ contratoId: atual.contratoId, representada: b.dataset.empresaNova, dataInicio: atual.dataInicio,
+        dataDistrato: atual.dataDistrato, dataAviso: atual.dataAviso, profissao: atual.profissao,
+        estadoCivil: atual.estadoCivil, naturalidade: atual.naturalidade, simples: atual.simples }, false);
+    }
+  });
+
+  /** Abre um distrato pela identificação (usado pelos Relatórios). */
+  let voltarPara = null; // aba de origem (Relatórios) para onde o "Voltar" retorna
+  async function abrirPorId(id, soLeitura, origem) {
+    await carregar();
+    voltarPara = origem || null;
+    const d = distratos.find((x) => x.id === id);
+    if (d) abrir(d, soLeitura);
+  }
+  window.EscalaDistratosUI = { abrirPorId };
+
   function fechar() {
     atual = null;
     exibindo = false;
+    if (voltarPara) { const aba = voltarPara; voltarPara = null; App.mostrarAba(aba); }
     contrato = null;
     $('#dt-editor').hidden = true;
     $('#dt-lista-cartao').hidden = false;
@@ -485,6 +549,7 @@
     atual = salvo;
     $('#dt-titulo').textContent = `Distrato — ${salvo.razao} (${nomeEmpresa(salvo.representada)})`;
     distratos = await api.get('/api/distratos');
+    renderEmpresas();
     return salvo;
   }
 

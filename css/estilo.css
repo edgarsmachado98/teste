@@ -529,3 +529,14 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .modo-chip { padding: .2rem .6rem; border-radius: 999px; background: var(--realce); color: var(--alerta-texto); font-size: .78rem; font-weight: 700; }
 @media print { .barra-voltar { display: none !important; } }
 #aba-colaboradores > .cartao:not(form) { overflow-x: auto; min-width: 0; }
+
+/* distrato: troca entre as empresas representadas do mesmo representante */
+.dt-empresas { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .85rem; color: var(--suave); }
+.dt-empresas button.ativo { background: var(--primaria); color: #ffffff; }
+
+/* relatórios */
+.rel-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .6rem; margin: .5rem 0 .25rem; }
+.rel-filtros label { display: grid; gap: .25rem; font-size: .85rem; font-weight: 600; }
+.rel-rolagem { overflow-x: auto; }
+.rel-rolagem td.num, .rel-rolagem th.num { white-space: nowrap; }
+.rel-rolagem tfoot td { font-weight: 700; border-top: 2px solid var(--borda); }
