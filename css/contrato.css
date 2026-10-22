@@ -1,0 +1,253 @@
+/* Módulo Contratos de representantes: editor, prévia em folhas e impressão (PDF). */
+
+.ct-editor { display: grid; grid-template-columns: minmax(300px, 420px) minmax(0, 1fr); gap: 1rem; align-items: start; }
+/* abaixo da barra com "Voltar" (fixa no topo) */
+.ct-form { position: sticky; top: 4.6rem; max-height: calc(100vh - 5.1rem); overflow-y: auto; }
+.ct-form fieldset { display: grid; gap: .6rem; }
+.ct-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+.ct-grade .largo, .ct-grade .check { grid-column: 1 / -1; }
+.ct-grade > label { align-content: start; }
+.ct-grade label small.dica { margin: 0; font-weight: 400; }
+.ct-form textarea {
+  font: inherit; padding: .45rem .55rem; border: 1px solid var(--borda); border-radius: 6px;
+  background: var(--campo); color: inherit; resize: vertical;
+}
+.obrig { color: var(--erro); }
+.invalido { border-color: var(--erro) !important; box-shadow: 0 0 0 2px var(--perigo-fundo); }
+.ct-docs { display: grid; gap: .35rem; }
+.ct-docs label { align-items: flex-start; }
+.ct-docs input, .ct-form label.check input { margin-top: .2rem; flex: none; }
+.ct-acoes { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: .25rem; border-top: 1px solid var(--borda); }
+.ct-acoes button { flex: 1 1 auto; }
+.ct-pendencias { background: var(--perigo-fundo); color: var(--erro); border-radius: 6px; padding: .5rem .75rem; font-size: .9rem; }
+.ct-pendencias ul { margin: .25rem 0 0; padding-left: 1.1rem; }
+.suave { color: var(--suave); }
+
+.ct-previa-col { min-width: 0; }
+.ct-previa-topo { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; color: var(--suave); }
+.ct-previa-topo b { color: var(--texto); }
+.ct-previa {
+  display: grid; gap: 1rem; justify-items: center; padding: 1rem; border-radius: 8px;
+  background: var(--codigo); max-height: calc(100vh - 6rem); overflow: auto;
+}
+/* a folha fica sempre clara, como o papel, mesmo no tema escuro */
+.ct-previa .ct-folha {
+  width: 100%; max-width: 21.6cm; background: #ffffff; color: #000000;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25); padding: 1.2cm 1.6cm 1.4cm 2.2cm;
+}
+.ct-previa .ct-doc { display: grid; gap: 1rem; width: 100%; justify-items: center; }
+
+/* -------------------------------------------------------- texto do documento */
+
+.ct-folha { border-collapse: collapse; width: 100%; }
+.ct-folha > thead > tr > td, .ct-folha > tbody > tr > td { padding: 0; vertical-align: top; }
+.ct-doc { font-family: "Times New Roman", Times, "Liberation Serif", serif; font-size: 12pt; line-height: 1.35; color: #000000; }
+.ct-fonte-politica { font-size: 9.5pt; line-height: 1.9; }
+.ct-fonte-termo { font-family: Carlito, Calibri, "Segoe UI", Arial, sans-serif; line-height: 1.75; }
+
+.ct-cab { display: flex; gap: 1.2rem; align-items: flex-start; margin-bottom: 1.6rem; font-family: Arial, Helvetica, sans-serif; }
+.ct-logo { width: 2.2cm; height: auto; }
+.ct-cab-dados { font-size: 7.5pt; line-height: 1.25; color: #333333; }
+.ct-cab-logos { flex-direction: column; gap: .8rem; }
+.ct-logos { display: flex; justify-content: center; gap: 1rem; width: 100%; align-items: center; }
+.ct-logos img:first-child { width: 2cm; }
+.ct-logos img:last-child { width: 2.4cm; }
+
+.ct-titulo { font-family: Cambria, Caladea, Georgia, serif; font-style: italic; font-weight: 700; font-size: 13pt; text-decoration: underline; margin: 0 0 1.2em; }
+.ct-titulo.centro { text-align: center; text-decoration: none; }
+.ct-titulo-centro { text-align: center; font-size: inherit; font-weight: 700; margin: .8em 0 1.4em; }
+.ct-secao { font-size: inherit; margin: .4em 0 .6em; }
+.ct-secao-pol { font-size: inherit; margin: 1.4em 0 .6em .6cm; }
+.ct-p { margin: 0 0 .8em; text-align: justify; }
+.ct-compacto { margin-bottom: .15em; }
+.ct-recuo { text-indent: 1.25cm; }
+.ct-termo { text-indent: .5cm; }
+.ct-n { display: grid; grid-template-columns: 1cm minmax(0, 1fr); margin-bottom: .8em; }
+.ct-n .ct-p { margin: 0; }
+.ct-item { display: grid; grid-template-columns: .6cm minmax(0, 1fr); margin: 0 0 .6em .6cm; }
+.ct-item .ct-p { margin: 0; }
+.ct-rotulo { font-family: Carlito, Calibri, Arial, sans-serif; font-weight: 700; font-size: 8pt; margin: .8em 0 .8em .3cm; }
+.ct-zona { margin: 1em 0; white-space: normal; }
+.ct-contato { margin: 0 0 1em 45%; text-align: justify; }
+.ct-data { margin: 1.4em 0 0; }
+.ct-vermelho { color: #ff0000; }
+
+.ct-assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2.6em; break-inside: avoid; }
+.ct-assinaturas.um { grid-template-columns: 1fr; justify-items: center; }
+.ct-ass { line-height: 1.25; break-inside: avoid; }
+.ct-ass.centro { text-align: center; }
+.ct-linha { display: block; border-top: 1px solid #000000; width: 6.2cm; margin-bottom: .2em; }
+.ct-ass.centro .ct-linha { margin-inline: auto; }
+.ct-test-rotulo { margin: 2.4em 0 0; }
+.ct-test { display: flex; gap: 2.5cm; margin-top: 2.6em; break-inside: avoid; }
+.ct-test .ct-linha { width: 5.5cm; }
+.ct-test-linha { align-items: flex-end; gap: 1cm; margin-top: 3em; }
+.ct-ass-pol { display: grid; gap: 2.2em; margin: 2.5em 0 0 40%; }
+.ct-ass-termo { margin-top: 4em; font-family: Arial, Helvetica, sans-serif; font-size: 8pt; }
+.ct-ass-termo .ct-linha { width: 9cm; }
+.ct-versoes { border-collapse: collapse; margin: 1em auto 1.6em; font-size: 7.5pt; line-height: 1.3; }
+.ct-versoes th, .ct-versoes td { border: 1px solid #000000; padding: .25em .5em; text-align: center; }
+.ct-versoes th { background: #f2f2f2; }
+.ct-versoes td:nth-child(3) { text-align: left; max-width: 9cm; }
+
+/* dados do representante destacados na prévia */
+.ct-campo { background: #fff3b0; color: inherit; padding: 0 .1em; border-radius: 2px; cursor: pointer; box-shadow: 0 0 0 1px #e6c200; }
+.ct-campo:hover { background: #ffe066; }
+.ct-campo.vazio { background: #ffd6d6; box-shadow: 0 0 0 1px #e05252; color: #a40000; font-style: italic; }
+
+#impressao { display: none; }
+
+@media (max-width: 1100px) {
+  .ct-editor { grid-template-columns: minmax(0, 1fr); }
+  .ct-form { position: static; max-height: none; }
+  .ct-previa { max-height: none; }
+}
+@media (max-width: 520px) {
+  .ct-grade { grid-template-columns: minmax(0, 1fr); }
+  .ct-previa { padding: .5rem; }
+  .ct-previa .ct-folha { padding: .8cm .6cm; }
+}
+
+/* ------------------------------------------------------------- impressão */
+
+@media print {
+  body.imprimindo > *:not(#impressao) { display: none !important; }
+  body.imprimindo #impressao { display: block !important; }
+  body.imprimindo { background: #ffffff; }
+  body.imprimindo .ct-doc { break-before: page; }
+  body.imprimindo .ct-doc:first-child { break-before: auto; }
+  body.imprimindo .ct-folha + .ct-folha { break-before: page; }
+  body.imprimindo .ct-folha > thead > tr > td { padding-bottom: .2cm; }
+  body.imprimindo .ct-cab { margin-bottom: .9cm; }
+  body.imprimindo .ct-data, body.imprimindo .ct-assinaturas, body.imprimindo .ct-test-rotulo { break-after: avoid; }
+  body.imprimindo #impressao { page: contrato; }
+}
+/* página nomeada: não interfere na impressão da escala (A4 paisagem) */
+@page contrato { size: letter; margin: 1.1cm 2.3cm 1.6cm 3.7cm; }
+
+/* ---------------------------------------------------------------- distratos */
+
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.dt-busca-linha { display: flex; gap: .5rem; align-items: flex-end; }
+.dt-busca-linha label { flex: 1; }
+.dt-representante { border: 1px solid var(--borda); border-radius: 6px; padding: .6rem .75rem; background: var(--fundo); }
+.dt-dados { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .2rem .75rem; margin: 0; font-size: .88rem; }
+.dt-dados dt { color: var(--suave); }
+.dt-dados dd { margin: 0; overflow-wrap: anywhere; }
+.dt-representante .aviso { margin: .5rem 0 0; font-size: .85rem; }
+.dt-meses-rolagem { max-height: 22rem; overflow: auto; border: 1px solid var(--borda); border-radius: 6px; }
+.dt-meses { font-size: .88rem; }
+.dt-meses th, .dt-meses td { padding: .25rem .5rem; }
+.dt-meses thead th, .dt-meses tfoot th { position: sticky; background: var(--cartao); z-index: 1; }
+.dt-meses thead th { top: 0; }
+.dt-meses tfoot th { bottom: 0; border-top: 1px solid var(--borda); color: var(--texto); }
+.dt-meses input { width: 7.5rem; text-align: right; padding: .25rem .4rem; font-variant-numeric: tabular-nums; }
+.dt-meses tr.dt-aviso-mes td:first-child { box-shadow: inset 3px 0 0 var(--primaria); font-weight: 600; }
+.dt-meses .dt-fator, .dt-meses .dt-atualizado { color: var(--suave); }
+.dt-periodo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.dt-resultado { display: grid; gap: .75rem; margin-bottom: 1rem; }
+.dt-resultado .cab-cartao h2 { margin: 0; }
+.dt-tiles { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.dt-tiles .tile-valor { font-size: 1.15rem; }
+.dt-total {
+  display: grid; gap: .1rem; margin: 0; padding: .75rem 1rem; border-radius: 8px;
+  background: var(--realce); border: 1px solid var(--borda);
+}
+.dt-total span { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); font-weight: 600; }
+.dt-total b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.dt-total small { color: var(--suave); }
+.dt-faltando { background: var(--folga); color: var(--folga-texto); border-radius: 6px; padding: .6rem .75rem; font-size: .9rem; }
+.dt-faltando p { margin: 0 0 .5rem; }
+.dt-faltando-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: .4rem; }
+.dt-faltando-grade label { font-weight: 500; font-size: .85rem; }
+.dt-faltando-grade input { padding: .25rem .4rem; }
+
+/* documentos de distrato */
+.ct-fonte-distrato { font-family: Arial, Helvetica, "Liberation Sans", sans-serif; font-size: 10.5pt; line-height: 1.32; }
+.ct-clausula { font-size: inherit; text-decoration: underline; margin: 1.1em 0 .1em; }
+.ct-data.direita { text-align: right; margin: 1.6em 0 1em; }
+.ct-data.recuo { margin: 2.4em 0 1.4em 3cm; }
+.ct-assinaturas.esquerda { justify-items: start; margin-top: 2.2em; }
+.ct-assinaturas .ct-ass.centro strong:last-child { font-weight: 700; }
+.ct-test-num { display: grid; gap: 1.6em; margin-top: 1.4em; }
+.ct-test-num p { display: flex; align-items: flex-end; gap: .2em; margin: 0; }
+.ct-test-num .ct-linha { width: 6cm; margin: 0; }
+.ct-cab-centro { justify-content: center; }
+.ct-logo-ant { width: 2.2cm; height: auto; }
+.dt-meses tr.dt-fora td { color: var(--erro); text-decoration: line-through; }
+.dt-meses tr.dt-fora input { border-color: var(--erro); }
+
+/* ajustes: tabela de meses cabe na coluna do formulário; link com aparência de botão */
+.dt-meses { width: 100%; }
+.dt-meses th, .dt-meses td { padding: .25rem .3rem; white-space: nowrap; }
+.dt-meses input { width: 6.4rem; }
+a.botao { text-decoration: none; }
+.botao.mini { padding: .2rem .5rem; font-size: .8rem; }
+@media print {
+  body.imprimindo .ct-clausula { break-after: avoid; }
+}
+.dt-editor { grid-template-columns: minmax(320px, 500px) minmax(0, 1fr); }
+@media (max-width: 1100px) { .dt-editor { grid-template-columns: minmax(0, 1fr); } }
+
+/* ------------------------------------------------- memória de cálculo do distrato */
+.dt-memoria-acoes { align-items: center; flex-wrap: wrap; border-top: 1px dashed var(--borda); padding-top: .6rem; }
+.dt-memoria-acoes span { flex: 1 1 100%; font-size: .85rem; color: var(--suave); }
+.mc { font: 10pt/1.35 Arial, Helvetica, sans-serif; color: #111111; }
+.mc-cab { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid #2e3192; margin-bottom: 8px; padding-bottom: 6px; }
+.mc-cab img { width: 60px; height: auto; }
+.mc-cab h1 { margin: 0; font-size: 15pt; color: #2e3192; }
+.mc-cab p { margin: 2px 0 0; color: #555555; font-size: 9pt; }
+.mc h2 { font-size: 11pt; margin: 14px 0 4px; color: #2e3192; }
+.mc table { width: 100%; border-collapse: collapse; }
+.mc-dados th { text-align: left; width: 34%; font-weight: 600; padding: 2px 6px 2px 0; vertical-align: top; }
+.mc-dados td { padding: 2px 0; }
+.mc-tabela th, .mc-tabela td { border-bottom: 1px solid #cccccc; padding: 3px 5px; text-align: left; }
+.mc-tabela thead th { background: #e8eaf6; font-size: 8.5pt; }
+.mc-tabela tr.mc-total th { border-top: 2px solid #2e3192; border-bottom: 0; }
+.mc-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mc-tabela tr.mc-aviso td { background: #fff7d6; }
+.mc-resumo tr.mc-total th { font-size: 11pt; }
+.mc-extenso { font-style: italic; margin: 4px 0 10px; }
+.mc-alerta { color: #a12020; font-weight: 600; }
+.mc-notas { font-size: 8.5pt; color: #444444; padding-left: 16px; }
+.mc thead { display: table-header-group; }
+.mc tr { break-inside: avoid; }
+@media print {
+  body.imprimindo.imprimindo-memoria #impressao { page: memoria; }
+}
+@page memoria { size: A4 portrait; margin: 14mm 14mm 14mm 16mm; }
+.mc-nota-fator { font-size: 8.5pt; color: #444444; margin: 2px 0 0; }
+
+/* ---------------------------------------------- Simples Nacional no distrato */
+.dt-simples { display: grid; gap: .35rem; margin-top: .6rem; padding: .6rem .7rem; border: 1px solid var(--borda); border-radius: 6px; background: var(--cabecalho); }
+.dt-simples-topo { display: flex; flex-wrap: wrap; gap: .4rem .75rem; align-items: center; }
+.dt-simples-topo a { font-size: .85rem; color: var(--secundaria); }
+.dt-simples .dica { margin: 0; }
+.dt-simples .ruim { color: var(--erro); font-weight: 600; }
+
+/* o título do formulário (com "Voltar à lista") fica fixo no topo enquanto o formulário rola */
+.ct-form > .cab-cartao {
+  position: sticky; top: -1rem; z-index: 3; margin: -1rem -1rem 0; padding: .75rem 1rem .6rem;
+  background: var(--cartao); border-bottom: 1px solid var(--borda); border-radius: 8px 8px 0 0;
+}
+@media (max-width: 1100px) {
+  .ct-form > .cab-cartao { top: 0; border-radius: 0; }
+}
+.ct-previa-vazia { display: grid; justify-items: center; }
+/* folha provisória: logotipo e linhas cinzas simulando o texto */
+.ct-sim-folha {
+  width: min(100%, 21cm); min-height: 70vh; background: #ffffff; color: #8a8f9c; border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .15); padding: 1.6cm 1.8cm; display: grid; align-content: start; gap: 1rem;
+}
+.ct-sim-logo { width: 90px; height: auto; justify-self: center; opacity: .55; }
+.ct-sim-titulo { margin: 0; text-align: center; font-weight: 700; letter-spacing: .03em; color: #b8bcc6; }
+.ct-sim-linhas { display: grid; gap: .55rem; }
+.ct-sim-linha { display: block; height: .55rem; border-radius: 3px; background: #eceef3; }
+.ct-sim-espaco { display: block; height: .4rem; }
+.ct-sim-aviso { margin: 1rem 0 0; text-align: center; font-size: .9rem; }
+.ct-docs-empresa { display: grid; gap: .3rem; padding: .4rem .5rem; border: 1px dashed var(--borda); border-radius: 6px; }
+.ct-anexos { display: grid; gap: .35rem; margin-bottom: .8rem; padding: .6rem .75rem; border: 1px solid var(--borda); border-radius: 8px; background: var(--cartao); }
+.ct-anexos small { color: var(--suave); }
+.ct-anexos div { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+@media print { .ct-anexos { display: none; } }
