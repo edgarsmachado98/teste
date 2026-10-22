@@ -473,19 +473,22 @@
   });
 
   // modo do formulário: 'novo', 'exibir' (só leitura) ou 'editar'; os dois últimos mostram a barra com "Voltar"
-  let modoColab = 'novo';
+  // a lista ocupa a tela; o formulário abre no lugar dela ('novo', 'exibir' ou 'editar') com a barra "Voltar"
+  let modoColab = 'fechado';
   function modoFormColab(modo, c) {
     modoColab = modo;
+    const aberto = modo !== 'fechado';
+    formColab.hidden = !aberto;
+    $('#colab-barra').hidden = !aberto;
+    $('#colab-lista-cartao').hidden = aberto;
+    if (!aberto) return;
     const leitura = modo === 'exibir' || !podeEditar();
     formColab.querySelectorAll('input, select, textarea').forEach((el) => { if (el.type !== 'hidden') el.disabled = leitura; });
-    $('#colab-barra').hidden = modo === 'novo';
-    $('#colab-barra-titulo').textContent = c ? `${c.nome} (matrícula ${c.matricula})` : '';
+    $('#colab-barra-titulo').textContent = c ? `${c.nome} (matrícula ${c.matricula})` : 'Novo colaborador';
     $('#colab-modo').hidden = modo !== 'exibir';
     $('#colab-editar').hidden = $('#colab-editar-fim').hidden = modo !== 'exibir' || !podeEditar();
     $('#colab-salvar').hidden = leitura;
-    $('#colab-cancelar').textContent = modo === 'novo' ? 'Cancelar' : 'Voltar';
-    // perfil consulta: o formulário só aparece para exibir um cadastro
-    formColab.hidden = modo === 'novo' && !podeEditar();
+    $('#colab-cancelar').textContent = 'Voltar';
     $('#titulo-form-colab').textContent = modo === 'novo' ? 'Novo colaborador' : modo === 'exibir' ? 'Dados do colaborador' : 'Editar colaborador';
   }
   const voltarColab = () => { formColab.reset(); window.scrollTo(0, 0); };
@@ -497,9 +500,15 @@
   $('#colab-editar').addEventListener('click', editarColab);
   $('#colab-editar-fim').addEventListener('click', editarColab);
 
+  $('#colab-novo').addEventListener('click', () => {
+    if (!exigirEdicao()) return;
+    formColab.reset();
+    setTimeout(() => { modoFormColab('novo'); window.scrollTo(0, 0); formColab.elements.nome.focus({ preventScroll: true }); });
+  });
+
   formColab.addEventListener('reset', () => setTimeout(() => {
     formColab.elements.id.value = '';
-    modoFormColab('novo');
+    modoFormColab('fechado');
     formColab.querySelectorAll('details').forEach((d) => { d.open = false; });
     caixaSemControle.checked = false;
     mostrarMotivoControle();
@@ -526,7 +535,7 @@
       $('#colab-desligamento').open = !!c.desligamento;
       modoFormColab(b.dataset.acao, c);
       atualizarDicaJornada();
-      formColab.scrollIntoView({ block: 'start' });
+      window.scrollTo(0, 0);
       if (b.dataset.acao === 'editar') f.nome.focus({ preventScroll: true });
     } else if (b.dataset.acao === 'excluir') {
       if (!(await confirmar(`Excluir ${c.nome} (matrícula ${c.matricula})?\n\nSe a pessoa saiu da empresa, prefira registrar o ` +
@@ -1015,7 +1024,7 @@
       usuario = u;
       document.body.classList.toggle('perfil-consulta', !podeEditar());
       document.body.classList.toggle('perfil-admin', u.perfil === 'admin');
-      modoFormColab('novo');
+      modoFormColab('fechado');
       await recarregar();
       periodoPadrao();
       mostrarAba('inicio');
