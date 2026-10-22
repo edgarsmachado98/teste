@@ -335,7 +335,7 @@ O botão **Conferir no Cálculo Exato** abre o site para conferência.
 ### Ferramentas (só administradores)
 
 O módulo **Ferramentas**, na barra de ícones acima de Usuários, reúne o **backup** (baixar os dados em .json),
-a **restauração** de um backup e o **Limpar tudo**. Ele aparece só para usuários administradores.
+e a **restauração** de um backup. Ele aparece só para usuários administradores.
 
 ### Jornadas disponíveis
 

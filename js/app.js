@@ -998,12 +998,6 @@
     if (await executar(() => api.post('/api/restaurar', dados))) avisar('Backup restaurado.');
   });
 
-  $('#btn-limpar').addEventListener('click', async () => {
-    if (!exigirEdicao()) return;
-    if (!(await confirmar('Apagar todos os setores, colaboradores e escalas? Os usuários do sistema são mantidos.'))) return;
-    await executar(() => api.del('/api/dados'));
-  });
-
   // ------------------------------------------------------------- render
 
   function render() {
