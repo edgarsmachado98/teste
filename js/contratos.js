@@ -60,13 +60,45 @@
         <td>${esc((c.zona || '').split('\n')[0])}</td>
         <td>${esc(C.dataBR(c.dataContrato))}</td>
         <td>${c.situacao === 'encerrado' ? '<span class="chip">Encerrado</span>' : '<span class="chip bom">Ativo</span>'}
-          ${c.pendencias ? `<span class="chip breve" title="Faltam dados para gerar o documento">${c.pendencias} pendência(s)</span>` : ''}</td>
+          ${c.pendencias ? `<button type="button" class="chip breve chip-botao" data-acao="pendencias" data-id="${c.id}"
+            title="Ver o que falta preencher">${c.pendencias} pendência(s) ›</button>` : ''}</td>
         <td class="acoes">
           <button type="button" class="mini sec" data-acao="exibir" data-id="${c.id}">Exibir</button>
           ${podeEditar() ? `<button type="button" class="mini sec" data-acao="abrir" data-id="${c.id}">Editar</button>` : ''}
           ${podeEditar() ? `<button type="button" class="mini perigo" data-acao="excluir" data-id="${c.id}">Excluir</button>` : ''}
         </td></tr>`).join('') ||
       `<tr><td colspan="7" class="vazio">${contratos.length ? 'Nenhum contrato encontrado.' : 'Nenhum contrato cadastrado.'}</td></tr>`;
+  }
+
+  // ------------------------------------------------------------- pendências
+
+  const GRUPOS_CAMPOS = { empresa: 'Empresa representante', responsavel: 'Responsável legal',
+    residencia: 'Endereço residencial do responsável', contrato: 'Contrato' };
+
+  /** Janela com o que falta preencher no cadastro, agrupado como no formulário. */
+  async function verPendencias(c) {
+    const lista = C.pendencias(c);
+    const porGrupo = {};
+    for (const p of lista) {
+      const def = C.CAMPOS.find((x) => x.id === p.campo);
+      const g = GRUPOS_CAMPOS[def ? def.grupo : 'empresa'];
+      (porGrupo[g] = porGrupo[g] || []).push(p.mensagem);
+    }
+    $('#pend-titulo').textContent = `Pendências — ${c.razao}`;
+    $('#pend-resumo').textContent = `${lista.length} item(ns) a preencher antes de gerar os documentos legais.`;
+    $('#pend-lista').innerHTML = Object.entries(porGrupo).map(([g, ms]) =>
+      `<div><b>${esc(g)}</b><ul>${ms.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></div>`).join('') ||
+      '<p>Nenhuma pendência: o cadastro está completo.</p>';
+    $('#pend-completar').hidden = !podeEditar() || !lista.length;
+    const dlg = $('#dialogo-pendencias');
+    dlg.returnValue = '';
+    dlg.showModal();
+    await new Promise((r) => dlg.addEventListener('close', r, { once: true }));
+    if (dlg.returnValue === 'completar') {
+      // abre a edição já com os campos pendentes destacados e o cursor no primeiro
+      await abrir(c, false);
+      mostrarPendencias(C.pendencias(c));
+    }
   }
 
   $('#ct-busca').addEventListener('input', renderLista);
@@ -175,7 +207,8 @@
     if (!b) return;
     const c = contratos.find((x) => x.id === b.dataset.id);
     if (!c) return;
-    if (b.dataset.acao === 'abrir' || b.dataset.acao === 'exibir') abrir(c, b.dataset.acao === 'exibir');
+    if (b.dataset.acao === 'pendencias') verPendencias(c);
+    else if (b.dataset.acao === 'abrir' || b.dataset.acao === 'exibir') abrir(c, b.dataset.acao === 'exibir');
     else if (b.dataset.acao === 'excluir') {
       if (!(await App.confirmar(`Excluir o contrato de ${c.razao}? Esta ação não pode ser desfeita.`))) return;
       try {

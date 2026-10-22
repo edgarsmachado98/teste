@@ -551,3 +551,10 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 .re-sit.T { background: var(--trabalho); color: var(--trabalho-texto); }
 .re-sit.F { background: var(--folga); color: var(--folga-texto); }
 .re-sit.FER { background: var(--feriado); color: var(--feriado-texto); }
+
+/* etiqueta de pendência clicável e janela com a lista */
+.chip-botao { border: 0; cursor: pointer; font: inherit; font-size: .75rem; font-weight: 600; padding: .1rem .55rem; border-radius: 999px; }
+.chip-botao:hover { filter: brightness(.95); text-decoration: underline; background: var(--folga); color: var(--folga-texto); }
+#dialogo-pendencias { max-width: 34rem; }
+.pend-lista { display: grid; gap: .6rem; max-height: 55vh; overflow: auto; }
+.pend-lista ul { margin: .25rem 0 0; padding-left: 1.2rem; }
