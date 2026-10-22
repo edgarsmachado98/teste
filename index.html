@@ -55,7 +55,7 @@
       <button type="button" class="modulo" data-modulo="escalas" data-grupo="Pessoas" title="Gestão de Jornada"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg><span class="curto" aria-hidden="true">Jornada</span><span class="rotulo">Gestão de Jornada</span></button>
       <span class="grupo-trilho" aria-hidden="true">COMERCIAL</span>
       <button type="button" class="modulo" data-modulo="contratos" data-grupo="Comercial" title="Representação Comercial"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/></svg><span class="curto" aria-hidden="true">Comercial</span><span class="rotulo">Representação Comercial</span></button>
-      <button type="button" class="modulo" data-modulo="distratos" data-grupo="Comercial" title="Rescisões Contratuais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="curto" aria-hidden="true">Rescisões</span><span class="rotulo">Rescisões Contratuais</span></button>
+      <button type="button" class="modulo" data-modulo="distratos" data-grupo="Comercial" title="Distratos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5"/></svg><span class="curto" aria-hidden="true">Distratos</span><span class="rotulo">Distratos</span></button>
       <span class="grupo-trilho" aria-hidden="true">GESTÃO</span>
       <button type="button" class="modulo" data-modulo="relatorios" data-grupo="Gestão" title="Relatórios Gerenciais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="curto" aria-hidden="true">Relatórios</span><span class="rotulo">Relatórios Gerenciais</span></button>
       <button type="button" class="modulo so-edicao" data-modulo="custos" data-grupo="Gestão" title="Gestão de Custos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.6-2.4-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.2 0 2.1-2 3.4-4.5 3.4-2.2 0-4-1-4.6-2.7"/></svg><span class="curto" aria-hidden="true">Custos</span><span class="rotulo">Gestão de Custos</span></button>
@@ -85,7 +85,7 @@
         <button type="button" class="aba" data-modulo="escalas" data-aba="regras">Parâmetros e Feriados</button>
       </div>
       <div class="subitens" data-modulo="relatorios">
-        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-distratos">Rescisões Realizadas</button>
+        <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-distratos">Distratos Realizados</button>
         <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-contratos">Carteira de Representantes</button>
         <button type="button" class="aba" data-modulo="relatorios" data-aba="rel-escalas">Escala Diária por Setor</button>
       </div>
@@ -96,7 +96,7 @@
       </div>
       <p class="subitens menu-desc" data-modulo="inicio">Visão geral do sistema e acesso rápido aos módulos.</p>
       <p class="subitens menu-desc" data-modulo="contratos">Contratos de representação comercial (Lei 4.886/1965) e documentos legais em PDF e Word.</p>
-      <p class="subitens menu-desc" data-modulo="distratos">Rescisão do contrato de representação (distrato): cálculo com correção pelo IGP-M, termo, aviso prévio e demonstrativo de cálculo.</p>
+      <p class="subitens menu-desc" data-modulo="distratos">Distrato do contrato de representação: cálculo com correção pelo IGP-M, termo, aviso prévio e demonstrativo de cálculo.</p>
       <p class="subitens menu-desc" data-modulo="ferramentas">Cópia de segurança e restauração de dados. Disponível só para administradores.</p>
       <p class="subitens menu-desc" data-modulo="usuarios">Usuários, perfis de acesso e trilha de auditoria.</p>
 
@@ -164,7 +164,7 @@
           <span>Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, com geração em PDF e Word.</span>
         </button>
         <button type="button" class="card-modulo" data-ir="distratos">
-          <span class="card-topo"><b>Rescisões Contratuais</b><span class="chip bom">Disponível</span></span>
+          <span class="card-topo"><b>Distratos</b><span class="chip bom">Disponível</span></span>
           <span>Cálculo da indenização (1/12) e do aviso prévio com correção pelo IGP-M, e termo de distrato e aviso prévio em PDF e Word.</span>
         </button>
       </div>
@@ -318,10 +318,10 @@
     <section id="aba-distratos" class="painel" data-modulo="distratos">
       <div class="cartao" id="dt-lista-cartao">
         <div class="cab-cartao">
-          <h2>Rescisões contratuais (distratos)</h2>
+          <h2>Distratos</h2>
           <div class="linha-botoes">
             <input type="search" id="dt-busca" placeholder="Buscar por nome ou CNPJ" aria-label="Buscar distrato">
-            <button type="button" id="dt-novo" class="so-edicao">Nova rescisão</button>
+            <button type="button" id="dt-novo" class="so-edicao">Novo distrato</button>
           </div>
         </div>
         <table class="tabela">
@@ -333,7 +333,7 @@
       <div id="dt-editor" class="ct-editor dt-editor" hidden>
         <div class="barra-voltar">
           <button type="button" id="dt-voltar" class="sec">← Voltar à lista</button>
-          <h2 id="dt-titulo">Nova rescisão</h2>
+          <h2 id="dt-titulo">Novo distrato</h2>
           <span class="modo-chip" id="dt-modo" hidden>Somente leitura</span>
           <button type="button" id="dt-editar" class="so-edicao" hidden>Editar</button>
           <div class="dt-empresas" id="dt-empresas" role="group" aria-label="Empresa representada" hidden></div>
@@ -757,7 +757,7 @@
     <section id="aba-rel-distratos" class="painel" data-modulo="relatorios">
       <div class="cartao">
         <div class="cab-cartao">
-          <h2>Rescisões Realizadas <small id="rd-resumo"></small></h2>
+          <h2>Distratos Realizados <small id="rd-resumo"></small></h2>
           <div class="linha-botoes">
             <button type="button" id="rd-xlsx" class="sec">Exportar Excel</button>
             <button type="button" id="rd-pdf" class="sec">Imprimir / PDF</button>
@@ -799,7 +799,7 @@
         <div class="rel-rolagem">
           <table class="tabela">
             <thead><tr><th>Representante</th><th>CNPJ</th><th>Cidade</th><th>Estado de atuação</th><th>Data do contrato</th>
-              <th>Situação</th><th>Rescisões (distratos)</th><th></th></tr></thead>
+              <th>Situação</th><th>Distratos</th><th></th></tr></thead>
             <tbody id="rc-lista"></tbody>
           </table>
         </div>

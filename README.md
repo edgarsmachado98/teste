@@ -10,7 +10,7 @@ cada uma com seu login e perfil, e todas as alterações ficam registradas no hi
 ## Módulos
 
 A barra de ícones agrupa os módulos em **Pessoas** (Cadastros Gerais, Gestão de Jornada), **Comercial**
-(Representação Comercial, Rescisões Contratuais), **Gestão** (Relatórios Gerenciais, Gestão de Custos) e
+(Representação Comercial, Distratos), **Gestão** (Relatórios Gerenciais, Gestão de Custos) e
 **Sistema** (Configurações, Acessos e Permissões). Os nomes são só de tela: os dados e o banco não mudam.
 
 | Módulo | Situação | O que faz |
@@ -19,7 +19,7 @@ A barra de ícones agrupa os módulos em **Pessoas** (Cadastros Gerais, Gestão 
 | Gestão de Jornada | Disponível | Gera escalas 6x1, 5x2 e 12x36 com rodízio de domingos, feriados e validação legal |
 | Gestão de Custos | Disponível | Folha mensal com encargos, provisões e benefícios, e 12 relatórios de custos, benefícios, turnover e produtividade |
 | Representação Comercial | Disponível | Contratos de representação comercial (Lei 4.886/1965) no modelo da empresa, em PDF e Word |
-| Rescisões Contratuais (distratos) | Disponível | Cálculo do distrato com correção pelo IGP-M e termo de distrato e aviso prévio em PDF e Word |
+| Distratos | Disponível | Cálculo do distrato com correção pelo IGP-M e termo de distrato e aviso prévio em PDF e Word |
 
 ## Instalação e execução
 
@@ -340,7 +340,7 @@ O botão **Conferir no Cálculo Exato** abre o site para conferência.
 
 O módulo **Relatórios Gerenciais** tem três seções, com pesquisa e exportação para Excel e PDF:
 
-- **Rescisões Realizadas**: os distratos salvos com o resultado gravado no momento em que foram salvos (indenização,
+- **Distratos Realizados**: os distratos salvos com o resultado gravado no momento em que foram salvos (indenização,
   aviso prévio, títulos pendentes, a receber, IR retido e total líquido). Pesquisa por representante, CNPJ,
   empresa representada e cidade. **Exibir** abre o distrato para conferir e baixar de novo os documentos e a
   memória de cálculo; o "Voltar" retorna ao relatório.

@@ -301,8 +301,8 @@
     if (img.complete) window.print(); else { img.onload = () => window.print(); img.onerror = () => window.print(); }
   }
 
-  $('#rd-xlsx').addEventListener('click', () => exportarXlsx('Rescisões Realizadas', COLS_D, filtrarDistratos(), 'relatorio_distratos'));
-  $('#rd-pdf').addEventListener('click', () => imprimir('Rescisões Realizadas', COLS_D, filtrarDistratos()));
+  $('#rd-xlsx').addEventListener('click', () => exportarXlsx('Distratos Realizados', COLS_D, filtrarDistratos(), 'relatorio_distratos'));
+  $('#rd-pdf').addEventListener('click', () => imprimir('Distratos Realizados', COLS_D, filtrarDistratos()));
   $('#rc-xlsx').addEventListener('click', () => exportarXlsx('Carteira de Representantes', COLS_C, filtrarContratos(), 'relatorio_contratos'));
   $('#rc-pdf').addEventListener('click', () => imprimir('Carteira de Representantes', COLS_C, filtrarContratos()));
   $('#re-xlsx').addEventListener('click', () => exportarXlsx(tituloEscala(), COLS_E, filtrarEscala(), 'relatorio_escala'));

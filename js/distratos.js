@@ -128,7 +128,7 @@
     $('#dt-naturalidade').value = d.naturalidade || '';
     const docs = d.documentos && d.documentos.length ? d.documentos : ['distrato', 'aviso'];
     form.querySelectorAll('input[name=dt-documento]').forEach((x) => { x.checked = docs.includes(x.value); });
-    $('#dt-titulo').textContent = d.id ? `Distrato — ${d.razao} (${nomeEmpresa(d.representada)})` : 'Nova rescisão';
+    $('#dt-titulo').textContent = d.id ? `Distrato — ${d.razao} (${nomeEmpresa(d.representada)})` : 'Novo distrato';
     form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !editavel(); });
     $('#dt-modo').hidden = !exibindo;
     renderEmpresas();
