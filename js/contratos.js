@@ -360,6 +360,7 @@
     }
     d.documentos = [...form.querySelectorAll('input[name=documento]:checked')].map((x) => x.value);
     d.situacao = $('#ct-situacao').value;
+    d.observacoes = $('#ct-observacoes').value;
     return d;
   }
 
@@ -377,6 +378,7 @@
     const docs = Array.isArray(d.documentos) && d.documentos.length ? d.documentos : C.DOCUMENTOS.map((x) => x.id);
     renderDocumentos(docs);
     $('#ct-situacao').value = d.situacao || 'ativo';
+    $('#ct-observacoes').value = d.observacoes || '';
   }
 
   function hoje() {

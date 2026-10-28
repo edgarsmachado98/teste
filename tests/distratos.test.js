@@ -335,3 +335,15 @@ test('relatórios: o distrato guarda o resultado de quando foi salvo, por empres
   const lista = s.listarDistratos(A).filter((d) => d.contratoId === c.id);
   assert.deepStrictEqual(lista.map((d) => d.representada).sort(), ['alimentos', 'cia']);
 });
+
+test('contrato: observações ficam só no cadastro', () => {
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  const A = { id: 'a', login: 'adm', perfil: 'admin' };
+  const c = s.salvarContrato(A, { ...CONTRATO, estados: 'SP', observacoes: '  Prefere contato por e-mail.\nVisita mensal.  ' });
+  assert.strictEqual(c.observacoes, 'Prefere contato por e-mail.\nVisita mensal.');
+  assert.strictEqual(s.listarContratos(A).find((x) => x.id === c.id).observacoes, c.observacoes);
+  const texto = JSON.stringify(C.montar(c));
+  assert.ok(!texto.includes('Prefere contato'));
+  assert.throws(() => s.salvarContrato(A, { ...CONTRATO, id: c.id, estados: 'SP', observacoes: 'x'.repeat(4001) }), /4000/);
+});

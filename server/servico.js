@@ -956,6 +956,9 @@ function criarServico(db, opcoes = {}) {
       ? d.documentos.filter((x) => typeof x === 'string' && (disponiveis.some((y) => y.id === x) || anexoValido(x))) : [];
     out.documentos = docs.length ? [...new Set(docs)] : disponiveis.map((x) => x.id);
     out.situacao = SITUACOES.includes(d.situacao) ? d.situacao : 'ativo';
+    // observações internas: só cadastro, não entram no contrato
+    out.observacoes = String(d.observacoes == null ? '' : d.observacoes).trim();
+    if (out.observacoes.length > 4000) falhar(400, 'Observações: no máximo 4000 caracteres.');
     // para salvar basta identificar o representante; o restante pode ser completado depois
     if (!out.razao) falhar(400, 'Informe a razão social do representante.');
     if (!out.cnpj) falhar(400, 'Informe o CNPJ do representante.');
