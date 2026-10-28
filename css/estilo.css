@@ -558,3 +558,7 @@ button.fl-comp.ativa { border-color: var(--primaria); box-shadow: inset 0 -3px 0
 #dialogo-pendencias { max-width: 34rem; }
 .pend-lista { display: grid; gap: .6rem; max-height: 55vh; overflow: auto; }
 .pend-lista ul { margin: .25rem 0 0; padding-left: 1.2rem; }
+
+/* busca de contratos: em qual campo o termo foi encontrado */
+.ct-achado { color: var(--alerta-texto); background: var(--realce); padding: 0 .35rem; border-radius: 4px; }
+#ct-busca { min-width: 18rem; }

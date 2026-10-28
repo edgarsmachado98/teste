@@ -41,20 +41,64 @@
   }
 
   /** Contratos com a busca e o filtro de situação da tela (a mesma lista exportada). */
+  // ------------------------------------------------------------- busca
+
+  const normalizar = (v) => String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const NOMES_ESTADO = Object.fromEntries(C.ESTADOS_ATUACAO.map((e) => [e.uf, e.nome]));
+  /** Campos pesquisáveis do cadastro: [rótulo, texto]. Datas também em dd/mm/aaaa; documentos também só com dígitos. */
+  function camposBusca(c) {
+    const out = C.CAMPOS.filter((f) => f.tipo !== 'check').map((f) => {
+      let v = c[f.id];
+      if (f.tipo === 'estados') v = C.listaEstados(v).map((uf) => `${uf} ${NOMES_ESTADO[uf] || ''}`).join(' ');
+      else if (f.tipo === 'data') v = v ? `${v} ${C.dataBR(v)}` : '';
+      else if (['cpf', 'cnpj', 'cep'].includes(f.tipo)) v = v ? `${v} ${C.soDigitos(v)}` : '';
+      return [f.rotulo, v || ''];
+    });
+    out.push(['Situação', c.situacao === 'encerrado' ? 'Encerrado' : 'Ativo']);
+    out.push(['Observações', c.observacoes || '']);
+    return out;
+  }
+  // campos que já aparecem na tabela (não precisam do aviso "encontrado em")
+  const VISIVEIS = ['Razão social', 'CNPJ', 'Nome completo', 'Código do representante', 'Cidade', 'UF', 'Estado de atuação do representante',
+    'Zona de influência/clientes (Anexo I)', 'Data do contrato', 'Situação'];
+
+  /** Onde a expressão aparece: lista de rótulos (vazia = não encontrada). Todas as palavras precisam aparecer no cadastro. */
+  function achados(c, busca) {
+    const palavras = normalizar(busca).split(/\s+/).filter(Boolean);
+    if (!palavras.length) return null;
+    const campos = camposBusca(c).map(([r, v]) => [r, normalizar(v), C.soDigitos(v)]);
+    // números também valem sem pontuação (ex.: 29356 encontra 29.356.095/0001-62)
+    const casa = ([, txt, dig], w) => txt.includes(w) || (/\d/.test(w) && C.soDigitos(w).length >= 3 && dig.includes(C.soDigitos(w)));
+    if (!palavras.every((w) => campos.some((f) => casa(f, w)))) return [];
+    return campos.filter((f) => palavras.some((w) => casa(f, w))).map(([r]) => r);
+  }
+
   function listaFiltrada() {
-    const busca = $('#ct-busca').value.trim().toLowerCase();
-    const digitos = C.soDigitos(busca);
+    const busca = $('#ct-busca').value.trim();
     const filtro = $('#ct-filtro').value;
-    return contratos.filter((c) => (!filtro || c.situacao === filtro) &&
-      (!busca || (c.razao || '').toLowerCase().includes(busca) || (c.responsavel || '').toLowerCase().includes(busca) ||
-        (c.codigo || '').toLowerCase() === busca ||
-        (digitos && C.soDigitos(c.cnpj).includes(digitos))));
+    return contratos.filter((c) => (!filtro || c.situacao === filtro) && (!busca || achados(c, busca).length));
+  }
+
+  /** Aviso abaixo do nome quando a busca encontrou o termo em um campo que não aparece na tabela. */
+  function ondeAchou(c) {
+    const busca = $('#ct-busca').value.trim();
+    if (!busca) return '';
+    const fora = (achados(c, busca) || []).filter((r) => !VISIVEIS.includes(r));
+    if (!fora.length) return '';
+    let trecho = '';
+    if (fora.includes('Observações')) {
+      const obs = String(c.observacoes || '');
+      const w = normalizar(busca).split(/\s+/)[0];
+      const i = normalizar(obs).indexOf(w);
+      if (i >= 0) trecho = ` — “${obs.slice(Math.max(0, i - 30), i + 60).replace(/\s+/g, ' ').trim()}…”`;
+    }
+    return `<br><small class="ct-achado">encontrado em: ${esc(fora.join(', '))}${esc(trecho)}</small>`;
   }
 
   function renderLista() {
     const lista = listaFiltrada();
     $('#ct-lista').innerHTML = lista.map((c) => `<tr>
-        <td><b>${esc(c.razao)}</b><br><small class="suave">${c.codigo ? `Cód. ${esc(c.codigo)} · ` : ''}${esc(c.responsavel || '')}</small></td>
+        <td><b>${esc(c.razao)}</b><br><small class="suave">${c.codigo ? `Cód. ${esc(c.codigo)} · ` : ''}${esc(c.responsavel || '')}</small>${ondeAchou(c)}</td>
         <td>${esc(c.cnpj)}</td>
         <td>${esc([c.cidade, c.uf].filter(Boolean).join('-'))}${c.estados ? `<br><small class="suave">atuação: ${esc(C.listaEstados(c.estados).join(', '))}</small>` : ''}</td>
         <td>${esc((c.zona || '').split('\n')[0])}</td>
