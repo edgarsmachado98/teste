@@ -29,6 +29,15 @@
         <div class="stat"><b id="st-zone">–</b><span>Zona restrita (24h)</span></div>
         <div class="stat"><b id="st-fire">–</b><span>Fogo/fumaça (24h)</span></div>
       </div>
+      <div id="onboarding" class="card onboarding" hidden>
+        <h2>Primeiros passos</h2>
+        <ol>
+          <li>Cadastre uma câmera (pode ser a webcam deste computador).</li>
+          <li>Crie uma regra – por exemplo, <b>Zona restrita</b> ou <b>EPI ausente</b>.</li>
+          <li>Pronto: as ocorrências aparecem aqui em tempo real, com som e foto.</li>
+        </ol>
+        <button type="button" id="go-cameras">Adicionar câmera</button>
+      </div>
       <div class="toolbar">
         <h2>Ocorrências</h2>
         <select id="filter-status">
@@ -61,6 +70,7 @@
         <label class="check"><input type="checkbox" name="enabled" checked> Ativa</label>
         <div class="actions">
           <button type="submit">Salvar câmera</button>
+          <button type="button" id="use-webcam" class="secondary">Usar webcam deste computador</button>
           <button type="reset" class="secondary">Limpar</button>
         </div>
       </form>

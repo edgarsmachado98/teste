@@ -116,3 +116,6 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.8); }
   .live, .events { grid-template-columns: 1fr; }
   table { display: block; overflow-x: auto; }
 }
+
+.onboarding { border-color: var(--accent); margin-bottom: 24px; }
+.onboarding ol { margin: 0 0 16px; padding-left: 20px; line-height: 1.8; }

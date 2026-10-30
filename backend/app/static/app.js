@@ -20,6 +20,15 @@ function getToken() {
 function setToken(t) {
   try { localStorage.setItem("vigia_token", t); } catch { /* sem storage */ }
 }
+// O iniciador (vigia.py) abre o painel com ?token=... – guardamos e limpamos a URL.
+(() => {
+  const params = new URLSearchParams(location.search);
+  if (params.has("token")) {
+    setToken(params.get("token"));
+    history.replaceState(null, "", location.pathname + location.hash);
+  }
+})();
+
 const withToken = (url) => {
   const t = getToken();
   return t ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(t)}` : url;
@@ -114,6 +123,7 @@ async function loadEvents() {
 
 async function loadStats() {
   const s = await api("/api/stats");
+  $("#onboarding").hidden = s.cameras > 0;
   $("#st-pending").textContent = s.pending;
   $("#st-ppe").textContent = s.last_24h.ppe_missing || 0;
   $("#st-zone").textContent = s.last_24h.restricted_zone || 0;
@@ -220,6 +230,17 @@ $("#camera-form").addEventListener("submit", async (e) => {
   } catch (err) { toast(esc(err.message), "danger"); }
 });
 $("#camera-form").addEventListener("reset", (e) => { e.target.id.value = ""; });
+$("#use-webcam").addEventListener("click", () => {
+  const f = $("#camera-form");
+  if (!f.name.value) f.name.value = "Webcam";
+  f.source.value = "0";
+  f.requestSubmit();
+});
+
+function openTab(name) {
+  $(`nav button[data-tab=${name}]`).click();
+}
+$("#go-cameras").addEventListener("click", () => openTab("cameras"));
 
 // ---------- Regras ----------
 let rules = [];

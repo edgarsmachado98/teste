@@ -6,3 +6,4 @@ data/
 modelos/*.pt
 videos/
 *.db
+.venv/

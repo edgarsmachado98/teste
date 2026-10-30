@@ -39,6 +39,23 @@ Câmeras IP (RTSP) ─► detector/ (YOLO + motor de regras) ──HTTP──►
 
 ## Como rodar
 
+### Jeito mais fácil (Windows)
+
+1. Instale o [Python](https://www.python.org/downloads/), marcando **"Add python.exe to PATH"**.
+2. Baixe o projeto e dê **dois cliques em `iniciar.bat`**.
+
+Na primeira vez ele instala tudo (alguns minutos) e cria o `.env` com tokens aleatórios. Depois,
+abre o painel no navegador já autenticado. Servidor e detector rodam juntos na mesma janela;
+para encerrar, feche a janela ou pressione Ctrl+C.
+
+No Linux ou Mac, o equivalente é:
+
+```bash
+python3 vigia.py
+```
+
+### Com Docker (servidor da empresa)
+
 ```bash
 cp .env.example .env
 ```
