@@ -1,12 +1,59 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 RuleType = Literal["ppe_missing", "restricted_zone", "fire_smoke", "max_people"]
 Severity = Literal["baixa", "media", "alta", "critica"]
-EventStatus = Literal["nova", "confirmada", "descartada"]
+EventStatus = Literal["nova", "confirmada", "descartada", "encerrada"]
+Classification = Literal["ato_inseguro", "condicao_insegura", "quase_acidente", "acidente"]
+Role = Literal["operador", "tecnico", "gestor", "admin"]
+ActionStatus = Literal["aberta", "concluida", "cancelada"]
 
+
+# ---------- Usuários e acesso ----------
+
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    email: str
+    role: Role
+    active: bool
+    last_login_at: datetime | None = None
+
+
+class UserIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=200, pattern=r"^[^@\s]+@[^@\s]+$")
+    role: Role = "operador"
+    active: bool = True
+    # Obrigatória na criação; na edição, vazia mantém a atual.
+    password: str | None = Field(None, min_length=8, max_length=200)
+
+
+class SetupIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=200, pattern=r"^[^@\s]+@[^@\s]+$")
+    password: str = Field(min_length=8, max_length=200)
+
+
+class PasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class SessionOut(BaseModel):
+    token: str
+    user: UserOut
+
+
+# ---------- Câmeras e regras ----------
 
 class CameraIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
@@ -19,6 +66,8 @@ class CameraOut(CameraIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime
+    health: str | None = None
+    last_frame_at: datetime | None = None
 
 
 class RuleIn(BaseModel):
@@ -51,11 +100,13 @@ class RuleOut(RuleIn):
     id: int
 
 
+# ---------- Ocorrências e plano de ação ----------
+
 class EventOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
     id: int
     camera_id: int
     camera_name: str
+    location: str
     rule_id: int | None
     rule_name: str | None
     type: str
@@ -63,15 +114,87 @@ class EventOut(BaseModel):
     message: str
     image_url: str | None
     status: EventStatus
+    classification: Classification | None
+    notes: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+    closed_at: datetime | None
+    open_actions: int
     created_at: datetime
 
 
-class EventStatusIn(BaseModel):
-    status: EventStatus
+class EventUpdate(BaseModel):
+    status: EventStatus | None = None
+    classification: Classification | None = None
+    notes: str | None = Field(None, max_length=4000)
 
+
+class ActionIn(BaseModel):
+    event_id: int | None = None
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    responsible_id: int | None = None
+    due_date: date | None = None
+
+
+class ActionUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    responsible_id: int | None = None
+    due_date: date | None = None
+    status: ActionStatus | None = None
+    completion_notes: str | None = None
+
+
+class ActionOut(BaseModel):
+    id: int
+    event_id: int | None
+    event_message: str | None
+    title: str
+    description: str
+    responsible_id: int | None
+    responsible_name: str | None
+    due_date: date | None
+    status: ActionStatus
+    overdue: bool
+    completion_notes: str
+    created_by: str | None
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class AuditOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_name: str
+    action: str
+    entity: str
+    entity_id: int | None
+    details: str
+    ip: str
+    created_at: datetime
+
+
+class EventDetail(EventOut):
+    actions: list[ActionOut]
+    history: list[AuditOut]
+
+
+# ---------- Detector ----------
 
 class DetectorCamera(BaseModel):
     id: int
     name: str
     source: str
     rules: list[RuleOut]
+
+
+class StatItem(BaseModel):
+    rule_id: int
+    observed: int = Field(ge=0)
+    violations: int = Field(ge=0)
+
+
+class StatsIn(BaseModel):
+    camera_id: int
+    items: list[StatItem]

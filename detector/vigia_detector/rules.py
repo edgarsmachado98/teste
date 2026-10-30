@@ -86,12 +86,42 @@ def missing_ppe(person: Detection, items: list[Detection], required: list[str]) 
     return missing
 
 
-def evaluate_frame(rule: dict, detections: list[Detection]) -> Violation | None:
-    """Avalia uma regra em um único quadro (sem considerar tempo)."""
+def _filter(rule: dict, detections: list[Detection]) -> tuple[list[Detection], list[Detection]]:
+    """Detecções com confiança suficiente e as pessoas cujos pés estão na zona."""
     min_conf = rule.get("min_confidence", 0.5)
     zone = rule.get("zone") or []
     dets = [d for d in detections if d.confidence >= min_conf]
     people = [d for d in dets if d.label == PERSON and point_in_polygon(d.foot, zone)]
+    return dets, people
+
+
+def ppe_check(rule: dict, dets: list[Detection], people: list[Detection]) -> tuple[list[Detection], set[str]]:
+    """Pessoas sem algum EPI obrigatório e o conjunto de itens faltantes."""
+    required = rule.get("params", {}).get("required") or ["helmet"]
+    items = [d for d in dets if d.label != PERSON]
+    offenders, missing_all = [], set()
+    for person in people:
+        missing = missing_ppe(person, items, required)
+        if missing:
+            offenders.append(person)
+            missing_all.update(missing)
+    return offenders, missing_all
+
+
+def observe(rule: dict, detections: list[Detection]) -> tuple[int, int] | None:
+    """Para o índice de conformidade: (pessoas observadas na zona, pessoas sem EPI).
+    Só se aplica a regras de EPI."""
+    if rule["type"] != "ppe_missing":
+        return None
+    dets, people = _filter(rule, detections)
+    offenders, _ = ppe_check(rule, dets, people)
+    return len(people), len(offenders)
+
+
+def evaluate_frame(rule: dict, detections: list[Detection]) -> Violation | None:
+    """Avalia uma regra em um único quadro (sem considerar tempo)."""
+    zone = rule.get("zone") or []
+    dets, people = _filter(rule, detections)
     rtype = rule["type"]
 
     if rtype == "restricted_zone":
@@ -100,13 +130,7 @@ def evaluate_frame(rule: dict, detections: list[Detection]) -> Violation | None:
 
     elif rtype == "ppe_missing":
         required = rule.get("params", {}).get("required") or ["helmet"]
-        items = [d for d in dets if d.label != PERSON]
-        offenders, missing_all = [], set()
-        for person in people:
-            missing = missing_ppe(person, items, required)
-            if missing:
-                offenders.append(person)
-                missing_all.update(missing)
+        offenders, missing_all = ppe_check(rule, dets, people)
         if offenders:
             names = ", ".join(PPE_NAMES.get(m, m) for m in required if m in missing_all)
             return Violation(rule["id"], f"{len(offenders)} pessoa(s) sem {names}", offenders)

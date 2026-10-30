@@ -11,7 +11,8 @@ from datetime import datetime
 import cv2
 import numpy as np
 
-from .rules import Detection, RuleTracker, Violation
+from .imagehealth import ImageHealth
+from .rules import Detection, RuleTracker, Violation, in_schedule, observe
 
 log = logging.getLogger("vigia.worker")
 
@@ -62,7 +63,7 @@ def to_jpeg(img: np.ndarray, max_width: int = 1280, quality: int = 85) -> bytes:
 
 class CameraWorker(threading.Thread):
     def __init__(self, camera: dict, engine, engine_lock: threading.Lock, client,
-                 analysis_fps: float = 3.0, live_interval: float = 2.0):
+                 analysis_fps: float = 3.0, live_interval: float = 2.0, stats_interval: float = 60.0):
         super().__init__(daemon=True, name=f"camera-{camera['id']}")
         self.camera = camera
         self.rules = camera["rules"]
@@ -71,7 +72,10 @@ class CameraWorker(threading.Thread):
         self.client = client
         self.analysis_period = 1.0 / analysis_fps
         self.live_interval = live_interval
+        self.stats_interval = stats_interval
         self.tracker = RuleTracker()
+        self.health = ImageHealth()
+        self.stats: dict[int, list[int]] = {}
         self.stop_event = threading.Event()
 
     def update(self, camera: dict) -> None:
@@ -99,6 +103,7 @@ class CameraWorker(threading.Thread):
     def _loop(self, cap: cv2.VideoCapture, stream: bool) -> None:
         file_delay = 0 if stream else 1.0 / (cap.get(cv2.CAP_PROP_FPS) or 25)
         last_analysis = last_live = 0.0
+        last_stats = time.monotonic()
         while not self.stop_event.is_set():
             # Em streams é preciso consumir os quadros continuamente para não acumular atraso.
             if not cap.grab():
@@ -121,10 +126,34 @@ class CameraWorker(threading.Thread):
             with self.engine_lock:
                 detections = self.engine.detect(frame)
             rules = self.rules
-            for violation in self.tracker.update(rules, detections, now, datetime.now()):
+            wall = datetime.now()
+            for violation in self.tracker.update(rules, detections, now, wall):
                 img = draw(frame, detections, rules, violation)
-                self.client.send_event(self.camera["id"], violation.rule_id, violation.message, to_jpeg(img))
+                boxes = [list(d.box) for d in violation.detections]
+                self.client.send_event(self.camera["id"], violation.rule_id, violation.message, to_jpeg(img), boxes)
+            self._accumulate(rules, detections, wall)
+            health = self.health.update(frame, now)
 
             if now - last_live >= self.live_interval:
                 last_live = now
-                self.client.send_frame(self.camera["id"], to_jpeg(draw(frame, detections, rules), 960, 70))
+                self.client.send_frame(self.camera["id"], to_jpeg(draw(frame, detections, rules), 960, 70), health)
+            if now - last_stats >= self.stats_interval:
+                last_stats = now
+                self._flush_stats()
+
+    def _accumulate(self, rules: list[dict], detections: list[Detection], wall: datetime) -> None:
+        """Soma pessoas observadas x sem EPI (base do índice de conformidade)."""
+        for rule in rules:
+            if not in_schedule(rule, wall):
+                continue
+            counts = observe(rule, detections)
+            if counts and counts[0]:
+                totals = self.stats.setdefault(rule["id"], [0, 0])
+                totals[0] += counts[0]
+                totals[1] += counts[1]
+
+    def _flush_stats(self) -> None:
+        if self.stats:
+            items = [{"rule_id": rid, "observed": o, "violations": v} for rid, (o, v) in self.stats.items()]
+            self.stats = {}
+            self.client.send_stats(self.camera["id"], items)

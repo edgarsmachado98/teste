@@ -51,7 +51,6 @@ def ensure_env() -> dict[str, str]:
     env_file = ROOT / ".env"
     if not env_file.exists():
         text = (ROOT / ".env.example").read_text(encoding="utf-8")
-        text = text.replace("API_TOKEN=troque-por-um-token-forte", f"API_TOKEN={secrets.token_urlsafe(16)}")
         text = text.replace("DETECTOR_API_KEY=troque-esta-chave", f"DETECTOR_API_KEY={secrets.token_urlsafe(24)}")
         env_file.write_text(text, encoding="utf-8")
         print("Arquivo .env criado. Edite-o para configurar e-mail e WhatsApp.")
@@ -117,12 +116,10 @@ def run() -> int:
     print("Iniciando o detector de IA...")
     detector = subprocess.Popen([sys.executable, "-m", "vigia_detector.main"], cwd=ROOT / "detector", env=env)
 
-    token = config.get("API_TOKEN", "")
-    url = f"http://localhost:{port}/" + (f"?token={token}" if token else "")
+    url = f"http://localhost:{port}/"
     print("\n" + "=" * 60)
-    print(f"  VigIA rodando em http://localhost:{port}")
-    if token:
-        print(f"  Token de acesso: {token}")
+    print(f"  VigIA rodando em {url}")
+    print("  No primeiro acesso, crie o usuário administrador na tela.")
     print("  Para encerrar, pressione Ctrl+C nesta janela.")
     print("=" * 60 + "\n")
     webbrowser.open(url)

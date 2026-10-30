@@ -1,5 +1,6 @@
 """Comunicação com o backend: configuração, eventos e quadros ao vivo."""
 
+import json
 import logging
 import queue
 import threading
@@ -22,28 +23,37 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
-    def send_event(self, camera_id: int, rule_id: int, message: str, jpeg: bytes) -> None:
+    def send_event(self, camera_id: int, rule_id: int, message: str, jpeg: bytes, boxes: list | None = None) -> None:
         try:
-            self.events.put_nowait((camera_id, rule_id, message, jpeg))
+            self.events.put_nowait((camera_id, rule_id, message, jpeg, boxes or []))
         except queue.Full:
             log.error("fila de eventos cheia – descartando evento da câmera %s", camera_id)
 
-    def send_frame(self, camera_id: int, jpeg: bytes) -> None:
+    def send_frame(self, camera_id: int, jpeg: bytes, health: str = "ok") -> None:
         try:
             self.http.post(
-                f"/api/detector/cameras/{camera_id}/frame", files={"frame": ("frame.jpg", jpeg, "image/jpeg")}
+                f"/api/detector/cameras/{camera_id}/frame",
+                data={"health": health},
+                files={"frame": ("frame.jpg", jpeg, "image/jpeg")},
             ).raise_for_status()
         except httpx.HTTPError as exc:
             log.debug("falha ao enviar quadro ao vivo: %s", exc)
 
+    def send_stats(self, camera_id: int, items: list[dict]) -> None:
+        try:
+            self.http.post("/api/detector/stats", json={"camera_id": camera_id, "items": items}).raise_for_status()
+        except httpx.HTTPError as exc:
+            log.warning("falha ao enviar estatísticas de conformidade: %s", exc)
+
     def _sender(self) -> None:
         while True:
-            camera_id, rule_id, message, jpeg = self.events.get()
+            camera_id, rule_id, message, jpeg, boxes = self.events.get()
             for attempt in range(5):
                 try:
                     self.http.post(
                         "/api/detector/events",
-                        data={"camera_id": camera_id, "rule_id": rule_id, "message": message},
+                        data={"camera_id": camera_id, "rule_id": rule_id, "message": message,
+                              "boxes": json.dumps(boxes)},
                         files={"snapshot": ("evento.jpg", jpeg, "image/jpeg")},
                     ).raise_for_status()
                     log.info("evento enviado: câmera %s – %s", camera_id, message)

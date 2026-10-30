@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 
 from .config import settings
+from .timeutil import to_local
 
 log = logging.getLogger("vigia.notifier")
 
@@ -20,20 +21,19 @@ def build_text(event: dict) -> str:
         f"Câmera: {event['camera_name']}\n"
         f"Regra: {event['rule_name'] or '-'}\n"
         f"Severidade: {event['severity']}\n"
-        f"Quando: {event['created_at']:%d/%m/%Y %H:%M:%S} (UTC)\n"
-        f"Painel: {settings.public_url}/#evento-{event['id']}"
+        f"Quando: {to_local(event['created_at']):%d/%m/%Y %H:%M:%S}\n"
+        f"Painel: {settings.public_url}/#ocorrencia-{event['id']}"
     )
 
 
-def send_email(event: dict, image_path: Path | None) -> None:
-    recipients = settings.email_recipients
+def send_mail(recipients: list[str], subject: str, body: str, image_path: Path | None = None) -> None:
     if not (settings.smtp_host and recipients):
         return
     msg = EmailMessage()
-    msg["Subject"] = f"[VigIA] {event['severity'].upper()} – {event['message']} ({event['camera_name']})"
+    msg["Subject"] = subject
     msg["From"] = settings.smtp_from or settings.smtp_user
     msg["To"] = ", ".join(recipients)
-    msg.set_content(build_text(event))
+    msg.set_content(body)
     if image_path and image_path.exists():
         msg.add_attachment(image_path.read_bytes(), maintype="image", subtype="jpeg", filename=image_path.name)
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
@@ -42,7 +42,25 @@ def send_email(event: dict, image_path: Path | None) -> None:
         if settings.smtp_user:
             smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(msg)
-    log.info("e-mail enviado para %s (evento %s)", recipients, event["id"])
+    log.info("e-mail enviado para %s: %s", recipients, subject)
+
+
+def send_email(event: dict, image_path: Path | None) -> None:
+    subject = f"[VigIA] {event['severity'].upper()} – {event['message']} ({event['camera_name']})"
+    send_mail(settings.email_recipients, subject, build_text(event), image_path)
+
+
+def send_whatsapp_text(text: str) -> None:
+    recipients = settings.whatsapp_recipients
+    if not (settings.whatsapp_token and settings.whatsapp_phone_id and recipients) or settings.whatsapp_template:
+        return
+    headers = {"Authorization": f"Bearer {settings.whatsapp_token}"}
+    with httpx.Client(timeout=20, headers=headers) as client:
+        for to in recipients:
+            client.post(
+                f"{WHATSAPP_API}/{settings.whatsapp_phone_id}/messages",
+                json={"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}},
+            ).raise_for_status()
 
 
 def send_whatsapp(event: dict, image_path: Path | None) -> None:
@@ -78,7 +96,7 @@ def send_whatsapp(event: dict, image_path: Path | None) -> None:
                                 "parameters": [
                                     {"type": "text", "text": event["message"]},
                                     {"type": "text", "text": event["camera_name"]},
-                                    {"type": "text", "text": f"{event['created_at']:%d/%m/%Y %H:%M}"},
+                                    {"type": "text", "text": f"{to_local(event['created_at']):%d/%m/%Y %H:%M}"},
                                 ],
                             },
                         ],
@@ -97,9 +115,35 @@ def send_whatsapp(event: dict, image_path: Path | None) -> None:
     log.info("WhatsApp enviado para %s (evento %s)", recipients, event["id"])
 
 
+def _safely(func, *args) -> None:
+    try:
+        func(*args)
+    except Exception:
+        log.exception("falha ao enviar notificação via %s", func.__name__)
+
+
 def notify(event: dict, image_path: Path | None) -> None:
     for sender in (send_email, send_whatsapp):
-        try:
-            sender(event, image_path)
-        except Exception:
-            log.exception("falha ao enviar alerta via %s", sender.__name__)
+        _safely(sender, event, image_path)
+
+
+def notify_action_assigned(action: dict, email: str) -> None:
+    due = f"{action['due_date']:%d/%m/%Y}" if action["due_date"] else "sem prazo"
+    body = (
+        f"Uma ação do plano de ação foi atribuída a você.\n\n"
+        f"Ação: {action['title']}\n"
+        f"Prazo: {due}\n"
+        f"Ocorrência: {action['event_message'] or '-'}\n"
+        f"Atribuída por: {action['created_by'] or '-'}\n\n"
+        f"{action['description']}\n\n"
+        f"Acesse: {settings.public_url}/#acoes"
+    )
+    _safely(send_mail, [email], f"[VigIA] Nova ação atribuída: {action['title']}", body)
+
+
+def notify_camera_health(info: dict) -> None:
+    ok = info["health"] == "ok"
+    text = (f"{'✅' if ok else '⚠️'} VigIA – câmera {info['camera_name']}: {info['label']}.\n"
+            + ("" if ok else "O monitoramento desta área está comprometido até a imagem ser restabelecida."))
+    _safely(send_mail, settings.email_recipients, f"[VigIA] Câmera {info['camera_name']}: {info['label']}", text)
+    _safely(send_whatsapp_text, text)

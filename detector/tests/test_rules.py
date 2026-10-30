@@ -121,3 +121,12 @@ def test_merge_removes_duplicate_people():
     dup = Detection("person", 0.7, (0.41, 0.31, 0.61, 0.91))
     merged = merge([PERSON, dup, HELMET])
     assert PERSON in merged and dup not in merged and HELMET in merged
+
+
+def test_observe_counts_people_and_offenders():
+    from vigia_detector.rules import observe
+    other = Detection("person", 0.9, (0.0, 0.3, 0.2, 0.9))
+    r = rule(params={"required": ["helmet"]})
+    assert observe(r, [PERSON, HELMET, other]) == (2, 1)
+    assert observe(rule(params={"required": ["helmet"]}, zone=LEFT_ZONE), [PERSON, HELMET, other]) == (1, 1)
+    assert observe(rule(type="restricted_zone"), [PERSON]) is None

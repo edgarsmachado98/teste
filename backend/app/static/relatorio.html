@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relatório de Segurança – VigIA</title>
+  <link rel="stylesheet" href="relatorio.css">
+</head>
+<body>
+  <div class="toolbar no-print">
+    <span>Revise o relatório, preencha os campos destacados e clique em <b>Salvar PDF</b>
+      (no destino da impressão, escolha "Salvar como PDF").</span>
+    <button id="print">Salvar PDF / Imprimir</button>
+  </div>
+
+  <article id="report">
+    <header class="cover">
+      <div>
+        <div class="brand">Vig<span>IA</span></div>
+        <h1>Relatório de Segurança e Comportamento</h1>
+        <p class="editable" contenteditable="true" data-placeholder="Empresa / unidade (clique para preencher)"></p>
+        <p id="period"></p>
+      </div>
+      <dl id="meta"></dl>
+    </header>
+
+    <section>
+      <h2>1. Resumo do período</h2>
+      <div id="kpis" class="kpis"></div>
+      <div class="editable notes" contenteditable="true"
+        data-placeholder="Análise do SESMT: principais conclusões e destaques do período (clique para escrever)."></div>
+    </section>
+
+    <section>
+      <h2>2. Tendência</h2>
+      <div class="grid-2">
+        <div><h3>Desvios por dia</h3><div data-chart="by_day" class="chart"></div></div>
+        <div><h3>Conformidade de EPI por dia</h3><div data-chart="compliance_day" class="chart"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Onde e quando os desvios acontecem</h2>
+      <div class="grid-2">
+        <div><h3>Por área</h3><div data-chart="by_location"></div></div>
+        <div><h3>Conformidade de EPI por câmera</h3><div data-chart="compliance_camera"></div></div>
+        <div><h3>Por turno</h3><div data-chart="by_shift"></div></div>
+        <div><h3>Conformidade de EPI por turno</h3><div data-chart="compliance_shift"></div></div>
+      </div>
+      <h3>Por hora do dia</h3><div data-chart="by_hour" class="chart"></div>
+    </section>
+
+    <section>
+      <h2>4. Natureza dos desvios</h2>
+      <div class="grid-2">
+        <div><h3>Por tipo</h3><div data-chart="by_type"></div></div>
+        <div><h3>Por classificação</h3><div data-chart="by_class"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Plano de ação</h2>
+      <h3>Ações em aberto</h3><div id="open-actions"></div>
+      <h3>Ações concluídas no período</h3><div id="done-actions"></div>
+    </section>
+
+    <section>
+      <h2>6. Ocorrências relevantes</h2>
+      <p class="hint">Desvios confirmados de maior severidade no período (até 12).</p>
+      <div id="events" class="events"></div>
+    </section>
+
+    <footer>
+      <p>Indicadores gerados automaticamente a partir das câmeras monitoradas pelo VigIA. A conformidade de EPI
+        considera as pessoas observadas nas zonas com regra de EPI ativa. O sistema é complementar e não substitui
+        inspeções, dispositivos de segurança de máquinas (NR-12) nem a gestão de riscos do PGR (NR-1).</p>
+      <div class="signatures">
+        <div>Responsável pelo SESMT</div>
+        <div>Gestor da unidade</div>
+      </div>
+    </footer>
+  </article>
+
+  <div id="chart-tip" class="chart-tip" hidden></div>
+  <script type="module" src="js/relatorio.js"></script>
+</body>
+</html>

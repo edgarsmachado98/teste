@@ -4,3 +4,4 @@ sqlalchemy>=2.0.40
 pydantic-settings>=2.9
 python-multipart>=0.0.20
 httpx>=0.28
+tzdata>=2024.1

@@ -1,13 +1,59 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Date, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .database import Base
+from .database import Base, UTCDateTime
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Perfis em ordem crescente de permissão
+ROLES = ("operador", "tecnico", "gestor", "admin")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(300))
+    role: Mapped[str] = mapped_column(String(20), default="operador")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # Guardamos só o hash do token: um vazamento do banco não dá acesso ao sistema.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+    user: Mapped[User] = relationship()
+
+
+class AuditLog(Base):
+    """Registro de quem fez o quê (LGPD e rastreabilidade das ocorrências)."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    user_name: Mapped[str] = mapped_column(String(120), default="sistema")
+    action: Mapped[str] = mapped_column(String(60))
+    entity: Mapped[str] = mapped_column(String(40), default="")
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    details: Mapped[str] = mapped_column(Text, default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
 
 
 class Camera(Base):
@@ -19,7 +65,10 @@ class Camera(Base):
     # URL RTSP/HTTP ou caminho de arquivo de vídeo (para testes)
     source: Mapped[str] = mapped_column(String(500))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    # Saúde: ok | offline | escura | obstruida | congelada (None = ainda sem imagem)
+    health: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_frame_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     rules: Mapped[list["Rule"]] = relationship(back_populates="camera", cascade="all, delete-orphan")
 
@@ -47,6 +96,11 @@ class Rule(Base):
     camera: Mapped[Camera] = relationship(back_populates="rules")
 
 
+# Fluxo da ocorrência: nova -> confirmada | descartada -> encerrada
+EVENT_STATUSES = ("nova", "confirmada", "descartada", "encerrada")
+CLASSIFICATIONS = ("ato_inseguro", "condicao_insegura", "quase_acidente", "acidente")
+
+
 class Event(Base):
     __tablename__ = "events"
 
@@ -57,9 +111,59 @@ class Event(Base):
     severity: Mapped[str] = mapped_column(String(20))
     message: Mapped[str] = mapped_column(String(500))
     image_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # nova | confirmada | descartada
     status: Mapped[str] = mapped_column(String(20), default="nova")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
+    # Caixas normalizadas das pessoas/objetos em violação (usadas no mapa de calor)
+    boxes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    classification: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     camera: Mapped[Camera] = relationship()
     rule: Mapped[Rule | None] = relationship()
+    reviewed_by: Mapped[User | None] = relationship()
+    actions: Mapped[list["ActionItem"]] = relationship(back_populates="event")
+
+
+ACTION_STATUSES = ("aberta", "concluida", "cancelada")
+
+
+class ActionItem(Base):
+    """Ação do plano de ação (corretiva ou preventiva)."""
+
+    __tablename__ = "actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), nullable=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    responsible_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="aberta")
+    completion_notes: Mapped[str] = mapped_column(Text, default="")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+    event: Mapped[Event | None] = relationship(back_populates="actions")
+    responsible: Mapped[User | None] = relationship(foreign_keys=[responsible_id])
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+
+
+class RuleStat(Base):
+    """Observações agregadas por hora: base do índice de conformidade de EPI.
+
+    `observed` = pessoas observadas na zona (somadas por quadro analisado);
+    `violations` = quantas dessas estavam sem algum EPI obrigatório."""
+
+    __tablename__ = "rule_stats"
+    __table_args__ = (UniqueConstraint("rule_id", "hour"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(ForeignKey("rules.id", ondelete="CASCADE"))
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"))
+    hour: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    observed: Mapped[int] = mapped_column(Integer, default=0)
+    violations: Mapped[int] = mapped_column(Integer, default=0)

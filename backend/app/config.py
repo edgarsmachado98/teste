@@ -6,15 +6,23 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./data/vigia.db"
     evidence_dir: str = "./data/evidencias"
+    # Imagens (dado pessoal) são apagadas após retention_days; o registro da ocorrência,
+    # sem imagem, fica event_retention_days para os indicadores históricos.
     retention_days: int = 30
+    event_retention_days: int = 730
 
-    # Token do painel/API. Vazio = sem autenticação (apenas desenvolvimento).
-    api_token: str = ""
     # Chave usada pelo serviço detector para enviar eventos.
     detector_api_key: str = "troque-esta-chave"
 
     # Endereço público do painel, usado nos links dos alertas.
     public_url: str = "http://localhost:8000"
+
+    # Fuso horário da planta e turnos (para indicadores e mensagens)
+    timezone: str = "America/Sao_Paulo"
+    shifts: str = "Turno A=06-14,Turno B=14-22,Turno C=22-06"
+    session_hours: int = 12
+    # Câmera sem imagem por mais que isto (segundos) é considerada offline
+    camera_offline_after: int = 60
 
     # E-mail (SMTP)
     smtp_host: str = ""
