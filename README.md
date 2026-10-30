@@ -16,6 +16,8 @@ Os alertas chegam por **e-mail**, **WhatsApp** e **na tela**, em tempo real.
 | **Plano de ação** | Ações corretivas/preventivas com responsável e prazo. O responsável recebe e-mail e registra a evidência ao concluir. Uma ocorrência só é encerrada sem ações abertas |
 | **Indicadores** | Conformidade de EPI (pessoas observadas × sem EPI), desvios por dia, turno, área, câmera, tipo, classificação e hora, taxa de falso alarme, tempo de triagem, ações no prazo e mapa de calor, com comparação ao período anterior |
 | **Relatório** | Relatório em PDF (pelo navegador), com campos para a análise do SESMT e assinaturas |
+| **Clipe da ocorrência** | Vídeo de alguns segundos antes e depois de cada desvio, além da foto |
+| **Relatório automático** | PDF mensal ou semanal enviado por e-mail aos gestores |
 | **Saúde das câmeras** | Alerta quando a câmera fica sem sinal, escura, obstruída/desfocada ou congelada |
 | **Usuários e auditoria** | Perfis de acesso e registro de quem fez o quê, quando e de onde |
 
@@ -102,6 +104,61 @@ Acesse http://localhost:8000 e crie o administrador. Depois:
 5. **Painel / Ocorrências**: os desvios chegam em tempo real. Faça a triagem, classifique, crie as
    ações e encerre a ocorrência quando as ações forem concluídas.
 6. **Indicadores**: acompanhe a evolução e gere o relatório mensal em PDF.
+
+### Instalação definitiva na empresa (Windows)
+
+1. **Iniciar com o computador**: clique com o botão direito em `instalar_servico.bat` →
+   *Executar como administrador*. O VigIA passa a iniciar com o Windows, mesmo sem ninguém logado,
+   e reinicia sozinho se algo falhar. Log em `logs/vigia.log`. Para desfazer: `remover_servico.bat`.
+   O serviço roda como SYSTEM: prefira câmeras IP (RTSP); webcams USB podem não ser acessíveis.
+2. **HTTPS** (obrigatório se o painel for acessado por outros computadores):
+
+   ```powershell
+   python vigia.py --gerar-certificado --nome vigia.empresa.local
+   ```
+
+   Isso cria uma autoridade certificadora própria da instalação e o certificado do servidor em
+   `certs/`. Instale `certs/vigia-ca.crt` nos computadores que acessam o painel (duplo clique →
+   Instalar certificado → Máquina local → Autoridades de Certificação Raiz Confiáveis), ajuste
+   `PUBLIC_URL=https://...` e `HOST=0.0.0.0` no `.env` e reinicie. Se a empresa tiver certificado
+   próprio, use `SSL_CERTFILE`/`SSL_KEYFILE`.
+3. **Backup**: automático todo dia (padrão 2h), guardando os 14 últimos em `backend/data/backups`.
+   Configure `BACKUP_COPY_DIR` com uma pasta de rede para ter uma cópia fora do computador.
+   Na tela **Sistema** é possível fazer e baixar backups. Para restaurar: pare o VigIA e copie o
+   backup por cima de `backend/data/vigia.db`.
+4. **Relatório automático**: configure SMTP e `REPORT_EMAILS`. Por padrão, todo dia 1 sai o PDF do
+   mês anterior (`REPORT_FREQUENCY=semanal` para toda segunda-feira). Na tela **Sistema** dá para
+   enviar um relatório na hora.
+
+### Treinar o modelo com imagens do cliente
+
+A precisão depende de imagens **das câmeras da própria planta** (ângulo, iluminação, uniformes,
+modelo de capacete). O fluxo:
+
+1. **Coletar**: no `.env`, defina `DATASET_DIR=C:\vigia-treino\coleta` e reinicie. O detector salva
+   imagens quando há pessoas (uma por câmera a cada `DATASET_INTERVAL` segundos) e sempre que há
+   desvio, já com as caixas marcadas pela IA atual (formato YOLO, pastas `images/` e `labels/`).
+   Deixe coletar alguns dias, em todos os turnos.
+2. **Corrigir as marcações** em uma ferramenta gratuita como o [Label Studio](https://labelstud.io)
+   ou o [CVAT](https://www.cvat.ai), importando no formato YOLO (o `classes.txt` já vem na pasta).
+   Inclua as classes negativas (`no_helmet`, `no_vest`...): elas ensinam o modelo a reconhecer a falta do EPI.
+3. **Preparar e treinar** (com GPU é muito mais rápido):
+
+   ```powershell
+   cd detector; python -m vigia_detector.dataset preparar --origem C:\vigia-treino\coleta --saida C:\vigia-treino\conjunto
+   ```
+
+   ```powershell
+   python -m vigia_detector.dataset treinar --dados C:\vigia-treino\conjunto\data.yaml --epocas 100
+   ```
+
+4. **Comparar** com o modelo atual e usar o novo só se o mAP50 for maior:
+
+   ```powershell
+   python -m vigia_detector.dataset avaliar --modelo ..\modelos\epi.pt --dados C:\vigia-treino\conjunto\data.yaml
+   ```
+
+As imagens coletadas mostram trabalhadores: restrinja o acesso à pasta e apague-a depois do treino.
 
 ### Dados de demonstração (para apresentar a clientes)
 
@@ -202,7 +259,7 @@ sobre ela, ou se não há detecção do item dentro da caixa da pessoa.
 
 ## LGPD e segurança
 
-- As **imagens** de evidência são apagadas após `RETENTION_DAYS` (padrão: 30 dias). O **registro** da
+- As **imagens e clipes** de evidência são apagados após `RETENTION_DAYS` (padrão: 30 dias). O **registro** da
   ocorrência, sem imagem, fica `EVENT_RETENTION_DAYS` (padrão: 2 anos) para os indicadores históricos.
 - Acesso com usuário e senha (senhas com PBKDF2; sessões expiram após `SESSION_HOURS`). O detector usa
   uma chave própria (`DETECTOR_API_KEY`).
@@ -213,10 +270,8 @@ sobre ela, ou se não há detecção do item dentro da caixa da pessoa.
 
 ## Próximos passos sugeridos
 
-- Gravar um clipe de vídeo de alguns segundos antes e depois de cada evento
-- Serviço do Windows (iniciar com o computador), HTTPS e backup automático
-- Envio automático do relatório mensal por e-mail
-- Aprendizado com os "falsos alarmes" para retreinar o modelo
+- Usar os "falsos alarmes" marcados no painel como exemplos negativos no treinamento
+- Exportar o clipe da ocorrência como arquivo de vídeo
 - Rastreamento de pessoas (ByteTrack) para contar violações por pessoa
 - Detecção de queda de pessoa e pessoa próxima a empilhadeira em movimento
 - Exportação dos indicadores em Excel

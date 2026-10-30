@@ -137,6 +137,15 @@ def event_image(event_id: int, db: Session = Depends(get_db)):
     return FileResponse(EVIDENCE_DIR / event.image_file, media_type="image/jpeg")
 
 
+@router.get("/events/{event_id}/clip/{index}", dependencies=[Depends(current_user)])
+def event_clip_frame(event_id: int, index: int, db: Session = Depends(get_db)):
+    event = get_or_404(db, Event, event_id)
+    if not event.clip_dir or not 0 <= index < (event.clip_frames or 0):
+        raise HTTPException(404, "quadro não encontrado")
+    return FileResponse(EVIDENCE_DIR / event.clip_dir / f"{index:04d}.jpg", media_type="image/jpeg",
+                        headers={"Cache-Control": "private, max-age=86400"})
+
+
 # ---------- Plano de ação ----------
 
 def action_query():

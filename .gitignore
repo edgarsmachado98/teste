@@ -7,3 +7,6 @@ modelos/*.pt
 videos/
 *.db
 .venv/
+logs/
+certs/
+vigia.service

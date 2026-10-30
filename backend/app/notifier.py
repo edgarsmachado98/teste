@@ -26,7 +26,8 @@ def build_text(event: dict) -> str:
     )
 
 
-def send_mail(recipients: list[str], subject: str, body: str, image_path: Path | None = None) -> None:
+def send_mail(recipients: list[str], subject: str, body: str, image_path: Path | None = None,
+              attachment: tuple[str, bytes, str] | None = None) -> None:
     if not (settings.smtp_host and recipients):
         return
     msg = EmailMessage()
@@ -36,6 +37,10 @@ def send_mail(recipients: list[str], subject: str, body: str, image_path: Path |
     msg.set_content(body)
     if image_path and image_path.exists():
         msg.add_attachment(image_path.read_bytes(), maintype="image", subtype="jpeg", filename=image_path.name)
+    if attachment:
+        filename, data, mime = attachment
+        maintype, subtype = mime.split("/")
+        msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
         if settings.smtp_tls:
             smtp.starttls()

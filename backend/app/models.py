@@ -111,6 +111,11 @@ class Event(Base):
     severity: Mapped[str] = mapped_column(String(20))
     message: Mapped[str] = mapped_column(String(500))
     image_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Clipe (sequência de quadros JPEG) de alguns segundos antes e depois do desvio
+    clip_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    clip_dir: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    clip_frames: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    clip_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="nova")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     # Caixas normalizadas das pessoas/objetos em violação (usadas no mapa de calor)
@@ -150,6 +155,15 @@ class ActionItem(Base):
     event: Mapped[Event | None] = relationship(back_populates="actions")
     responsible: Mapped[User | None] = relationship(foreign_keys=[responsible_id])
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+
+
+class SystemState(Base):
+    """Pares chave/valor do sistema (ex.: data do último backup e do último relatório enviado)."""
+
+    __tablename__ = "system_state"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")
 
 
 class RuleStat(Base):

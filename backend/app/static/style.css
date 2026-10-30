@@ -231,3 +231,19 @@ legend { color: var(--muted); font-size: 13px; }
   .barrow { grid-template-columns: 1fr 56px; }
   .barrow .bartrack { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Clipe da ocorrência */
+.media-tabs { margin-bottom: 8px; }
+.clip-controls { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.clip-controls input[type=range] { flex: 1; min-width: 120px; margin: 0; padding: 0; accent-color: var(--accent); }
+.clip-controls select { width: auto; margin: 0; padding: 4px; }
+.clip-controls .hint { font-variant-numeric: tabular-nums; min-width: 92px; }
+
+/* Sistema */
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 14px; font-size: 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; }
+.bad-text { color: #fca5a5; }
+code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+table.compact { margin-top: 12px; font-size: 13px; }
+table.compact td, table.compact th { padding: 6px 8px; }

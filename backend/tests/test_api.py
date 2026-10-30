@@ -8,6 +8,9 @@ os.environ["DATABASE_URL"] = f"sqlite:///{tmp}/test.db"
 os.environ["EVIDENCE_DIR"] = f"{tmp}/evidencias"
 os.environ["DETECTOR_API_KEY"] = "chave-teste"
 os.environ["CAMERA_OFFLINE_AFTER"] = "0"
+os.environ["BACKUP_DIR"] = f"{tmp}/backups"
+os.environ["BACKUP_KEEP"] = "2"
+os.environ["REPORT_FREQUENCY"] = "mensal"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -193,3 +196,115 @@ def test_retention_keeps_records_but_drops_images(client, admin):
         event = db.get(Event, ev["id"])
         assert event is not None and event.image_file is None
     assert not image.exists()
+
+
+def test_clip_upload_and_retention(client, admin):
+    from datetime import datetime, timedelta, timezone
+
+    from app.common import EVIDENCE_DIR
+    from app.database import SessionLocal
+    from app.main import purge_old_data
+    from app.models import Event
+
+    cam = client.post("/api/cameras", headers=admin, json={"name": "Clipe", "source": "0"}).json()
+    rule = client.post("/api/rules", headers=admin, json={"camera_id": cam["id"], "name": "Z", "type": "restricted_zone"}).json()
+    ev = client.post("/api/detector/events", headers=DET, data={
+        "camera_id": cam["id"], "rule_id": rule["id"], "message": "com clipe", "clip_id": "abc123"}).json()
+    assert ev["clip_frames"] is None
+    # clipe de ocorrência desconhecida é recusado
+    files = [("frames", (f"{i}.jpg", f"q{i}".encode(), "image/jpeg")) for i in range(3)]
+    assert client.post("/api/detector/clips/nao-existe", headers=DET, data={"duration": "1"}, files=files).status_code == 404
+    assert client.post("/api/detector/clips/abc123", headers=DET, data={"duration": "1.5"}, files=files).status_code == 204
+
+    detail = client.get(f"/api/events/{ev['id']}", headers=admin).json()
+    assert detail["clip_frames"] == 3 and detail["clip_duration"] == 1.5
+    assert client.get(f"/api/events/{ev['id']}/clip/2", headers=admin).content == b"q2"
+    assert client.get(f"/api/events/{ev['id']}/clip/3", headers=admin).status_code == 404
+    assert client.get(f"/api/events/{ev['id']}/clip/0").status_code == 401
+
+    with SessionLocal() as db:
+        event = db.get(Event, ev["id"])
+        folder = EVIDENCE_DIR / event.clip_dir
+        event.created_at = datetime.now(timezone.utc) - timedelta(days=40)
+        db.commit()
+    purge_old_data()
+    assert not folder.exists()
+    assert client.get(f"/api/events/{ev['id']}", headers=admin).json()["clip_frames"] is None
+
+
+def test_backup_and_rotation(client, admin):
+    import sqlite3
+    import time
+
+    from app.backup import backup_dir
+
+    _, operador = make_user(client, admin, "op2@fabrica.com", "operador")
+    assert client.post("/api/system/backups", headers=operador).status_code == 403
+    names = []
+    for _ in range(3):
+        resp = client.post("/api/system/backups", headers=admin)
+        assert resp.status_code == 201
+        names.append(resp.json()["name"])
+        time.sleep(1.1)  # nomes têm resolução de segundos
+    files = sorted(p.name for p in backup_dir().glob("vigia-*.db"))
+    assert files == sorted(names[1:])  # BACKUP_KEEP=2
+    with sqlite3.connect(backup_dir() / names[-1]) as db:
+        assert db.execute("select count(*) from users").fetchone()[0] >= 1
+    assert client.get(f"/api/system/backups/{names[-1]}", headers=admin).status_code == 200
+    assert client.get("/api/system/backups/..%2Fvigia.db", headers=admin).status_code == 404
+    status = client.get("/api/system/status", headers=admin).json()
+    assert status["database"] == "sqlite" and len(status["backups"]) == 2
+
+
+def test_report_pdf_and_email(client, admin, monkeypatch):
+    from app import notifier
+
+    resp = client.get("/api/reports/pdf", headers=admin)
+    assert resp.status_code == 200 and resp.content.startswith(b"%PDF")
+    assert len(resp.content) > 3000
+
+    # sem SMTP configurado: erro claro
+    assert client.post("/api/system/report-email", headers=admin, json={}).status_code == 400
+
+    sent = []
+
+    class FakeSMTP:
+        def __init__(self, *a, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def starttls(self): pass
+        def login(self, *a): pass
+        def send_message(self, msg): sent.append(msg)
+
+    monkeypatch.setattr(notifier.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(notifier.settings, "smtp_host", "smtp.teste")
+    monkeypatch.setattr(notifier.settings, "alert_emails", "sesmt@fabrica.com")
+    resp = client.post("/api/system/report-email", headers=admin, json={"start": "2026-01-01", "end": "2026-01-31"})
+    assert resp.status_code == 200, resp.text
+    msg = sent[0]
+    assert msg["To"] == "sesmt@fabrica.com" and "01/01/2026 a 31/01/2026" in msg["Subject"]
+    pdfs = [p for p in msg.iter_attachments() if p.get_content_type() == "application/pdf"]
+    assert pdfs and pdfs[0].get_content().startswith(b"%PDF")
+
+
+def test_scheduler_runs_each_job_once(monkeypatch):
+    from datetime import date, datetime
+
+    from app import scheduler
+    from app.timeutil import local_tz
+
+    assert scheduler.report_period(date(2026, 3, 1), "mensal") == (date(2026, 2, 1), date(2026, 2, 28))
+    assert scheduler.report_period(date(2026, 3, 4), "semanal") == (date(2026, 2, 23), date(2026, 3, 1))
+    assert scheduler.report_period(date(2026, 3, 4), "desligado") is None
+
+    calls = []
+    monkeypatch.setattr(scheduler, "run_backup", lambda: calls.append("backup"))
+    monkeypatch.setattr(scheduler, "send_report", lambda s, e: calls.append(("report", s, e)))
+    monkeypatch.setattr(scheduler.settings, "smtp_host", "smtp.teste")
+    monkeypatch.setattr(scheduler.settings, "alert_emails", "x@y.com")
+    early = datetime(2026, 4, 1, 1, 0, tzinfo=local_tz())
+    assert scheduler.run_due_jobs(early) == []  # antes do horário do backup e do relatório
+    now = datetime(2026, 4, 1, 8, 0, tzinfo=local_tz())
+    assert scheduler.run_due_jobs(now) == ["backup", "report"]
+    assert scheduler.run_due_jobs(now) == []  # não repete
+    assert calls == ["backup", ("report", date(2026, 3, 1), date(2026, 3, 31))]

@@ -113,6 +113,8 @@ class EventOut(BaseModel):
     severity: str
     message: str
     image_url: str | None
+    clip_frames: int | None = None
+    clip_duration: float | None = None
     status: EventStatus
     classification: Classification | None
     notes: str | None

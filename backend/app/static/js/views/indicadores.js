@@ -52,7 +52,10 @@ export async function show(element) {
   el.innerHTML = `
     <div class="toolbar">
       <h2>Indicadores de segurança</h2>
-      ${can("tecnico") ? `<button id="report-btn">Gerar relatório (PDF)</button>` : ""}
+      ${can("tecnico") ? `<div class="actions">
+        <button id="pdf-btn" class="secondary" title="PDF pronto, igual ao enviado por e-mail">Baixar PDF rápido</button>
+        <button id="report-btn" title="Relatório editável, com análise do SESMT e fotos">Gerar relatório completo</button>
+      </div>` : ""}
     </div>
     <form id="ind-filters" class="filters">
       <label>Período
@@ -107,6 +110,9 @@ export async function show(element) {
   $("#heat-camera", el).addEventListener("change", (e) => {
     e.target.dataset.chosen = "1";
     loadHeatmap();
+  });
+  $("#pdf-btn", el)?.addEventListener("click", () => {
+    window.location.href = withToken(`/api/reports/pdf?${query()}`);
   });
   $("#report-btn", el)?.addEventListener("click", () => {
     window.open(`relatorio.html?${query()}`, "_blank");

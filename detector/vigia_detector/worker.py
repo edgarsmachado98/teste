@@ -11,6 +11,7 @@ from datetime import datetime
 import cv2
 import numpy as np
 
+from .clips import ClipRecorder
 from .imagehealth import ImageHealth
 from .rules import Detection, RuleTracker, Violation, in_schedule, observe
 
@@ -63,7 +64,8 @@ def to_jpeg(img: np.ndarray, max_width: int = 1280, quality: int = 85) -> bytes:
 
 class CameraWorker(threading.Thread):
     def __init__(self, camera: dict, engine, engine_lock: threading.Lock, client,
-                 analysis_fps: float = 3.0, live_interval: float = 2.0, stats_interval: float = 60.0):
+                 analysis_fps: float = 3.0, live_interval: float = 2.0, stats_interval: float = 60.0,
+                 clip_seconds: tuple[float, float] = (5.0, 5.0), collector=None):
         super().__init__(daemon=True, name=f"camera-{camera['id']}")
         self.camera = camera
         self.rules = camera["rules"]
@@ -75,6 +77,8 @@ class CameraWorker(threading.Thread):
         self.stats_interval = stats_interval
         self.tracker = RuleTracker()
         self.health = ImageHealth()
+        self.clips = ClipRecorder(*clip_seconds) if clip_seconds[0] + clip_seconds[1] > 0 else None
+        self.collector = collector  # coleta de imagens para treinar o modelo (opcional)
         self.stats: dict[int, list[int]] = {}
         self.stop_event = threading.Event()
 
@@ -99,6 +103,9 @@ class CameraWorker(threading.Thread):
             backoff = 2
             self._loop(cap, stream)
             cap.release()
+            if self.clips:
+                for clip_id, frames, duration in self.clips.flush():
+                    self.client.send_clip(clip_id, frames, duration)
 
     def _loop(self, cap: cv2.VideoCapture, stream: bool) -> None:
         file_delay = 0 if stream else 1.0 / (cap.get(cv2.CAP_PROP_FPS) or 25)
@@ -127,16 +134,26 @@ class CameraWorker(threading.Thread):
                 detections = self.engine.detect(frame)
             rules = self.rules
             wall = datetime.now()
-            for violation in self.tracker.update(rules, detections, now, wall):
+            annotated = draw(frame, detections, rules)
+            if self.clips:
+                for clip_id, frames, duration in self.clips.add(now, to_jpeg(annotated, 800, 70)):
+                    self.client.send_clip(clip_id, frames, duration)
+
+            violations = self.tracker.update(rules, detections, now, wall)
+            for violation in violations:
                 img = draw(frame, detections, rules, violation)
                 boxes = [list(d.box) for d in violation.detections]
-                self.client.send_event(self.camera["id"], violation.rule_id, violation.message, to_jpeg(img), boxes)
+                clip_id = self.clips.start(now) if self.clips else None
+                self.client.send_event(self.camera["id"], violation.rule_id, violation.message, to_jpeg(img),
+                                       boxes, clip_id)
             self._accumulate(rules, detections, wall)
             health = self.health.update(frame, now)
+            if self.collector:
+                self.collector.offer(self.camera, frame, detections, now, important=bool(violations))
 
             if now - last_live >= self.live_interval:
                 last_live = now
-                self.client.send_frame(self.camera["id"], to_jpeg(draw(frame, detections, rules), 960, 70), health)
+                self.client.send_frame(self.camera["id"], to_jpeg(annotated, 960, 70), health)
             if now - last_stats >= self.stats_interval:
                 last_stats = now
                 self._flush_stats()

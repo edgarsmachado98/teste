@@ -1,6 +1,7 @@
 // Detalhe da ocorrência: evidência, triagem, classificação, plano de ação e histórico.
 
 import { cancelAction, openActionForm, openCompleteForm } from "./actions-ui.js";
+import { mountClipPlayer } from "./clip-player.js";
 import {
   $, ACTION_STATUS, CLASS_LABELS, TYPE_LABELS, api, badge, can, esc, fmtDate, fmtDateTime, session,
   statusBadge, toast, withToken,
@@ -8,6 +9,7 @@ import {
 
 const dialog = () => $("#event-dialog");
 let currentId = null;
+let stopClip = () => {};
 let onChange = () => {};
 
 export function setEventChangeHandler(fn) { onChange = fn; }
@@ -78,8 +80,10 @@ function render(ev) {
 
       <div class="detail-body">
         <div>
-          ${ev.image_url ? `<img class="evidence-img" src="${esc(withToken(ev.image_url))}" data-full="${esc(withToken(ev.image_url))}" alt="Evidência">`
-            : `<div class="noimg">sem imagem</div>`}
+          ${ev.clip_frames ? `<div class="tabs media-tabs">
+              <button type="button" class="small" data-media="clip">Vídeo</button>
+              <button type="button" class="small secondary" data-media="photo">Foto do momento</button></div>` : ""}
+          <div id="media"></div>
           ${ev.reviewed_by ? `<p class="hint">Triagem por ${esc(ev.reviewed_by)} em ${fmtDateTime(ev.reviewed_at)}</p>` : ""}
         </div>
 
@@ -113,6 +117,20 @@ function render(ev) {
     </div>`;
 
   const d = dialog();
+  const media = d.querySelector("#media");
+  const showPhoto = () => {
+    stopClip();
+    media.innerHTML = ev.image_url
+      ? `<img class="evidence-img" src="${esc(withToken(ev.image_url))}" data-full="${esc(withToken(ev.image_url))}" alt="Evidência">`
+      : `<div class="noimg">${ev.clip_frames ? "sem foto" : "sem imagem (apagada pela política de retenção ou não enviada)"}</div>`;
+  };
+  const showClip = () => { stopClip(); stopClip = mountClipPlayer(media, ev.id, ev.clip_frames, ev.clip_duration); };
+  ev.clip_frames ? showClip() : showPhoto();
+  d.querySelectorAll("[data-media]").forEach((btn) => btn.addEventListener("click", () => {
+    d.querySelectorAll("[data-media]").forEach((b) => b.classList.toggle("secondary", b !== btn));
+    btn.dataset.media === "clip" ? showClip() : showPhoto();
+  }));
+
   const reload = async () => { await openEvent(ev.id); onChange(); };
 
   d.querySelector("#triage-form").addEventListener("submit", async (e) => {
@@ -154,6 +172,7 @@ function render(ev) {
 // Ao fechar, limpa o endereço #ocorrencia-N
 dialog().addEventListener("close", () => {
   currentId = null;
+  stopClip();
   if (location.hash.startsWith("#ocorrencia-")) {
     history.replaceState(null, "", $("#nav a.active")?.getAttribute("href") || "#ocorrencias");
   }

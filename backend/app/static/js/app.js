@@ -11,9 +11,10 @@ import * as indicadores from "./views/indicadores.js";
 import * as ocorrencias from "./views/ocorrencias.js";
 import * as painel from "./views/painel.js";
 import * as regras from "./views/regras.js";
+import * as sistema from "./views/sistema.js";
 import * as usuarios from "./views/usuarios.js";
 
-const VIEWS = { painel, ocorrencias, acoes, indicadores, aovivo, cameras, regras, usuarios, auditoria };
+const VIEWS = { painel, ocorrencias, acoes, indicadores, aovivo, cameras, regras, usuarios, auditoria, sistema };
 let current = null;
 
 // ---------- Acesso ----------

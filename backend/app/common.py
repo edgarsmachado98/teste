@@ -10,6 +10,14 @@ from .schemas import ActionOut, EventOut
 
 EVIDENCE_DIR = Path(settings.evidence_dir)
 
+CLASS_LABELS_PT = {
+    "ato_inseguro": "Ato inseguro",
+    "condicao_insegura": "Condição insegura",
+    "quase_acidente": "Quase acidente",
+    "acidente": "Acidente",
+    "nao_classificada": "Não classificada",
+}
+
 TYPE_LABELS = {
     "ppe_missing": "EPI ausente",
     "restricted_zone": "Zona restrita",
@@ -60,6 +68,8 @@ def event_out(event: Event) -> dict:
         severity=event.severity,
         message=event.message,
         image_url=f"/api/events/{event.id}/image" if event.image_file else None,
+        clip_frames=event.clip_frames if event.clip_dir else None,
+        clip_duration=event.clip_duration if event.clip_dir else None,
         status=event.status,
         classification=event.classification,
         notes=event.notes,

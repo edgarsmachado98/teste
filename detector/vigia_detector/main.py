@@ -36,10 +36,18 @@ def main() -> None:
     model_paths = [p.strip() for p in os.getenv("MODEL_PATHS", "yolov8n.pt").split(",") if p.strip()]
     analysis_fps = float(os.getenv("ANALYSIS_FPS", "3"))
     refresh = float(os.getenv("CONFIG_REFRESH", "15"))
+    clip_seconds = (float(os.getenv("CLIP_BEFORE", "5")), float(os.getenv("CLIP_AFTER", "5")))
+    # HTTPS com certificado próprio da instalação: o detector confia nele explicitamente
+    verify = os.getenv("BACKEND_CA") or True
+    collector = None
+    if os.getenv("DATASET_DIR"):
+        from .dataset import Collector
+        collector = Collector(os.getenv("DATASET_DIR"), float(os.getenv("DATASET_INTERVAL", "60")))
+        log.info("coleta de imagens para treinamento ativa em %s", os.getenv("DATASET_DIR"))
 
     engine = Engine(model_paths, device=os.getenv("DEVICE") or None, imgsz=int(os.getenv("IMG_SIZE", "640")))
     engine_lock = threading.Lock()
-    client = BackendClient(backend, api_key)
+    client = BackendClient(backend, api_key, verify)
     workers: dict[int, CameraWorker] = {}
 
     while True:
@@ -61,7 +69,8 @@ def main() -> None:
                 workers[cam_id].update(camera)
             else:
                 log.info("iniciando câmera %s (%d regras)", camera["name"], len(camera["rules"]))
-                workers[cam_id] = CameraWorker(camera, engine, engine_lock, client, analysis_fps)
+                workers[cam_id] = CameraWorker(camera, engine, engine_lock, client, analysis_fps,
+                                               clip_seconds=clip_seconds, collector=collector)
                 workers[cam_id].start()
         time.sleep(refresh)
 

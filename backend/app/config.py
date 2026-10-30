@@ -24,6 +24,23 @@ class Settings(BaseSettings):
     # Câmera sem imagem por mais que isto (segundos) é considerada offline
     camera_offline_after: int = 60
 
+    # Backup diário do banco (SQLite). BACKUP_COPY_DIR: cópia extra, ex. pasta de rede.
+    backup_dir: str = "./data/backups"
+    backup_hour: int = 2
+    backup_keep: int = 14
+    backup_copy_dir: str = ""
+
+    # Relatório automático por e-mail: mensal | semanal | desligado
+    report_frequency: str = "mensal"
+    report_hour: int = 7
+    report_emails: str = ""  # vazio = usa ALERT_EMAILS
+    company_name: str = ""  # aparece no cabeçalho do relatório
+
+    @property
+    def report_recipients(self) -> list[str]:
+        emails = self.report_emails or self.alert_emails
+        return [e.strip() for e in emails.split(",") if e.strip()]
+
     # E-mail (SMTP)
     smtp_host: str = ""
     smtp_port: int = 587

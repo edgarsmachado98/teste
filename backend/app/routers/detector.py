@@ -46,6 +46,7 @@ async def receive_event(
     rule_id: int = Form(...),
     message: str = Form(..., max_length=500),
     boxes: str | None = Form(None),
+    clip_id: str | None = Form(None, max_length=40),
     snapshot: UploadFile | None = File(None),
     db: Session = Depends(get_db),
 ):
@@ -63,7 +64,7 @@ async def receive_event(
         path.write_bytes(await snapshot.read())
 
     event = Event(camera_id=camera.id, rule_id=rule.id, type=rule.type, severity=rule.severity,
-                  message=message, image_file=image_file, boxes=_parse_boxes(boxes))
+                  message=message, image_file=image_file, boxes=_parse_boxes(boxes), clip_id=clip_id)
     db.add(event)
     db.commit()
     event = db.scalar(select(Event).where(Event.id == event.id).options(selectinload(Event.actions)))
@@ -72,6 +73,25 @@ async def receive_event(
     await hub.broadcast({"kind": "event", "event": payload})
     background.add_task(notifier.notify, payload, EVIDENCE_DIR / image_file if image_file else None)
     return payload
+
+
+@router.post("/clips/{clip_id}", status_code=204)
+async def receive_clip(clip_id: str, frames: list[UploadFile] = File(...), duration: float = Form(...),
+                       db: Session = Depends(get_db)):
+    """Quadros do clipe de uma ocorrência (chegam alguns segundos depois do evento)."""
+    event = db.scalar(select(Event).where(Event.clip_id == clip_id))
+    if event is None:
+        raise HTTPException(404, "ocorrência do clipe não encontrada")
+    if len(frames) > 300:
+        raise HTTPException(400, "clipe longo demais")
+    folder = f"clipes/{event.created_at:%Y/%m/%d}/{event.id}"
+    path = EVIDENCE_DIR / folder
+    path.mkdir(parents=True, exist_ok=True)
+    for i, frame in enumerate(frames):
+        (path / f"{i:04d}.jpg").write_bytes(await frame.read())
+    event.clip_dir, event.clip_frames, event.clip_duration = folder, len(frames), max(duration, 0.1)
+    db.commit()
+    await hub.broadcast({"kind": "event_updated", "id": event.id})
 
 
 @router.post("/cameras/{camera_id}/frame", status_code=204)

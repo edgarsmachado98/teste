@@ -13,6 +13,8 @@ log = logging.getLogger("vigia.migrate")
 
 
 def migrate() -> None:
+    from . import models  # noqa: F401  (registra as tabelas em Base.metadata)
+
     Base.metadata.create_all(engine)
     inspector = inspect(engine)
     with engine.begin() as conn:
