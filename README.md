@@ -21,7 +21,7 @@ Os alertas chegam por **e-mail**, **WhatsApp** e **na tela**, em tempo real.
 | **Armazenamento de rede (NAS)** | Fotos, clipes, backups e relatórios no storage de rede, com fila quando o NAS está fora do ar |
 | **Saúde das câmeras** | Alerta quando a câmera fica sem sinal, escura, obstruída/desfocada ou congelada |
 | **Usuários e auditoria** | Perfis de acesso e registro de quem fez o quê, quando e de onde |
-| **Parâmetros** (administradores) | Retenção de imagens e logs, uso do sistema (CPU, memória, disco) com limites de alerta, canais de alerta (e-mail, WhatsApp) e severidade por canal, com envio de teste |
+| **Parâmetros** (administradores) | Retenção de imagens e logs, uso do sistema (CPU, memória, disco) com limites de alerta, canais de alerta (e-mail, WhatsApp) e severidade por canal, com envio de teste, e dimensionamento de recursos |
 | **Configurações** (administradores) | Conexão com storage de rede (NAS), backup (agendado ou manual, com ou sem evidências) e restauração |
 
 ### Perfis de acesso
@@ -151,6 +151,23 @@ sem `.env`, num arquivo `backend/data/secret.key`) e nunca voltam para a tela.
 - A `SECRET_KEY` não vai no backup: ao restaurar em outro computador, digite de novo as senhas (NAS,
   SMTP, WhatsApp) ou copie a `SECRET_KEY` do `.env` antigo.
 - Com PostgreSQL, use `pg_dump`/`pg_restore`.
+
+### Dimensionamento de recursos (implantação)
+
+Na guia **Parâmetros → Dimensionamento e capacidade**:
+
+- **Planejar implantação**: informe câmeras, ocorrências por câmera/dia, retenção, duração do clipe,
+  modo de armazenamento e RAID. O sistema calcula o disco local (SSD) e o NAS necessários (com perda
+  do RAID e folga), sugere discos e baias, estima CPU/GPU, memória e banda de rede e, opcionalmente, o
+  volume de gravação contínua do NVR. O resultado pode ser impresso para a proposta.
+- **Situação atual**: com os dados reais da instalação (tamanho médio das ocorrências e volume
+  diário), projeta o uso com a retenção atual, em quantos dias o disco atinge o limite de alerta e a
+  retenção máxima que cabe. Exige ao menos 3 dias e 20 ocorrências de amostra.
+
+Premissas usadas (editáveis): ~2 MB por ocorrência (foto de 180 KB + clipe de 10 s a 3 quadros/s com
+quadros de 60 KB), banco de ~3 KB por ocorrência, 60 GB de sistema/IA, desempenho de IA por classe de
+hardware para o modelo nano (CPU ~15, GPU de entrada ~150, intermediária ~300, alta ~600 inferências/s)
+com uso máximo de 70%. São médias: depois do piloto, use **"Usar os valores medidos nesta instalação"**.
 
 ### Armazenamento em storage de rede (NAS)
 

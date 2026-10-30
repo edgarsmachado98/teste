@@ -554,3 +554,63 @@ def test_parameters_usage_and_alerts(client, admin, monkeypatch):
     assert resp.status_code == 400 and "SMTP" in resp.json()["detail"]
     client.put("/api/config", headers=admin, json={"reset": ["audit_retention_days", "alert_emails",
                "alert_min_severity_whatsapp", "whatsapp_to", "smtp_tls", "usage_alert_disk"]})
+
+
+def test_capacity_planning(client, admin):
+    from app import capacity
+
+    # cálculo de referência: 32 câmeras, 30 ocorrências/dia, 30 dias
+    res = capacity.plan(capacity.PlanInput(cameras=32, events_per_camera_day=30, retention_days=30,
+                                           storage_mode="espelho", raid="raid6"))
+    per_event_mb = res.per_event_bytes / capacity.MB
+    assert 1.8 < per_event_mb < 2.0                       # 180 KB + 30 quadros × 60 KB
+    assert abs(res.daily_bytes - 960 * res.per_event_bytes) < 1
+    images = next(i for i in res.nas_items if i.label.startswith("Fotos"))
+    assert abs(images.bytes - res.daily_bytes * 30) < 1
+    nas = res.nas_recommended
+    assert nas["usable_bytes"] >= res.nas_total / 0.7 and nas["raid"] == "raid6" and nas["disks"] >= 4
+    assert res.local_recommended["size_gb"] in capacity.SSD_SIZES_GB
+    assert res.compute["inferences_per_second"] == 32 * 3 * 2
+    assert res.compute["suggested"].startswith("GPU intermediária")  # 192 > 70% de 150
+
+    # modo principal reduz o disco local; sem NAS gera aviso
+    principal = capacity.plan(capacity.PlanInput(cameras=32, events_per_camera_day=30, retention_days=180,
+                                                 storage_mode="principal", local_days=7))
+    espelho = capacity.plan(capacity.PlanInput(cameras=32, events_per_camera_day=30, retention_days=180))
+    assert principal.local_total < espelho.local_total / 4  # 60 GB fixos de sistema/IA
+    assert capacity.plan(capacity.PlanInput(storage_mode="sem_nas")).warnings
+    # carga acima de uma GPU: dividir em servidores
+    big = capacity.plan(capacity.PlanInput(cameras=400, analysis_fps=5, models=2, model_size="s"))
+    assert big.compute["suggested"] is None and big.compute["servers_needed"] > 1
+    # gravação contínua: 10 câmeras × 4 Mbps × H.265 × 30 dias ≈ 7 TB
+    cont = capacity.plan(capacity.PlanInput(cameras=10, continuous=True, continuous_mbps=4, continuous_days=30))
+    assert 6.5 < cont.continuous["total_bytes"] / 1e12 < 7.5
+    assert capacity.recommend_nas(1e18, "raid6")["bays"] is None  # grande demais para um NAS
+
+    # API
+    plan = client.post("/api/config/capacity/plan", headers=admin, json={"cameras": 8, "raid": "raid1"}).json()
+    assert plan["nas_recommended"]["disks"] == 2 and plan["local_items"][0]["label"].startswith("Sistema")
+    assert client.post("/api/config/capacity/plan", headers=admin, json={"cameras": 0}).status_code == 400
+    status = client.get("/api/config/capacity", headers=admin).json()
+    assert status["measured"]["events_total"] >= 1 and status["measured"]["avg_event_bytes"]
+    assert status["defaults"]["retention_days"] == 30 and len(status["hardware"]) == 5
+    assert "daily_bytes" in status["projection"]
+    _, gestor = make_user(client, admin, "gestor-cap@fabrica.com", "gestor")
+    assert client.get("/api/config/capacity", headers=gestor).status_code == 403
+
+
+def test_capacity_projection_with_real_data():
+    from app import capacity
+
+    m = {"events_per_day": 100, "avg_event_bytes": 2 * capacity.MB, "days_observed": 10, "events_total": 1000}
+    # disco de 500 GB, 300 GB livres, 50 GB já em evidências; retenção 30 dias → 6 GB/dia... 200 MB/dia
+    p = capacity.project(m, 500e9, 300e9, 50e9)
+    daily = 100 * 2 * capacity.MB
+    assert p["daily_bytes"] == daily and p["steady_local_bytes"] == daily * 30
+    assert p["local_fits"] is True and p["days_until_alert"] is None  # já acima do regime: estável
+    p2 = capacity.project(m, 500e9, 300e9, 1e9)
+    assert p2["days_until_alert"] == int((500e9 * 0.9 - 200e9) / daily)
+    # poucos dados: não projeta
+    few = capacity.project({**m, "days_observed": 1, "events_total": 5}, 500e9, 300e9, 0)
+    assert "insuficientes" in few["message"]
+    assert capacity.plan(capacity.PlanInput(cameras=40)).compute["ram_gb"] == 16

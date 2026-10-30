@@ -272,3 +272,12 @@ button.danger-solid { background: var(--danger); color: #fff; }
 #par-usage-form { border-top: 1px solid var(--line); padding-top: 14px; }
 .backup-now .check { display: flex; align-items: center; gap: 6px; color: var(--text); }
 .backup-now .check input { width: auto; margin: 0; }
+
+/* Dimensionamento */
+.cap-form { margin: 12px 0 16px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.cap-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+.cap-summary .stat b { font-size: 22px; }
+table.compact td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.compact tr.total td { font-weight: 700; }
+.rec { margin: 8px 0 0; font-size: 14px; }
+h4 { margin: 14px 0 8px; font-size: 14px; }

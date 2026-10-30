@@ -148,6 +148,52 @@ def test_alert(data: AlertTestIn, request: Request, user: User = Depends(admin_o
     return {"sent": True, "to": recipients}
 
 
+# ---------- Dimensionamento ----------
+
+@router.get("/capacity")
+def capacity_status(_: User = Depends(admin_only), db: Session = Depends(get_db)):
+    """Dados reais da instalação, projeção com a retenção atual e premissas para o planejamento."""
+    from dataclasses import asdict
+
+    from .. import capacity
+    from ..usage import _sizes, measure_sizes, snapshot
+
+    if _sizes["evidence_bytes"] is None:
+        measure_sizes()
+    usage = snapshot()
+    measured = capacity.measure(db)
+    nas = storage.status() if storage.enabled() else {}
+    projection = capacity.project(measured, usage["disk_total"], usage["disk_free"], usage["evidence_bytes"] or 0,
+                                  nas.get("total_bytes"), nas.get("free_bytes"))
+    defaults = capacity.PlanInput(
+        retention_days=settings.retention_days, event_retention_days=settings.event_retention_days,
+        backup_keep=settings.backup_keep, nas_backup_keep=settings.storage_backup_keep,
+        storage_mode=(settings.storage_mode if settings.storage_nas_path else "sem_nas"),
+        local_days=settings.storage_local_days)
+    measured_inputs = {}
+    if measured["cameras"]:
+        measured_inputs["cameras"] = measured["cameras"]
+    if measured["events_per_camera_day"] is not None and measured["events_total"]:
+        measured_inputs["events_per_camera_day"] = measured["events_per_camera_day"]
+    if measured["avg_frame_kb"]:
+        measured_inputs["frame_kb"] = measured["avg_frame_kb"]
+    if measured["avg_snapshot_kb"]:
+        measured_inputs["snapshot_kb"] = measured["avg_snapshot_kb"]
+    return {"measured": measured, "projection": projection, "usage": usage, "nas": nas,
+            "defaults": asdict(defaults), "measured_inputs": measured_inputs, "hardware": capacity.HARDWARE}
+
+
+@router.post("/capacity/plan")
+def capacity_plan(data: dict, _: User = Depends(admin_only)):
+    from .. import capacity
+
+    try:
+        inputs = capacity.PlanInput.from_dict(data)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return capacity.result_dict(capacity.plan(inputs))
+
+
 # ---------- Backup ----------
 
 class BackupIn(BaseModel):

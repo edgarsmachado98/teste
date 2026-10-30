@@ -1,5 +1,6 @@
 // Guia Parâmetros (administradores): retenção, uso do sistema e alertas.
 
+import { mountCapacity } from "../capacity-ui.js";
 import { collect, field, fmtBytes, saveConfig } from "../config-form.js";
 import { $, api, badge, esc, toast } from "../core.js";
 
@@ -142,9 +143,11 @@ export async function show(element) {
       <div class="card wide"><h3>Alertas</h3><div id="par-alerts"></div></div>
       <div class="card"><h3>E-mail (SMTP)</h3><div id="par-smtp"></div></div>
       <div class="card"><h3>WhatsApp Business (Meta Cloud API)</h3><div id="par-whatsapp"></div></div>
+      <div class="card wide"><h3>Dimensionamento e capacidade</h3><div id="par-capacity"></div></div>
     </div>`;
   cfg = await api("/api/config");
   render();
+  mountCapacity($("#par-capacity", el)).catch((err) => toast(esc(err.message), "danger"));
   await refreshUsage();
   clearInterval(usageTimer);
   usageTimer = setInterval(refreshUsage, 5000);
