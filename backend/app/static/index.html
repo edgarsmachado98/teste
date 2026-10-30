@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VigIA – Monitoramento Industrial</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Vig<span>IA</span></h1>
+    <nav>
+      <button data-tab="painel" class="active">Painel</button>
+      <button data-tab="aovivo">Ao vivo</button>
+      <button data-tab="cameras">Câmeras</button>
+      <button data-tab="regras">Regras</button>
+    </nav>
+    <div id="conn" class="conn off" title="Conexão em tempo real">●</div>
+  </header>
+
+  <div id="toasts"></div>
+
+  <main>
+    <!-- PAINEL -->
+    <section id="tab-painel" class="tab active">
+      <div class="stats">
+        <div class="stat"><b id="st-pending">–</b><span>Alertas pendentes</span></div>
+        <div class="stat"><b id="st-ppe">–</b><span>EPI ausente (24h)</span></div>
+        <div class="stat"><b id="st-zone">–</b><span>Zona restrita (24h)</span></div>
+        <div class="stat"><b id="st-fire">–</b><span>Fogo/fumaça (24h)</span></div>
+      </div>
+      <div class="toolbar">
+        <h2>Ocorrências</h2>
+        <select id="filter-status">
+          <option value="">Todas</option>
+          <option value="nova" selected>Novas</option>
+          <option value="confirmada">Confirmadas</option>
+          <option value="descartada">Descartadas</option>
+        </select>
+      </div>
+      <div id="events" class="events"></div>
+    </section>
+
+    <!-- AO VIVO -->
+    <section id="tab-aovivo" class="tab">
+      <h2>Câmeras ao vivo</h2>
+      <p class="hint">Último quadro analisado pelo detector (atualiza a cada 2 s).</p>
+      <div id="live" class="live"></div>
+    </section>
+
+    <!-- CÂMERAS -->
+    <section id="tab-cameras" class="tab">
+      <h2>Câmeras</h2>
+      <form id="camera-form" class="card form">
+        <input type="hidden" name="id">
+        <label>Nome <input name="name" required placeholder="Linha de produção 1"></label>
+        <label>Local <input name="location" placeholder="Galpão A"></label>
+        <label class="wide">Fonte (RTSP ou arquivo)
+          <input name="source" required placeholder="rtsp://usuario:senha@192.168.0.10:554/stream1">
+        </label>
+        <label class="check"><input type="checkbox" name="enabled" checked> Ativa</label>
+        <div class="actions">
+          <button type="submit">Salvar câmera</button>
+          <button type="reset" class="secondary">Limpar</button>
+        </div>
+      </form>
+      <table id="cameras-table"></table>
+    </section>
+
+    <!-- REGRAS -->
+    <section id="tab-regras" class="tab">
+      <h2>Regras de detecção</h2>
+      <form id="rule-form" class="card form">
+        <input type="hidden" name="id">
+        <label>Câmera <select name="camera_id" required></select></label>
+        <label>Nome <input name="name" required placeholder="Capacete obrigatório – Prensa"></label>
+        <label>Tipo
+          <select name="type">
+            <option value="ppe_missing">EPI ausente</option>
+            <option value="restricted_zone">Zona restrita</option>
+            <option value="fire_smoke">Fogo / fumaça</option>
+            <option value="max_people">Excesso de pessoas</option>
+          </select>
+        </label>
+        <label>Severidade
+          <select name="severity">
+            <option value="baixa">Baixa</option>
+            <option value="media">Média</option>
+            <option value="alta" selected>Alta</option>
+            <option value="critica">Crítica</option>
+          </select>
+        </label>
+        <fieldset class="wide param" data-for="ppe_missing">
+          <legend>EPIs obrigatórios</legend>
+          <label class="check"><input type="checkbox" name="req_helmet" checked> Capacete</label>
+          <label class="check"><input type="checkbox" name="req_vest"> Colete</label>
+          <label class="check"><input type="checkbox" name="req_glasses"> Óculos</label>
+          <label class="check"><input type="checkbox" name="req_gloves"> Luvas</label>
+          <label class="check"><input type="checkbox" name="req_mask"> Máscara</label>
+        </fieldset>
+        <label class="param" data-for="max_people">Máx. de pessoas na zona
+          <input type="number" name="max_people" min="0" value="2">
+        </label>
+        <label>Confiança mínima <input type="number" name="min_confidence" min="0" max="1" step="0.05" value="0.5"></label>
+        <label>Duração mínima (s) <input type="number" name="min_duration" min="0" step="0.5" value="2"></label>
+        <label>Intervalo entre alertas (s) <input type="number" name="cooldown" min="0" value="300"></label>
+        <label>Das (hora) <input type="number" name="start_hour" min="0" max="23" placeholder="sempre"></label>
+        <label>Até (hora) <input type="number" name="end_hour" min="0" max="24" placeholder="sempre"></label>
+        <label class="check"><input type="checkbox" name="enabled" checked> Ativa</label>
+
+        <div class="wide zone-editor">
+          <p class="hint">Zona de monitoramento: clique na imagem para marcar os pontos do polígono.
+            Sem pontos = imagem inteira.</p>
+          <div class="zone-wrap">
+            <img id="zone-img" alt="" hidden>
+            <canvas id="zone-canvas"></canvas>
+          </div>
+          <button type="button" id="zone-clear" class="secondary">Limpar zona</button>
+        </div>
+
+        <div class="actions">
+          <button type="submit">Salvar regra</button>
+          <button type="reset" class="secondary">Limpar</button>
+        </div>
+      </form>
+      <table id="rules-table"></table>
+    </section>
+  </main>
+
+  <dialog id="viewer">
+    <img id="viewer-img" alt="Evidência">
+    <form method="dialog"><button>Fechar</button></form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

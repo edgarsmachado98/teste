@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vigia
+      POSTGRES_USER: vigia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vigia}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://vigia:${POSTGRES_PASSWORD:-vigia}@db:5432/vigia
+      EVIDENCE_DIR: /data/evidencias
+    volumes:
+      - evidencias:/data/evidencias
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  detector:
+    build: ./detector
+    env_file: .env
+    environment:
+      BACKEND_URL: http://backend:8000
+    volumes:
+      - ./modelos:/app/modelos     # modelos treinados (EPI, fogo)
+      - ./videos:/app/videos:ro    # vídeos de teste (fonte: videos/arquivo.mp4)
+    depends_on:
+      - backend
+    restart: unless-stopped
+    # Para usar GPU NVIDIA, descomente (requer nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  pgdata:
+  evidencias:
