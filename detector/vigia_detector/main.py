@@ -4,6 +4,7 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 
 import httpx
 
@@ -15,7 +16,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("vigia.detector")
 
 
+def load_env_file() -> None:
+    """Fora do Docker, lê o .env da raiz do projeto (variáveis já definidas têm prioridade)."""
+    for path in (Path.cwd() / ".env", Path.cwd().parent / ".env"):
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        return
+
+
 def main() -> None:
+    load_env_file()
     backend = os.getenv("BACKEND_URL", "http://localhost:8000")
     api_key = os.getenv("DETECTOR_API_KEY", "troque-esta-chave")
     model_paths = [p.strip() for p in os.getenv("MODEL_PATHS", "yolov8n.pt").split(",") if p.strip()]

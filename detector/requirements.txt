@@ -1,4 +1,4 @@
-ultralytics==8.3.120
-opencv-python-headless==4.11.0.86
-numpy<2.3
-httpx==0.28.1
+ultralytics>=8.3.120
+opencv-python-headless>=4.10
+numpy>=1.26
+httpx>=0.28

@@ -69,6 +69,39 @@ cd detector && pip install -r requirements.txt && python -m vigia_detector.main
 
 Sem `DATABASE_URL`, o backend usa SQLite em `backend/data/`.
 
+### Windows sem Docker (PowerShell)
+
+Use **Python 3.12** ([python.org](https://www.python.org/downloads/release/python-3128/)): a
+biblioteca de IA (PyTorch) ainda não tem versão para o Python mais recente. Os dois serviços leem
+o `.env` da raiz do projeto.
+
+```powershell
+py -3.12 -m venv .venv
+```
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Se o PowerShell bloquear o script, execute antes
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+```powershell
+pip install -r backend\requirements.txt -r detector\requirements.txt
+```
+
+Terminal 1 (com o ambiente ativado):
+
+```powershell
+cd backend; uvicorn app.main:app
+```
+
+Terminal 2 (com o ambiente ativado):
+
+```powershell
+cd detector; python -m vigia_detector.main
+```
+
 ### Testes
 
 ```bash
