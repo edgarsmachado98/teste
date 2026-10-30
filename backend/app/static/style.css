@@ -247,3 +247,4 @@ legend { color: var(--muted); font-size: 13px; }
 code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
 table.compact { margin-top: 12px; font-size: 13px; }
 table.compact td, table.compact th { padding: 6px 8px; }
+.bartrack.space { height: 8px; margin-top: 6px; max-width: 320px; }

@@ -61,6 +61,18 @@ def send_report(start: date, end: date, recipients: list[str] | None = None) -> 
     return len(pdf)
 
 
+def archive_report(start: date, end: date) -> str:
+    """Guarda o PDF do período na pasta relatorios/ do NAS (histórico para auditorias)."""
+    from . import storage
+    from .reportpdf import build_report_pdf
+
+    if not storage.enabled():
+        return ""
+    with SessionLocal() as db:
+        pdf = build_report_pdf(db, start, end)
+    return storage.write_to_nas(f"relatorio-vigia-{start:%Y%m%d}-{end:%Y%m%d}.pdf", pdf, "relatorios")
+
+
 def due_jobs(now: datetime) -> list[str]:
     jobs = []
     if sqlite_path() and now.hour >= settings.backup_hour and get_state("backup_last") != f"{now:%Y-%m-%d}":
@@ -81,6 +93,10 @@ def run_due_jobs(now: datetime | None = None) -> list[str]:
                 set_state("backup_last", f"{now:%Y-%m-%d}")
             elif job == "report":
                 start, end = report_period(now.date(), settings.report_frequency)
+                try:
+                    archive_report(start, end)
+                except OSError as exc:
+                    log.error("relatório não arquivado no NAS: %s", exc)
                 if settings.smtp_host and settings.report_recipients:
                     send_report(start, end)
                 else:

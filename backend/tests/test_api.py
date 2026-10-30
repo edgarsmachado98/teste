@@ -308,3 +308,77 @@ def test_scheduler_runs_each_job_once(monkeypatch):
     assert scheduler.run_due_jobs(now) == ["backup", "report"]
     assert scheduler.run_due_jobs(now) == []  # não repete
     assert calls == ["backup", ("report", date(2026, 3, 1), date(2026, 3, 31))]
+
+
+def test_network_storage(client, admin, monkeypatch, tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    from app import storage
+    from app.common import EVIDENCE_DIR
+    from app.database import SessionLocal
+    from app.main import purge_old_data
+    from app.models import Event
+
+    nas = tmp_path / "nas"
+    nas.mkdir()
+    monkeypatch.setattr(storage.settings, "storage_nas_path", str(nas))
+    monkeypatch.setattr(storage.settings, "storage_mode", "principal")
+    monkeypatch.setattr(storage.settings, "storage_local_days", 7)
+
+    _, tecnico = make_user(client, admin, "tec-nas@fabrica.com", "tecnico")
+    assert client.get("/api/system/storage", headers=tecnico).status_code == 403
+    st = client.get("/api/system/storage", headers=admin).json()
+    assert st["enabled"] and not st["online"] and "ativado" in st["error"]
+    assert not storage.sync_once()["online"]          # sem marcador: não grava nada na pasta
+    assert list(nas.iterdir()) == []
+
+    assert client.post("/api/system/storage/activate", headers=admin).json()["online"] is True
+
+    cam = client.post("/api/cameras", headers=admin, json={"name": "NAS cam", "source": "0"}).json()
+    rule = client.post("/api/rules", headers=admin, json={"camera_id": cam["id"], "name": "Z", "type": "restricted_zone"}).json()
+    ev = client.post("/api/detector/events", headers=DET, files={"snapshot": ("e.jpg", b"foto", "image/jpeg")},
+                     data={"camera_id": cam["id"], "rule_id": rule["id"], "message": "nas", "clip_id": "clip-nas"}).json()
+
+    # o clipe ainda não chegou: aguarda (as ocorrências dos testes anteriores são enviadas)
+    storage.sync_once()
+    with SessionLocal() as db:
+        assert db.get(Event, ev["id"]).media_synced_at is None
+    files = [("frames", (f"{i}.jpg", f"q{i}".encode(), "image/jpeg")) for i in range(2)]
+    client.post("/api/detector/clips/clip-nas", headers=DET, data={"duration": "1"}, files=files)
+    result = client.post("/api/system/storage/sync", headers=admin).json()
+    assert result["synced_events"] >= 1 and result["copied_files"] >= 3
+
+    with SessionLocal() as db:
+        event = db.get(Event, ev["id"])
+        image_rel, clip_rel = event.image_file, event.clip_dir
+        assert event.media_synced_at is not None
+        assert (nas / "evidencias" / image_rel).read_bytes() == b"foto"
+        # modo principal: ocorrência com mais de 7 dias sai do disco local
+        event.created_at = datetime.now(timezone.utc) - timedelta(days=10)
+        db.commit()
+    assert storage.sync_once()["freed_events"] >= 1
+    assert not (EVIDENCE_DIR / image_rel).exists() and not (EVIDENCE_DIR / clip_rel).exists()
+    # ...e o painel continua mostrando, agora a partir do NAS
+    assert client.get(f"/api/events/{ev['id']}/image", headers=admin).content == b"foto"
+    assert client.get(f"/api/events/{ev['id']}/clip/1", headers=admin).content == b"q1"
+
+    # NAS cai: imagem indisponível (503) e a retenção deixa a exclusão pendente
+    offline = tmp_path / "nas-desligado"
+    nas.rename(offline)
+    assert not storage.check()
+    assert client.get(f"/api/events/{ev['id']}/image", headers=admin).status_code == 503
+    with SessionLocal() as db:
+        db.get(Event, ev["id"]).created_at = datetime.now(timezone.utc) - timedelta(days=40)
+        db.commit()
+    purge_old_data()
+    assert storage.status()["pending_deletions"] == 2
+    assert (offline / "evidencias" / image_rel).exists()
+
+    # NAS volta: exclusões pendentes são feitas (LGPD)
+    offline.rename(nas)
+    assert storage.sync_once()["deleted"] == 2
+    assert not (nas / "evidencias" / image_rel).exists() and not (nas / "evidencias" / clip_rel).exists()
+
+    # backup também vai para o NAS
+    backup = client.post("/api/system/backups", headers=admin).json()
+    assert (nas / "backups" / backup["name"]).exists()

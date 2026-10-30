@@ -151,6 +151,10 @@ function connectWs() {
       if (!ok) beep();
       toast(`<b>${ok ? "✅" : "⚠️"} Câmera ${esc(data.camera_name)}</b><br>${esc(data.label)}`, ok ? "ok" : "warn", 10000);
     }
+    if (data.kind === "storage_health") {
+      toast(`<b>${data.online ? "✅" : "⚠️"} Armazenamento de rede</b><br>${esc(data.label)}`,
+        data.online ? "ok" : "warn", 12000);
+    }
     if (data.kind === "event_updated") refreshIfOpen(data.id);
     VIEWS[current]?.onRealtime?.(data);
   };

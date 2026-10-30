@@ -116,6 +116,8 @@ class Event(Base):
     clip_dir: Mapped[str | None] = mapped_column(String(255), nullable=True)
     clip_frames: Mapped[int | None] = mapped_column(Integer, nullable=True)
     clip_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Quando a foto e o clipe foram copiados para o armazenamento de rede (NAS)
+    media_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="nova")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     # Caixas normalizadas das pessoas/objetos em violação (usadas no mapa de calor)
@@ -155,6 +157,16 @@ class ActionItem(Base):
     event: Mapped[Event | None] = relationship(back_populates="actions")
     responsible: Mapped[User | None] = relationship(foreign_keys=[responsible_id])
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+
+
+class StorageDeletion(Base):
+    """Exclusão pendente no NAS (retenção/LGPD) para quando ele estiver acessível."""
+
+    __tablename__ = "storage_deletions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rel_path: Mapped[str] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class SystemState(Base):

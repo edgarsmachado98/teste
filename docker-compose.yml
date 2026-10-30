@@ -46,3 +46,10 @@ services:
 volumes:
   pgdata:
   evidencias:
+  # Para guardar as evidências em um NAS, troque o volume "evidencias" por um compartilhamento CIFS:
+  # evidencias:
+  #   driver: local
+  #   driver_opts:
+  #     type: cifs
+  #     device: //192.168.0.20/vigia
+  #     o: "username=vigia,password=senha,uid=0,gid=0,file_mode=0660,dir_mode=0770"

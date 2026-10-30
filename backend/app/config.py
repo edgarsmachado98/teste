@@ -30,6 +30,18 @@ class Settings(BaseSettings):
     backup_keep: int = 14
     backup_copy_dir: str = ""
 
+    # Armazenamento de rede (NAS): pasta compartilhada (\\nas\vigia no Windows, ponto de
+    # montagem no Linux). espelho = cópia das evidências; principal = NAS é o armazenamento
+    # oficial e o computador guarda só os últimos storage_local_days dias.
+    storage_nas_path: str = ""
+    storage_mode: str = "espelho"
+    storage_local_days: int = 7
+    storage_nas_user: str = ""
+    storage_nas_password: str = ""
+    storage_sync_interval: int = 60
+    storage_backup_keep: int = 60
+    storage_offline_alert_minutes: int = 10
+
     # Relatório automático por e-mail: mensal | semanal | desligado
     report_frequency: str = "mensal"
     report_hour: int = 7

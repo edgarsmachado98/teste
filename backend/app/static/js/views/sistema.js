@@ -1,12 +1,71 @@
-import { $, api, can, esc, fmtDate, fmtDateTime, isoDate, toast, withToken } from "../core.js";
+import { $, api, badge, can, esc, fmtDate, fmtDateTime, isoDate, toast, withToken } from "../core.js";
 
 let el;
 
 const FREQ = { mensal: "Mensal (dia 1, referente ao mês anterior)", semanal: "Semanal (segunda-feira, semana anterior)",
   desligado: "Desligado" };
-const fmtSize = (b) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`).replace(".", ",");
+const fmtSize = (b) => (b > 1073741824 ? `${(b / 1073741824).toFixed(1)} GB` : b > 1048576
+  ? `${(b / 1048576).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`).replace(".", ",");
+
+function storageCard(n) {
+  if (!n.enabled) {
+    return `<p class="hint">Não configurado. Para guardar fotos, clipes, backups e relatórios em um storage de
+      rede (NAS), defina <code>STORAGE_NAS_PATH</code> no <code>.env</code> (ex.: <code>\\\\nas\\vigia</code>)
+      e reinicie o VigIA.</p>`;
+  }
+  const used = n.total_bytes ? 1 - n.free_bytes / n.total_bytes : null;
+  const state = n.online ? badge("● Conectado", "good")
+    : n.activated === false && n.error.includes("ativado") ? badge("Aguardando ativação", "warn")
+    : badge("▲ Inacessível", "bad");
+  return `
+    <dl class="kv">
+      <dt>Situação</dt><dd>${state}${!n.online && n.error ? `<div class="hint">${esc(n.error)}</div>` : ""}</dd>
+      <dt>Pasta</dt><dd class="mono">${esc(n.path)}${n.user ? ` <span class="hint">(usuário ${esc(n.user)})</span>` : ""}</dd>
+      <dt>Modo</dt><dd>${n.mode === "principal"
+        ? `Principal – o NAS guarda tudo; este computador mantém só os últimos ${n.local_days} dias`
+        : "Espelho – cópia de segurança de todas as evidências"}</dd>
+      ${n.total_bytes ? `<dt>Espaço</dt><dd>${fmtSize(n.free_bytes)} livres de ${fmtSize(n.total_bytes)}
+        <div class="bartrack space"><div class="barfill" style="width:${(used * 100).toFixed(1)}%"></div></div></dd>` : ""}
+      <dt>Aguardando envio</dt><dd>${n.pending_events} ocorrência(s)${n.pending_deletions
+        ? ` · ${n.pending_deletions} exclusão(ões) pendente(s)` : ""}</dd>
+      <dt>Última sincronização</dt><dd>${n.last_sync ? fmtDateTime(n.last_sync) : "–"}</dd>
+    </dl>
+    ${can("admin") ? `<div class="actions">
+      ${n.activated ? "" : `<button id="nas-activate">Ativar esta pasta como armazenamento</button>`}
+      ${n.activated ? `<button id="nas-sync">Sincronizar agora</button>` : ""}
+      <button id="nas-test" class="secondary">Testar conexão</button>
+    </div>` : ""}`;
+}
+
+async function loadStorage() {
+  const n = await api("/api/system/storage");
+  const box = $("#sys-storage", el);
+  box.innerHTML = storageCard(n);
+  $("#nas-test", box)?.addEventListener("click", async () => {
+    const r = await api("/api/system/storage");
+    toast(r.online ? "Armazenamento de rede acessível." : esc(r.error || "Inacessível"), r.online ? "ok" : "danger");
+    loadStorage();
+  });
+  $("#nas-activate", box)?.addEventListener("click", async () => {
+    if (!confirm(`Confirma que ${n.path} é a pasta do storage de rede reservada para o VigIA?`)) return;
+    try {
+      await api("/api/system/storage/activate", { method: "POST" });
+      toast("Armazenamento de rede ativado. As evidências começam a ser enviadas.", "ok");
+    } catch (err) { toast(esc(err.message), "danger"); }
+    loadStorage();
+  });
+  $("#nas-sync", box)?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    try {
+      const r = await api("/api/system/storage/sync", { method: "POST" });
+      toast(`${r.synced_events} ocorrência(s) enviadas (${r.copied_files} arquivos).`, "ok");
+    } catch (err) { toast(esc(err.message), "danger"); }
+    loadStorage();
+  });
+}
 
 async function load() {
+  loadStorage().catch((err) => toast(esc(err.message), "danger"));
   const s = await api("/api/system/status");
   const lastPeriod = s.report_last_period;
   $("#sys-report", el).innerHTML = `
@@ -71,11 +130,16 @@ async function load() {
   });
 }
 
+export function onRealtime(data) {
+  if (data.kind === "storage_health") loadStorage();
+}
+
 export async function show(element) {
   el = element;
   el.innerHTML = `
     <h2>Sistema</h2>
     <div class="grid-2">
+      <div class="card wide"><h3>Armazenamento de rede (NAS)</h3><div id="sys-storage"></div></div>
       <div class="card"><h3>Relatório automático por e-mail</h3><div id="sys-report"></div></div>
       <div class="card"><h3>Backup do banco de dados</h3><div id="sys-backup"></div></div>
       <div class="card"><h3>Retenção de dados (LGPD)</h3><div id="sys-retention"></div></div>

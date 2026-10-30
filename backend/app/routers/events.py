@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import audit, notifier
+from .. import audit, notifier, storage
 from ..auth import current_user, has_role, require_role
 from ..common import EVIDENCE_DIR, action_out, event_out, get_or_404
 from ..database import get_db
@@ -134,7 +134,17 @@ def event_image(event_id: int, db: Session = Depends(get_db)):
     event = get_or_404(db, Event, event_id)
     if not event.image_file:
         raise HTTPException(404, "evento sem imagem")
-    return FileResponse(EVIDENCE_DIR / event.image_file, media_type="image/jpeg")
+    return FileResponse(_media_path(event.image_file), media_type="image/jpeg")
+
+
+def _media_path(rel: str):
+    """Arquivo no disco local ou no NAS (modo principal, fora do cache local)."""
+    path = storage.resolve(rel)
+    if path is None:
+        if storage.enabled():
+            raise HTTPException(503, "imagem no armazenamento de rede, que está inacessível no momento")
+        raise HTTPException(404, "arquivo não encontrado")
+    return path
 
 
 @router.get("/events/{event_id}/clip/{index}", dependencies=[Depends(current_user)])
@@ -142,7 +152,7 @@ def event_clip_frame(event_id: int, index: int, db: Session = Depends(get_db)):
     event = get_or_404(db, Event, event_id)
     if not event.clip_dir or not 0 <= index < (event.clip_frames or 0):
         raise HTTPException(404, "quadro não encontrado")
-    return FileResponse(EVIDENCE_DIR / event.clip_dir / f"{index:04d}.jpg", media_type="image/jpeg",
+    return FileResponse(_media_path(f"{event.clip_dir}/{index:04d}.jpg"), media_type="image/jpeg",
                         headers={"Cache-Control": "private, max-age=86400"})
 
 

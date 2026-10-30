@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import shutil
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -9,6 +8,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, select
 
+from . import storage
 from .auth import user_from_token
 from .common import EVIDENCE_DIR
 from .config import settings
@@ -18,6 +18,7 @@ from .migrate import migrate
 from .models import Event, Session
 from .routers import access, cameras, detector, events, reports, system
 from .scheduler import scheduler_loop
+from .storage import storage_loop
 from .ws import hub
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -26,14 +27,13 @@ log = logging.getLogger("vigia")
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def remove_media(event: Event) -> None:
-    """Apaga a foto e o clipe da ocorrência (dados pessoais), mantendo o registro."""
-    if event.image_file:
-        (EVIDENCE_DIR / event.image_file).unlink(missing_ok=True)
-        event.image_file = None
-    if event.clip_dir:
-        shutil.rmtree(EVIDENCE_DIR / event.clip_dir, ignore_errors=True)
-        event.clip_dir = event.clip_frames = event.clip_duration = None
+def remove_media(event: Event, db=None) -> None:
+    """Apaga a foto e o clipe da ocorrência (dados pessoais), no disco local e no NAS,
+    mantendo o registro."""
+    storage.remove(event.image_file, db)
+    storage.remove(event.clip_dir, db)
+    event.image_file = None
+    event.clip_dir = event.clip_frames = event.clip_duration = None
 
 
 def purge_old_data() -> tuple[int, int]:
@@ -47,10 +47,10 @@ def purge_old_data() -> tuple[int, int]:
             Event.created_at < image_cutoff, (Event.image_file.is_not(None)) | (Event.clip_dir.is_not(None))
         )).all()
         for event in with_images:
-            remove_media(event)
+            remove_media(event, db)
         old = db.scalars(select(Event).where(Event.created_at < event_cutoff)).all()
         for event in old:
-            remove_media(event)
+            remove_media(event, db)
             db.delete(event)
         db.execute(delete(Session).where(Session.expires_at < now))
         db.commit()
@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     migrate()
     tasks = [asyncio.create_task(retention_loop()), asyncio.create_task(health_loop()),
-             asyncio.create_task(scheduler_loop())]
+             asyncio.create_task(scheduler_loop()), asyncio.create_task(storage_loop())]
     yield
     for task in tasks:
         task.cancel()

@@ -90,6 +90,7 @@ async def receive_clip(clip_id: str, frames: list[UploadFile] = File(...), durat
     for i, frame in enumerate(frames):
         (path / f"{i:04d}.jpg").write_bytes(await frame.read())
     event.clip_dir, event.clip_frames, event.clip_duration = folder, len(frames), max(duration, 0.1)
+    event.media_synced_at = None  # o clipe chegou depois: enviar também ao NAS
     db.commit()
     await hub.broadcast({"kind": "event_updated", "id": event.id})
 

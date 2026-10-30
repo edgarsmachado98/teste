@@ -48,7 +48,15 @@ def run_backup() -> dict:
         except OSError as exc:
             log.error("backup criado, mas a cópia para %s falhou: %s", settings.backup_copy_dir, exc)
             copied = f"falhou: {exc}"
+    nas = ""
+    try:
+        from .storage import copy_to_nas
+
+        nas = copy_to_nas(target, "backups", keep=settings.storage_backup_keep, pattern="vigia-*.db")
+    except OSError as exc:
+        log.error("backup criado, mas a cópia para o NAS falhou: %s", exc)
+        nas = f"falhou: {exc}"
     for old in sorted(folder.glob("vigia-*.db"), reverse=True)[max(settings.backup_keep, 1):]:
         old.unlink(missing_ok=True)
     log.info("backup criado: %s", target)
-    return {"name": target.name, "size": target.stat().st_size, "copy": copied}
+    return {"name": target.name, "size": target.stat().st_size, "copy": copied, "nas": nas}

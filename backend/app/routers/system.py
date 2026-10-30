@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from .. import audit
+from .. import audit, storage
 from ..auth import require_role
 from ..backup import backup_dir, list_backups, run_backup, sqlite_path
 from ..config import settings
@@ -41,6 +41,37 @@ def status():
         "retention_days": settings.retention_days,
         "event_retention_days": settings.event_retention_days,
     }
+
+
+@router.get("/system/storage", dependencies=[Depends(require_role("gestor"))])
+def storage_status():
+    if storage.enabled():
+        storage.check()
+    return storage.status()
+
+
+@router.post("/system/storage/activate")
+def storage_activate(request: Request, user: User = Depends(require_role("admin")), db: Session = Depends(get_db)):
+    try:
+        storage.activate()
+    except OSError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    audit.record(db, user, "nas_ativado", "sistema", None, settings.storage_nas_path, request)
+    db.commit()
+    return storage.status()
+
+
+@router.post("/system/storage/sync")
+def storage_sync(request: Request, user: User = Depends(require_role("admin")), db: Session = Depends(get_db)):
+    if not storage.enabled():
+        raise HTTPException(400, "armazenamento de rede não configurado (STORAGE_NAS_PATH no .env)")
+    result = storage.sync_once()
+    if not result["online"]:
+        raise HTTPException(503, storage.status()["error"] or "armazenamento de rede inacessível")
+    audit.record(db, user, "nas_sincronizado", "sistema", None,
+                 f"{result['synced_events']} ocorrências, {result['copied_files']} arquivos", request)
+    db.commit()
+    return {**result, "status": storage.status()}
 
 
 @router.post("/system/backups", status_code=201)

@@ -18,6 +18,7 @@ Os alertas chegam por **e-mail**, **WhatsApp** e **na tela**, em tempo real.
 | **Relatório** | Relatório em PDF (pelo navegador), com campos para a análise do SESMT e assinaturas |
 | **Clipe da ocorrência** | Vídeo de alguns segundos antes e depois de cada desvio, além da foto |
 | **Relatório automático** | PDF mensal ou semanal enviado por e-mail aos gestores |
+| **Armazenamento de rede (NAS)** | Fotos, clipes, backups e relatórios no storage de rede, com fila quando o NAS está fora do ar |
 | **Saúde das câmeras** | Alerta quando a câmera fica sem sinal, escura, obstruída/desfocada ou congelada |
 | **Usuários e auditoria** | Perfis de acesso e registro de quem fez o quê, quando e de onde |
 
@@ -129,6 +130,46 @@ Acesse http://localhost:8000 e crie o administrador. Depois:
 4. **Relatório automático**: configure SMTP e `REPORT_EMAILS`. Por padrão, todo dia 1 sai o PDF do
    mês anterior (`REPORT_FREQUENCY=semanal` para toda segunda-feira). Na tela **Sistema** dá para
    enviar um relatório na hora.
+
+### Armazenamento em storage de rede (NAS)
+
+Guarda as evidências (fotos e clipes), os backups e os relatórios mensais em um NAS (Synology,
+QNAP, TrueNAS ou qualquer pasta compartilhada da rede).
+
+1. No NAS, crie uma pasta compartilhada (ex.: `vigia`) e um **usuário próprio** com permissão de
+   leitura e escrita somente nela.
+2. No `.env`:
+
+   ```ini
+   STORAGE_NAS_PATH=\\192.168.0.20\vigia
+   STORAGE_NAS_USER=vigia
+   STORAGE_NAS_PASSWORD=senha-do-usuario-no-nas
+   STORAGE_MODE=espelho
+   ```
+
+   No Linux, monte o compartilhamento (`/etc/fstab` com `cifs` ou `nfs`) e use o ponto de montagem em
+   `STORAGE_NAS_PATH`.
+3. Reinicie o VigIA e, na tela **Sistema → Armazenamento de rede**, clique em **Ativar**. Isso grava um
+   arquivo marcador na pasta. Sem ele o VigIA não grava nada, para não encher o disco local caso o
+   compartilhamento não esteja conectado.
+
+**Modos**
+
+- `espelho` (padrão): tudo continua neste computador e o NAS recebe uma cópia, para redundância.
+- `principal`: o NAS é o armazenamento oficial. Este computador guarda só os últimos
+  `STORAGE_LOCAL_DAYS` dias e o painel busca o restante no NAS. Use quando o disco local for pequeno.
+
+**Como funciona**
+
+- As evidências são gravadas primeiro no disco local (a detecção nunca espera a rede) e enviadas ao NAS
+  a cada `STORAGE_SYNC_INTERVAL` segundos, com cópia atômica e conferência de tamanho.
+- Se o NAS ficar fora do ar, nada se perde: os arquivos aguardam na fila e o sistema avisa na tela e por
+  e-mail após `STORAGE_OFFLINE_ALERT_MINUTES` minutos. No modo principal, imagens que só existem no NAS
+  ficam indisponíveis no painel até ele voltar.
+- A retenção (LGPD) apaga as fotos e clipes também no NAS. Se ele estiver fora do ar, a exclusão fica
+  pendente e é feita quando ele voltar.
+- Também vão para o NAS: os backups diários (pasta `backups/`, guardando `STORAGE_BACKUP_KEEP`) e o PDF
+  de cada relatório automático (pasta `relatorios/`), como histórico para auditorias.
 
 ### Treinar o modelo com imagens do cliente
 
