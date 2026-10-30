@@ -67,6 +67,7 @@ def ensure_env() -> dict[str, str]:
     if not env_file.exists():
         text = (ROOT / ".env.example").read_text(encoding="utf-8")
         text = text.replace("DETECTOR_API_KEY=troque-esta-chave", f"DETECTOR_API_KEY={secrets.token_urlsafe(24)}")
+        text = text.replace("\nSECRET_KEY=\n", f"\nSECRET_KEY={secrets.token_urlsafe(32)}\n")
         env_file.write_text(text, encoding="utf-8")
         print("Arquivo .env criado. Edite-o para configurar e-mail e WhatsApp.")
 

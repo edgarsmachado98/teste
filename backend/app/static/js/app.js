@@ -11,10 +11,13 @@ import * as indicadores from "./views/indicadores.js";
 import * as ocorrencias from "./views/ocorrencias.js";
 import * as painel from "./views/painel.js";
 import * as regras from "./views/regras.js";
+import * as configuracoes from "./views/configuracoes.js";
+import * as parametros from "./views/parametros.js";
 import * as sistema from "./views/sistema.js";
 import * as usuarios from "./views/usuarios.js";
 
-const VIEWS = { painel, ocorrencias, acoes, indicadores, aovivo, cameras, regras, usuarios, auditoria, sistema };
+const VIEWS = { painel, ocorrencias, acoes, indicadores, aovivo, cameras, regras, usuarios, auditoria, sistema,
+  parametros, configuracoes };
 let current = null;
 
 // ---------- Acesso ----------
@@ -150,6 +153,10 @@ function connectWs() {
       const ok = data.health === "ok";
       if (!ok) beep();
       toast(`<b>${ok ? "✅" : "⚠️"} Câmera ${esc(data.camera_name)}</b><br>${esc(data.label)}`, ok ? "ok" : "warn", 10000);
+    }
+    if (data.kind === "usage_alert") {
+      toast(esc(data.text), data.alerting ? "warn" : "ok", 12000);
+      if (data.alerting) beep();
     }
     if (data.kind === "storage_health") {
       toast(`<b>${data.online ? "✅" : "⚠️"} Armazenamento de rede</b><br>${esc(data.label)}`,

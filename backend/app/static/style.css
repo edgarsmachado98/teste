@@ -248,3 +248,27 @@ code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-si
 table.compact { margin-top: 12px; font-size: 13px; }
 table.compact td, table.compact th { padding: 6px 8px; }
 .bartrack.space { height: 8px; margin-top: 6px; max-width: 320px; }
+
+/* Configurações e Parâmetros */
+.src { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; margin-left: 4px;
+  background: var(--panel-2); color: var(--muted); vertical-align: middle; }
+.src-painel { color: #93c5fd; }
+.with-suffix { display: flex; align-items: center; gap: 6px; }
+.with-suffix span { color: var(--muted); font-size: 13px; white-space: nowrap; margin-top: 4px; }
+.form small.hint { display: block; margin-top: 4px; font-size: 12px; }
+.status-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.status-line .bartrack.space { margin: 0; flex: 0 1 220px; }
+.backup-now { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 16px 0 8px;
+  padding-top: 14px; border-top: 1px solid var(--line); }
+.warn-box { border: 1px solid var(--warn); background: #2a2210; border-radius: 8px; padding: 12px; margin-bottom: 14px;
+  font-size: 14px; line-height: 1.5; }
+button.danger-solid { background: var(--danger); color: #fff; }
+.meters { display: flex; flex-direction: column; gap: 14px; margin-bottom: 12px; }
+.meter-head { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 14px; }
+.meter-track { position: relative; height: 12px; background: var(--panel-2); border-radius: 4px; }
+.meter-fill { height: 100%; background: var(--series-1); border-radius: 4px 0 0 4px; }
+.meter-fill.over { background: var(--danger); }
+.meter-limit { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: 0.7; }
+#par-usage-form { border-top: 1px solid var(--line); padding-top: 14px; }
+.backup-now .check { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.backup-now .check input { width: auto; margin: 0; }

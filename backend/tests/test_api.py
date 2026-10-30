@@ -233,27 +233,32 @@ def test_clip_upload_and_retention(client, admin):
 
 
 def test_backup_and_rotation(client, admin):
-    import sqlite3
+    import json
     import time
+    import zipfile
 
     from app.backup import backup_dir
 
-    _, operador = make_user(client, admin, "op2@fabrica.com", "operador")
-    assert client.post("/api/system/backups", headers=operador).status_code == 403
+    _, gestor = make_user(client, admin, "gestor-bk@fabrica.com", "gestor")
+    assert client.post("/api/config/backups", headers=gestor, json={}).status_code == 403
+    assert client.get("/api/config", headers=gestor).status_code == 403
     names = []
     for _ in range(3):
-        resp = client.post("/api/system/backups", headers=admin)
+        resp = client.post("/api/config/backups", headers=admin, json={})
         assert resp.status_code == 201
         names.append(resp.json()["name"])
-        time.sleep(1.1)  # nomes têm resolução de segundos
-    files = sorted(p.name for p in backup_dir().glob("vigia-*.db"))
+        time.sleep(1.1)
+    files = sorted(p.name for p in backup_dir().glob("vigia-*.zip"))
     assert files == sorted(names[1:])  # BACKUP_KEEP=2
-    with sqlite3.connect(backup_dir() / names[-1]) as db:
-        assert db.execute("select count(*) from users").fetchone()[0] >= 1
-    assert client.get(f"/api/system/backups/{names[-1]}", headers=admin).status_code == 200
-    assert client.get("/api/system/backups/..%2Fvigia.db", headers=admin).status_code == 404
-    status = client.get("/api/system/status", headers=admin).json()
-    assert status["database"] == "sqlite" and len(status["backups"]) == 2
+    with zipfile.ZipFile(backup_dir() / names[-1]) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        assert set(zf.namelist()) == {"vigia.db", "manifest.json"}
+    assert manifest["counts"]["users"] >= 1 and manifest["evidence_files"] == 0
+    assert client.get(f"/api/config/backups/{names[-1]}", headers=admin).status_code == 200
+    assert client.get("/api/config/backups/..%2Fvigia.db", headers=admin).status_code == 404
+    assert len(client.get("/api/config", headers=admin).json()["backups"]) == 2
+    assert client.delete(f"/api/config/backups/{names[-1]}", headers=admin).status_code == 204
+    assert len(client.get("/api/config", headers=admin).json()["backups"]) == 1
 
 
 def test_report_pdf_and_email(client, admin, monkeypatch):
@@ -326,13 +331,13 @@ def test_network_storage(client, admin, monkeypatch, tmp_path):
     monkeypatch.setattr(storage.settings, "storage_local_days", 7)
 
     _, tecnico = make_user(client, admin, "tec-nas@fabrica.com", "tecnico")
-    assert client.get("/api/system/storage", headers=tecnico).status_code == 403
-    st = client.get("/api/system/storage", headers=admin).json()
+    assert client.get("/api/config", headers=tecnico).status_code == 403
+    st = client.get("/api/config", headers=admin).json()["storage"]
     assert st["enabled"] and not st["online"] and "ativado" in st["error"]
     assert not storage.sync_once()["online"]          # sem marcador: não grava nada na pasta
     assert list(nas.iterdir()) == []
 
-    assert client.post("/api/system/storage/activate", headers=admin).json()["online"] is True
+    assert client.post("/api/config/storage/activate", headers=admin).json()["online"] is True
 
     cam = client.post("/api/cameras", headers=admin, json={"name": "NAS cam", "source": "0"}).json()
     rule = client.post("/api/rules", headers=admin, json={"camera_id": cam["id"], "name": "Z", "type": "restricted_zone"}).json()
@@ -345,7 +350,7 @@ def test_network_storage(client, admin, monkeypatch, tmp_path):
         assert db.get(Event, ev["id"]).media_synced_at is None
     files = [("frames", (f"{i}.jpg", f"q{i}".encode(), "image/jpeg")) for i in range(2)]
     client.post("/api/detector/clips/clip-nas", headers=DET, data={"duration": "1"}, files=files)
-    result = client.post("/api/system/storage/sync", headers=admin).json()
+    result = client.post("/api/config/storage/sync", headers=admin).json()
     assert result["synced_events"] >= 1 and result["copied_files"] >= 3
 
     with SessionLocal() as db:
@@ -380,5 +385,172 @@ def test_network_storage(client, admin, monkeypatch, tmp_path):
     assert not (nas / "evidencias" / image_rel).exists() and not (nas / "evidencias" / clip_rel).exists()
 
     # backup também vai para o NAS
-    backup = client.post("/api/system/backups", headers=admin).json()
+    backup = client.post("/api/config/backups", headers=admin, json={}).json()
     assert (nas / "backups" / backup["name"]).exists()
+
+
+
+def test_config_settings_and_nas_probe(client, admin, tmp_path):
+    from app import settings_store
+    from app.config import settings
+    from app.database import SessionLocal
+    from app.models import SystemState
+
+    nas = tmp_path / "nas2"
+    nas.mkdir()
+    probe = client.post("/api/config/storage/test", headers=admin,
+                        json={"path": str(nas), "user": "vigia", "password": "x"}).json()
+    assert probe["ok"] and probe["writable"] and not probe["activated"]
+    bad = client.post("/api/config/storage/test", headers=admin, json={"path": str(tmp_path / "nao-existe")}).json()
+    assert not bad["ok"] and "não encontrada" in bad["message"]
+
+    resp = client.put("/api/config", headers=admin, json={"values": {
+        "storage_nas_path": str(nas), "storage_nas_user": "vigia", "storage_nas_password": "s3nh@-do-nas",
+        "storage_mode": "principal", "backup_hour": 3}})
+    assert resp.status_code == 200, resp.text
+    values = resp.json()["values"]
+    assert values["storage_nas_password"] == {"set": True, "source": "painel"}  # senha nunca volta para a tela
+    assert values["storage_mode"]["value"] == "principal" and settings.backup_hour == 3
+    assert settings.storage_nas_password == "s3nh@-do-nas"
+    with SessionLocal() as db:
+        stored = db.get(SystemState, "cfg:storage_nas_password").value
+    assert stored.startswith("enc:") and "s3nh@" not in stored  # criptografada no banco
+
+    # senha vazia mantém a atual; valores inválidos são recusados
+    client.put("/api/config", headers=admin, json={"values": {"storage_nas_password": ""}})
+    assert settings.storage_nas_password == "s3nh@-do-nas"
+    assert client.put("/api/config", headers=admin, json={"values": {"backup_hour": 30}}).status_code == 400
+    assert client.put("/api/config", headers=admin, json={"values": {"storage_mode": "x"}}).status_code == 400
+    assert client.put("/api/config", headers=admin, json={"values": {"database_url": "x"}}).status_code == 400
+
+    # voltar ao .env
+    client.put("/api/config", headers=admin, json={"reset": list(settings_store.FIELDS)})
+    assert settings.storage_nas_path == "" and settings.backup_hour == 2
+    audit = client.get("/api/audit?entity=sistema", headers=admin).json()
+    assert any("senha do NAS" in a["details"] for a in audit)
+    assert all("s3nh@" not in a["details"] for a in audit)
+
+
+def test_restore(client, admin, tmp_path):
+    import io
+    import zipfile
+
+    from app.backup import backup_dir
+    from app.common import EVIDENCE_DIR
+
+    cam = client.post("/api/cameras", headers=admin, json={"name": "Antes do backup", "source": "0"}).json()
+    rule = client.post("/api/rules", headers=admin, json={"camera_id": cam["id"], "name": "Z", "type": "restricted_zone"}).json()
+    ev = client.post("/api/detector/events", headers=DET, files={"snapshot": ("e.jpg", b"evidencia-original", "image/jpeg")},
+                     data={"camera_id": cam["id"], "rule_id": rule["id"], "message": "antes"}).json()
+    full = client.post("/api/config/backups", headers=admin, json={"include_evidence": True}).json()
+    assert full["evidence_files"] >= 1 and full["kind"] == "completo"
+
+    # mudanças depois do backup
+    client.post("/api/cameras", headers=admin, json={"name": "Depois do backup", "source": "0"})
+    image = client.get(f"/api/events/{ev['id']}", headers=admin).json()
+    from app.database import SessionLocal
+    from app.models import Event
+    with SessionLocal() as db:
+        image_file = EVIDENCE_DIR / db.get(Event, ev["id"]).image_file
+    image_file.unlink()
+    assert image["id"] == ev["id"]
+
+    # confirmação obrigatória
+    assert client.post("/api/config/restore", headers=admin, json={"name": full["name"], "confirm": "sim"}).status_code == 400
+    result = client.post("/api/config/restore", headers=admin, json={"name": full["name"], "confirm": "RESTAURAR"}).json()
+    assert result["evidence_files"] >= 1 and "antes-restauracao" in result["safety_backup"]
+
+    # sessão do admin existia no backup, então continua válida; dados voltaram
+    names = [c["name"] for c in client.get("/api/cameras", headers=admin).json()]
+    assert "Antes do backup" in names and "Depois do backup" not in names
+    assert client.get(f"/api/events/{ev['id']}/image", headers=admin).content == b"evidencia-original"
+    assert any(a["action"] == "sistema_restaurado" for a in client.get("/api/audit?entity=sistema", headers=admin).json())
+
+    # desfazer: restaurar o backup de segurança traz a câmera de volta
+    client.post("/api/config/restore", headers=admin, json={"name": result["safety_backup"], "confirm": "RESTAURAR"})
+    assert "Depois do backup" in [c["name"] for c in client.get("/api/cameras", headers=admin).json()]
+
+    # envio de arquivo: válido
+    data = (backup_dir() / full["name"]).read_bytes()
+    up = client.post("/api/config/restore/upload?confirm=RESTAURAR", headers=admin,
+                     files={"file": ("meu-backup.zip", data, "application/zip")})
+    assert up.status_code == 200, up.text
+    assert "Depois do backup" not in [c["name"] for c in client.get("/api/cameras", headers=admin).json()]
+
+    # arquivos inválidos são recusados e não ficam na lista
+    before = len(list(backup_dir().iterdir()))
+    bad = client.post("/api/config/restore/upload?confirm=RESTAURAR", headers=admin,
+                      files={"file": ("x.zip", b"isto nao e zip", "application/zip")})
+    assert bad.status_code == 400 and "inválido" in bad.json()["detail"]
+    evil = io.BytesIO()
+    with zipfile.ZipFile(evil, "w") as zf:
+        zf.writestr("vigia.db", data[:10])
+        zf.writestr("../../fora.txt", "x")
+    bad = client.post("/api/config/restore/upload?confirm=RESTAURAR", headers=admin,
+                      files={"file": ("evil.zip", evil.getvalue(), "application/zip")})
+    assert bad.status_code == 400 and "não permitidos" in bad.json()["detail"]
+    notdb = io.BytesIO()
+    with zipfile.ZipFile(notdb, "w") as zf:
+        zf.writestr("vigia.db", b"nao sou um banco")
+    bad = client.post("/api/config/restore/upload?confirm=RESTAURAR", headers=admin,
+                      files={"file": ("n.zip", notdb.getvalue(), "application/zip")})
+    assert bad.status_code == 400
+    assert len(list(backup_dir().iterdir())) == before
+    assert client.get("/api/auth/me", headers=admin).status_code == 200  # sistema segue funcionando
+
+
+def test_parameters_usage_and_alerts(client, admin, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from app import notifier, usage
+    from app.config import settings
+    from app.database import SessionLocal
+    from app.main import purge_old_data
+    from app.models import AuditLog
+
+    # parâmetros de retenção e alerta pela tela
+    resp = client.put("/api/config", headers=admin, json={"values": {
+        "audit_retention_days": 30, "alert_emails": "sesmt@fab.com; gerente@fab.com",
+        "alert_min_severity_whatsapp": "critica", "whatsapp_to": "+55 (11) 99999-8888", "smtp_tls": "false",
+        "usage_alert_disk": 80}})
+    assert resp.status_code == 200, resp.text
+    assert settings.alert_emails == "sesmt@fab.com, gerente@fab.com"
+    assert settings.whatsapp_to == "5511999998888" and settings.smtp_tls is False
+    assert client.put("/api/config", headers=admin, json={"values": {"alert_emails": "invalido"}}).status_code == 400
+    assert client.put("/api/config", headers=admin, json={"values": {"whatsapp_to": "123"}}).status_code == 400
+
+    # retenção da auditoria
+    with SessionLocal() as db:
+        db.add(AuditLog(user_name="antigo", action="login", created_at=datetime.now(timezone.utc) - timedelta(days=40)))
+        db.commit()
+    purge_old_data()
+    assert not [a for a in client.get("/api/audit?user_name=antigo", headers=admin).json()]
+
+    # severidade mínima por canal
+    sent = []
+    monkeypatch.setattr(notifier, "send_email", lambda e, i: sent.append(("email", e["severity"])))
+    monkeypatch.setattr(notifier, "send_whatsapp", lambda e, i, r=None: sent.append(("whatsapp", e["severity"])))
+    notifier.notify({"severity": "alta"}, None)
+    notifier.notify({"severity": "critica"}, None)
+    assert sent == [("email", "alta"), ("email", "critica"), ("whatsapp", "critica")]
+
+    # uso do sistema
+    data = client.get("/api/config/usage", headers=admin).json()
+    assert 0 < data["disk_percent"] <= 100 and data["limits"]["disk"] == 80
+    assert data["cpu_percent"] is not None and data["memory_percent"] is not None
+
+    # alerta só após o tempo contínuo e volta com histerese
+    monkeypatch.setattr(settings, "usage_alert_minutes", 5)
+    assert usage.evaluate({"disk_percent": 85}, 0) == []
+    assert usage.evaluate({"disk_percent": 85}, 299) == []
+    assert usage.evaluate({"disk_percent": 86}, 301) == [("disk", True, 86)]
+    assert usage.evaluate({"disk_percent": 86}, 400) == []          # não repete
+    assert usage.evaluate({"disk_percent": 78}, 401) == []          # dentro da histerese
+    assert usage.evaluate({"disk_percent": 70}, 402) == [("disk", False, 70)]
+
+    # mensagem de teste: sem SMTP, erro claro
+    monkeypatch.setattr(settings, "smtp_host", "")
+    resp = client.post("/api/config/alerts/test", headers=admin, json={"channel": "email"})
+    assert resp.status_code == 400 and "SMTP" in resp.json()["detail"]
+    client.put("/api/config", headers=admin, json={"reset": ["audit_retention_days", "alert_emails",
+               "alert_min_severity_whatsapp", "whatsapp_to", "smtp_tls", "usage_alert_disk"]})

@@ -21,6 +21,8 @@ Os alertas chegam por **e-mail**, **WhatsApp** e **na tela**, em tempo real.
 | **Armazenamento de rede (NAS)** | Fotos, clipes, backups e relatórios no storage de rede, com fila quando o NAS está fora do ar |
 | **Saúde das câmeras** | Alerta quando a câmera fica sem sinal, escura, obstruída/desfocada ou congelada |
 | **Usuários e auditoria** | Perfis de acesso e registro de quem fez o quê, quando e de onde |
+| **Parâmetros** (administradores) | Retenção de imagens e logs, uso do sistema (CPU, memória, disco) com limites de alerta, canais de alerta (e-mail, WhatsApp) e severidade por canal, com envio de teste |
+| **Configurações** (administradores) | Conexão com storage de rede (NAS), backup (agendado ou manual, com ou sem evidências) e restauração |
 
 ### Perfis de acesso
 
@@ -29,7 +31,7 @@ Os alertas chegam por **e-mail**, **WhatsApp** e **na tela**, em tempo real.
 | **Operador** | Ver tudo e fazer a triagem (confirmar/falso alarme, classificar); concluir ações atribuídas a ele |
 | **Técnico de segurança** | Tudo do operador, mais tratar e encerrar ocorrências, criar ações, câmeras e regras, gerar relatório |
 | **Gestor** | Tudo do técnico, mais excluir câmeras |
-| **Administrador** | Tudo, mais usuários e auditoria |
+| **Administrador** | Tudo, mais usuários, auditoria, Parâmetros e Configurações |
 
 ## O que detecta (MVP)
 
@@ -131,6 +133,25 @@ Acesse http://localhost:8000 e crie o administrador. Depois:
    mês anterior (`REPORT_FREQUENCY=semanal` para toda segunda-feira). Na tela **Sistema** dá para
    enviar um relatório na hora.
 
+### Parâmetros e Configurações pelo painel
+
+Os administradores ajustam o sistema pelas guias **Parâmetros** e **Configurações**, sem editar o
+`.env`. O que for salvo no painel tem prioridade, e cada campo mostra a origem do valor (painel, `.env`
+ou padrão). Senhas e tokens ficam criptografados no banco com a `SECRET_KEY` (gerada pelo iniciador;
+sem `.env`, num arquivo `backend/data/secret.key`) e nunca voltam para a tela.
+
+**Backup e restauração** (guia Configurações):
+
+- O backup é um `.zip` com o banco de dados e um manifesto. Marcando *Incluir fotos e clipes*, leva
+  também as evidências. O backup automático diário leva só o banco.
+- A restauração aceita um backup da lista ou um arquivo enviado (`.zip` ou `.db` de versões
+  anteriores). O sistema confere a integridade do arquivo, faz antes um **backup de segurança do estado
+  atual** (que permite desfazer) e exige digitar `RESTAURAR`. Backups de versões antigas são
+  atualizados automaticamente.
+- A `SECRET_KEY` não vai no backup: ao restaurar em outro computador, digite de novo as senhas (NAS,
+  SMTP, WhatsApp) ou copie a `SECRET_KEY` do `.env` antigo.
+- Com PostgreSQL, use `pg_dump`/`pg_restore`.
+
 ### Armazenamento em storage de rede (NAS)
 
 Guarda as evidências (fotos e clipes), os backups e os relatórios mensais em um NAS (Synology,
@@ -138,7 +159,8 @@ QNAP, TrueNAS ou qualquer pasta compartilhada da rede).
 
 1. No NAS, crie uma pasta compartilhada (ex.: `vigia`) e um **usuário próprio** com permissão de
    leitura e escrita somente nela.
-2. No `.env`:
+2. Na guia **Configurações → Conexão com storage de rede**, preencha caminho, usuário e senha, clique
+   em **Testar conexão** e salve. Também é possível usar o `.env`:
 
    ```ini
    STORAGE_NAS_PATH=\\192.168.0.20\vigia

@@ -62,13 +62,16 @@ def _share_root(path: str) -> str | None:
     return f"\\\\{parts[0]}\\{parts[1]}" if len(parts) >= 2 else None
 
 
-def connect() -> None:
+def connect(path: str | None = None, user: str | None = None, password: str | None = None) -> None:
     """Windows: autentica no compartilhamento com usuário próprio do NAS.
 
     Necessário quando o VigIA roda como serviço (conta SYSTEM, sem acesso à rede).
     Usa a API do Windows em vez de 'net use' para a senha não aparecer na linha de comando."""
-    share = _share_root(settings.storage_nas_path)
-    if os.name != "nt" or not share or not settings.storage_nas_user:
+    path = settings.storage_nas_path if path is None else path
+    user = settings.storage_nas_user if user is None else user
+    password = settings.storage_nas_password if password is None else password
+    share = _share_root(path)
+    if os.name != "nt" or not share or not user:
         return
     import ctypes
     from ctypes import wintypes
@@ -79,8 +82,7 @@ def connect() -> None:
                     ("lpComment", wintypes.LPWSTR), ("lpProvider", wintypes.LPWSTR)]
 
     resource = NetResource(dwType=1, lpRemoteName=share)  # RESOURCETYPE_DISK
-    code = ctypes.WinDLL("mpr").WNetAddConnection2W(ctypes.byref(resource), settings.storage_nas_password,
-                                                    settings.storage_nas_user, 0)
+    code = ctypes.WinDLL("mpr").WNetAddConnection2W(ctypes.byref(resource), password, user, 0)
     # 0 = conectado; 1219 = já existe uma conexão com o servidor (ok)
     if code not in (0, 1219):
         raise OSError(f"não foi possível conectar a {share} (código {code}); confira usuário e senha do NAS")
@@ -111,6 +113,45 @@ def check() -> bool:
             _state["offline_since"] = now
         _state.update(online=online, error=error, last_check=now)
     return online
+
+
+def reset_state() -> None:
+    """Chamado quando a configuração do NAS muda."""
+    with _lock:
+        _state.update(online=False, error="", offline_since=None, alerted=False)
+    if enabled():
+        check()
+
+
+def probe(path: str, user: str = "", password: str = "") -> dict:
+    """Testa uma pasta de rede com os dados informados, sem salvar nada (botão 'Testar')."""
+    result = {"ok": False, "exists": False, "writable": False, "activated": False,
+              "free_bytes": None, "total_bytes": None, "message": ""}
+    if not path:
+        result["message"] = "informe o caminho da pasta de rede"
+        return result
+    try:
+        connect(path, user, password)
+        base = Path(path)
+        if not base.is_dir():
+            raise OSError("pasta não encontrada: confira o caminho, se o NAS está ligado e o usuário/senha")
+        result["exists"] = True
+        probe_file = base / f".probe-{uuid.uuid4().hex}"
+        probe_file.write_bytes(b"ok")
+        if probe_file.read_bytes() != b"ok":
+            raise OSError("a leitura de teste não confere")
+        probe_file.unlink()
+        result["writable"] = True
+        result["activated"] = (base / MARKER).exists()
+        usage = shutil.disk_usage(base)
+        result.update(free_bytes=usage.free, total_bytes=usage.total, ok=True,
+                      message="conexão bem-sucedida" + ("" if result["activated"]
+                                                         else " – salve e ative para começar a usar"))
+    except OSError as exc:
+        result["message"] = str(exc) if result["exists"] or "pasta" in str(exc) else f"sem acesso: {exc}"
+        if result["exists"] and not result["writable"]:
+            result["message"] = f"a pasta existe, mas não é possível gravar nela ({exc}); confira as permissões do usuário"
+    return result
 
 
 def activate() -> None:

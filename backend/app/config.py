@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     retention_days: int = 30
     event_retention_days: int = 730
 
+    # Chave para criptografar segredos guardados no banco (ex.: senha do NAS). Se vazia,
+    # usa/gera o arquivo secret_key_file.
+    secret_key: str = ""
+    secret_key_file: str = "./data/secret.key"
+
     # Chave usada pelo serviço detector para enviar eventos.
     detector_api_key: str = "troque-esta-chave"
 
@@ -29,6 +34,17 @@ class Settings(BaseSettings):
     backup_hour: int = 2
     backup_keep: int = 14
     backup_copy_dir: str = ""
+
+    # Logs de auditoria: dias guardados (0 = para sempre)
+    audit_retention_days: int = 365
+    # Severidade mínima que dispara cada canal (baixa | media | alta | critica); a tela recebe todas
+    alert_min_severity_email: str = "baixa"
+    alert_min_severity_whatsapp: str = "alta"
+    # Alertas de uso do sistema (%) quando o limite é ultrapassado por usage_alert_minutes
+    usage_alert_cpu: int = 90
+    usage_alert_memory: int = 90
+    usage_alert_disk: int = 90
+    usage_alert_minutes: int = 5
 
     # Armazenamento de rede (NAS): pasta compartilhada (\\nas\vigia no Windows, ponto de
     # montagem no Linux). espelho = cópia das evidências; principal = NAS é o armazenamento

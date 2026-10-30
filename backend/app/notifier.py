@@ -68,8 +68,8 @@ def send_whatsapp_text(text: str) -> None:
             ).raise_for_status()
 
 
-def send_whatsapp(event: dict, image_path: Path | None) -> None:
-    recipients = settings.whatsapp_recipients
+def send_whatsapp(event: dict, image_path: Path | None, recipients: list[str] | None = None) -> None:
+    recipients = recipients or settings.whatsapp_recipients
     if not (settings.whatsapp_token and settings.whatsapp_phone_id and recipients):
         return
     headers = {"Authorization": f"Bearer {settings.whatsapp_token}"}
@@ -127,9 +127,19 @@ def _safely(func, *args) -> None:
         log.exception("falha ao enviar notificação via %s", func.__name__)
 
 
+SEVERITY_RANK = {"baixa": 0, "media": 1, "alta": 2, "critica": 3}
+
+
+def channel_wants(severity: str, minimum: str) -> bool:
+    return SEVERITY_RANK.get(severity, 3) >= SEVERITY_RANK.get(minimum, 0)
+
+
 def notify(event: dict, image_path: Path | None) -> None:
-    for sender in (send_email, send_whatsapp):
-        _safely(sender, event, image_path)
+    """Envia por e-mail e WhatsApp conforme a severidade mínima de cada canal (guia Parâmetros)."""
+    if channel_wants(event["severity"], settings.alert_min_severity_email):
+        _safely(send_email, event, image_path)
+    if channel_wants(event["severity"], settings.alert_min_severity_whatsapp):
+        _safely(send_whatsapp, event, image_path)
 
 
 def notify_action_assigned(action: dict, email: str) -> None:

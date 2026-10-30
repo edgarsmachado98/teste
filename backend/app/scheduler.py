@@ -89,7 +89,7 @@ def run_due_jobs(now: datetime | None = None) -> list[str]:
     for job in due_jobs(now):
         try:
             if job == "backup":
-                run_backup()
+                run_backup()  # .zip só com o banco; com evidências apenas sob demanda
                 set_state("backup_last", f"{now:%Y-%m-%d}")
             elif job == "report":
                 start, end = report_period(now.date(), settings.report_frequency)
