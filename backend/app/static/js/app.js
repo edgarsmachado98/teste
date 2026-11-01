@@ -64,11 +64,58 @@ setUnauthorizedHandler(() => {
 async function showApp() {
   $("#auth").hidden = true;
   $("#app").hidden = false;
-  $("#user-menu").textContent = `${session.user.name} · ${ROLE_LABELS[session.user.role]}`;
+  renderUserButton();
+  loadMeta();
   applyRoleVisibility();
   connectWs();
   route();
 }
+
+// ---------- Cabeçalho: usuário, cliente/unidade e turno ----------
+function initials(name) {
+  const parts = (name || "?").trim().split(/\s+/);
+  return ((parts[0]?.[0] || "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+function renderUserButton() {
+  const u = session.user;
+  $("#user-menu").innerHTML = `<span class="initials" aria-hidden="true">${esc(initials(u.name))}</span>
+    <span class="who">${esc(u.name.split(" ")[0])}<small>${esc(ROLE_LABELS[u.role])}</small></span>`;
+  $("#user-menu").setAttribute("aria-label", `Minha conta – ${u.name}`);
+}
+
+let meta = null;
+// O turno vem do servidor (fuso da planta), não do relógio deste computador.
+function currentShift() {
+  const s = (meta?.shifts || []).find((x) => x.name === meta.shift);
+  return s ? `${s.name} · ${String(s.start).padStart(2, "0")}h–${String(s.end).padStart(2, "0")}h` : meta?.shift || "";
+}
+function renderMeta() {
+  if (!meta) return;
+  const units = meta.units || [];
+  const unit = units.length === 1 ? units[0] : units.length ? `${units.length} unidades` : "";
+  $("#site-pill").innerHTML = meta.company_name || unit
+    ? `${meta.company_name ? `<b>${esc(meta.company_name)}</b>` : ""}${unit ? `<span>${meta.company_name ? "· " : ""}${esc(unit)}</span>` : ""}`
+    : "";
+  if (units.length > 1) $("#site-pill").title = units.join(", ");
+  $("#shift-chip").textContent = currentShift();
+}
+async function loadMeta() {
+  try { meta = await api("/api/meta"); session.meta = meta; renderMeta(); } catch { /* cabeçalho é opcional */ }
+}
+setInterval(() => { if (session.user) loadMeta(); }, 5 * 60000);
+
+// ---------- Tema ----------
+function applyTheme(theme) {
+  if (theme === "dark") document.documentElement.dataset.theme = "dark";
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem("vigia-theme", theme); } catch { /* navegador sem armazenamento */ }
+  $$("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === theme)));
+  window.dispatchEvent(new Event("themechange"));
+}
+$$("[data-theme-set]").forEach((b) => b.addEventListener("click", () => applyTheme(b.dataset.themeSet)));
+$$("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed",
+  String(b.dataset.themeSet === (document.documentElement.dataset.theme === "dark" ? "dark" : "light"))));
 
 // ---------- Conta ----------
 $("#user-menu").addEventListener("click", () => {

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import audit
@@ -12,12 +13,24 @@ from ..auth import require_role
 from ..backup import sqlite_path
 from ..config import settings
 from ..database import get_db
-from ..models import User
+from ..models import Unit, User
 from ..scheduler import get_state, report_period, send_report
-from ..timeutil import local_tz
+from ..timeutil import local_tz, parse_shifts, shift_of
 from .reports import _period
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/meta")
+def meta(user: User = Depends(require_role("operador")), db: Session = Depends(get_db)):
+    """Dados do cabeçalho: cliente, unidades e turno atual."""
+    units = db.scalars(select(Unit.name).where(Unit.active.is_(True)).order_by(Unit.name)).all()
+    return {
+        "company_name": settings.company_name,
+        "units": list(units),
+        "shifts": [{"name": n, "start": a, "end": b} for n, a, b in parse_shifts(settings.shifts)],
+        "shift": shift_of(datetime.now(local_tz())),
+    }
 
 
 @router.get("/system/status", dependencies=[Depends(require_role("gestor"))])

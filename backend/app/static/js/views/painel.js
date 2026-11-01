@@ -1,7 +1,24 @@
 import { delta } from "../indicators-render.js";
-import { HEALTH_LABELS, TYPE_LABELS, api, can, esc, fmtDateTime, fmtPct, healthBadge, toast, withToken } from "../core.js";
+import { HEALTH_LABELS, TYPE_LABELS, api, can, esc, fmtDateTime, fmtPct, healthBadge, session, toast, withToken } from "../core.js";
 
 let el;
+
+function greeting(t, overdueCount, problems) {
+  const h = new Date().getHours();
+  const hello = h < 5 ? "Boa noite" : h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  const first = (session.user?.name || "").split(" ")[0];
+  const parts = [];
+  parts.push(t.pending ? `${t.pending} ${t.pending === 1 ? "alerta aguarda" : "alertas aguardam"} triagem` : "nenhum alerta aguardando triagem");
+  if (overdueCount) parts.push(`${overdueCount} ${overdueCount === 1 ? "ação atrasada" : "ações atrasadas"}`);
+  if (problems) parts.push(`${problems} ${problems === 1 ? "câmera com problema" : "câmeras com problema"}`);
+  const line = parts.join(" · ");
+  const today = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  return `<div class="greeting">
+      <div><h2>${hello}${first ? `, ${esc(first)}` : ""}.</h2>
+        <p>${esc(line.charAt(0).toUpperCase() + line.slice(1))}.</p></div>
+      <span class="when">${esc(today)}${session.meta?.shift ? ` · ${esc(session.meta.shift)}` : ""}</span>
+    </div>`;
+}
 
 function card(ev) {
   return `
@@ -34,6 +51,7 @@ async function load() {
   const problems = cameras.filter((cam) => cam.enabled && cam.health && cam.health !== "ok");
 
   el.innerHTML = `
+    ${greeting(t, summary.actions.overdue, problems.length)}
     ${cameras.length ? "" : `
       <div class="card onboarding">
         <h2>Primeiros passos</h2>
@@ -63,7 +81,7 @@ async function load() {
     </div>
 
     ${approvals.length ? `
-      <div class="card alert-strip" style="border-color: var(--accent); background: #2a2414">
+      <div class="card alert-strip approvals">
         <b>${approvals.length} advertência(s) aguardando sua aprovação:</b>
         ${approvals.slice(0, 5).map((m) => `<a href="#ocorrencia-${m.event_id}">${esc(m.person_name)} (${esc(m.number)})</a>`).join(" · ")}
       </div>` : ""}

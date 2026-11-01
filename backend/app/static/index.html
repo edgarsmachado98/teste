@@ -4,13 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VigIA – Gestão de Segurança</title>
+  <script>try { if (localStorage.getItem("vigia-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- Acesso: configuração inicial e login -->
   <div id="auth" class="auth" hidden>
     <div class="auth-card card">
-      <h1>Vig<span>IA</span></h1>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>
+        <h1 class="brand-name">Vig<span>IA</span></h1></div>
       <p class="hint">Gestão de segurança e comportamento industrial</p>
 
       <form id="setup-form" hidden>
@@ -34,7 +36,19 @@
 
   <div id="app" hidden>
     <header>
-      <h1>Vig<span>IA</span></h1>
+      <div class="topbar">
+        <a class="brand" href="#painel" aria-label="VigIA – Painel">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span><span class="brand-name">Vig<span>IA</span></span><span class="brand-sub">Segurança industrial</span></span>
+        </a>
+        <div id="site-pill" class="site-pill" title="Cliente e unidade"></div>
+        <span id="shift-chip" class="shift-chip" title="Turno atual"></span>
+        <div class="userbox">
+          <span id="conn" class="conn off" title="Conexão em tempo real">ao vivo</span>
+          <button id="user-menu" class="avatar-btn" title="Minha conta"></button>
+        </div>
+      </div>
+      <div class="navbar">
       <nav id="nav">
         <a href="#painel">Painel</a>
         <a href="#ocorrencias">Ocorrências</a>
@@ -47,9 +61,6 @@
         <a href="#parametros" data-min-role="admin">Parâmetros</a>
         <a href="#configuracoes" data-min-role="admin">Configurações</a>
       </nav>
-      <div class="userbox">
-        <span id="conn" class="conn off" title="Conexão em tempo real">●</span>
-        <button id="user-menu" class="secondary small"></button>
       </div>
     </header>
 
@@ -135,6 +146,13 @@
     <form id="password-form" method="dialog" class="form">
       <h2 id="account-name"></h2>
       <p id="account-role" class="hint wide"></p>
+      <div class="wide">
+        <label>Aparência</label>
+        <div class="theme-switch" role="group" aria-label="Aparência">
+          <button type="button" data-theme-set="light">Claro</button>
+          <button type="button" data-theme-set="dark">Sala de controle (escuro)</button>
+        </div>
+      </div>
       <label>Senha atual <input name="current_password" type="password" required autocomplete="current-password"></label>
       <label>Nova senha <input name="new_password" type="password" minlength="8" required autocomplete="new-password"></label>
       <div class="actions wide">

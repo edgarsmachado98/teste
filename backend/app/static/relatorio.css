@@ -1,3 +1,4 @@
+@import url("fonts/fonts.css");
 /* Relatório: tema claro, pensado para impressão em A4 e "Salvar como PDF". */
 :root {
   --text: #16191d;
@@ -10,7 +11,7 @@
   --grid: #e6e9ed;
   --ok: #15803d;
   --danger: #b91c1c;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
