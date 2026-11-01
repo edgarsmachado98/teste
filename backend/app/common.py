@@ -5,8 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .models import ActionItem, Event
-from .schemas import ActionOut, EventOut
+from .models import ATTACHMENT_KINDS, ActionItem, Attachment, Event
+from .schemas import ActionOut, AttachmentOut, EventOut
 
 EVIDENCE_DIR = Path(settings.evidence_dir)
 
@@ -53,7 +53,15 @@ def action_out(action: ActionItem) -> dict:
         created_by=action.created_by.name if action.created_by else None,
         created_at=action.created_at,
         completed_at=action.completed_at,
+        attachments=[attachment_out(a) for a in action.attachments],
     ).model_dump()
+
+
+def attachment_out(a: Attachment) -> AttachmentOut:
+    return AttachmentOut(id=a.id, kind=a.kind, kind_label=ATTACHMENT_KINDS.get(a.kind, a.kind), filename=a.filename,
+                         content_type=a.content_type, size=a.size,
+                         uploaded_by=a.uploaded_by.name if a.uploaded_by else None, uploaded_by_id=a.uploaded_by_id,
+                         created_at=a.created_at)
 
 
 def camera_name(event: Event) -> str:

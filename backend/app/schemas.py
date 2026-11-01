@@ -210,6 +210,18 @@ class ActionUpdate(BaseModel):
     completion_notes: str | None = None
 
 
+class AttachmentOut(BaseModel):
+    id: int
+    kind: str
+    kind_label: str
+    filename: str
+    content_type: str
+    size: int
+    uploaded_by: str | None
+    uploaded_by_id: int | None
+    created_at: datetime
+
+
 class ActionOut(BaseModel):
     id: int
     event_id: int | None
@@ -225,6 +237,7 @@ class ActionOut(BaseModel):
     created_by: str | None
     created_at: datetime
     completed_at: datetime | None
+    attachments: list[AttachmentOut] = []
 
 
 class AuditOut(BaseModel):

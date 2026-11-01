@@ -116,9 +116,15 @@ def _run_backup(source: Path, include_evidence: bool, label: str, rotate: bool) 
         partial = target.with_suffix(".parcial")
         with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(snapshot, "vigia.db")
-            if include_evidence and evidence_dir().exists():
-                for f in sorted(evidence_dir().rglob("*")):
-                    rel = f.relative_to(evidence_dir())
+            # Documentos anexados (advertências e atas assinadas) entram em todo backup: são poucos
+            # e são registro legal. Fotos e clipes das ocorrências, só no backup completo.
+            base = evidence_dir()
+            sources = (base,) if include_evidence else (base / "anexos",)
+            for folder_ in sources:
+                if not folder_.exists():
+                    continue
+                for f in sorted(folder_.rglob("*")):
+                    rel = f.relative_to(base)
                     if f.is_file() and rel.parts[0] != "ao-vivo":
                         zf.write(f, f"evidencias/{rel.as_posix()}", compress_type=zipfile.ZIP_STORED)
                         evidence_files += 1

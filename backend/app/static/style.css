@@ -550,3 +550,16 @@ button { border-radius: 4px; }
   main { padding: 16px; }
   .greeting h2 { font-size: 22px; }
 }
+
+/* Anexos do plano de ação */
+.attachments { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.attachments ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.attachments li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 4px; background: var(--panel); }
+.attachments li .danger { margin-left: auto; }
+.file-ico { font: 600 10px var(--font-mono); padding: 4px 5px; border-radius: 3px; background: var(--t-info-bg); color: var(--t-info-fg); flex: 0 0 auto; }
+.att-info { min-width: 0; display: flex; flex-direction: column; font-size: 13px; overflow-wrap: anywhere; }
+.att-info small { color: var(--muted); font-size: 11px; }
+.attach-field { flex-direction: column; gap: 8px; padding: 10px 12px; }
+.attach-field .hint { margin: 0; }
+.file-drop input[type=file] { padding: 10px; border-style: dashed; cursor: pointer; background: var(--panel-2); }

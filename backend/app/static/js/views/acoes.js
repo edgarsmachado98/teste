@@ -1,4 +1,4 @@
-import { cancelAction, getUsers, openActionForm, openCompleteForm } from "../actions-ui.js";
+import { attachmentsHtml, getUsers, openActionForm, runActionButton } from "../actions-ui.js";
 import { $, ACTION_STATUS, api, badge, can, esc, fmtDate, session, toast } from "../core.js";
 
 let el;
@@ -28,7 +28,8 @@ async function load() {
       return `
         <tr class="${a.overdue ? "row-bad" : ""}">
           <td><b>${esc(a.title)}</b>${a.description ? `<div class="hint">${esc(a.description)}</div>` : ""}
-            ${a.completion_notes ? `<div class="evidence">✔ ${esc(a.completion_notes)}</div>` : ""}</td>
+            ${a.completion_notes ? `<div class="evidence">✔ ${esc(a.completion_notes)}</div>` : ""}
+            ${attachmentsHtml(a)}</td>
           <td>${esc(a.responsible_name || "–")}</td>
           <td>${fmtDate(a.due_date)} ${a.overdue ? badge("▲ Atrasada", "bad") : ""}</td>
           <td>${badge(ACTION_STATUS[a.status], `ac-${a.status}`)}</td>
@@ -63,9 +64,7 @@ export async function show(element) {
     if (!btn) return;
     const action = actions.find((a) => a.id === Number(btn.dataset.id));
     try {
-      const fn = { complete: openCompleteForm, cancel: cancelAction,
-        edit: (a) => openActionForm({ action: a }) }[btn.dataset.act];
-      if (await fn(action)) load();
+      if (await runActionButton(btn, action)) load();
     } catch (err) { toast(esc(err.message), "danger"); }
   });
   await getUsers(true);

@@ -1,6 +1,6 @@
 // Detalhe da ocorrência: evidência, triagem, classificação, plano de ação e histórico.
 
-import { cancelAction, openActionForm, openCompleteForm } from "./actions-ui.js";
+import { attachmentsHtml, openActionForm, runActionButton } from "./actions-ui.js";
 import { mountClipPlayer } from "./clip-player.js";
 import { decideMeasure, openAck, openIdentify, openMeasure } from "./measures-ui.js";
 import {
@@ -48,6 +48,7 @@ function actionRow(a) {
         <div class="hint">${esc(a.responsible_name || "Sem responsável")} · prazo ${fmtDate(a.due_date)}</div>
         ${a.description ? `<div>${esc(a.description)}</div>` : ""}
         ${a.completion_notes ? `<div class="evidence">✔ ${esc(a.completion_notes)}</div>` : ""}
+        ${attachmentsHtml(a)}
       </div>
       <div class="actions">${buttons}</div>
     </li>`;
@@ -218,9 +219,7 @@ function render(ev) {
   d.querySelectorAll("[data-act]").forEach((btn) => btn.addEventListener("click", async () => {
     const action = ev.actions.find((a) => a.id === Number(btn.dataset.id));
     try {
-      const fn = { complete: openCompleteForm, cancel: cancelAction,
-        edit: (a) => openActionForm({ action: a }) }[btn.dataset.act];
-      if (await fn(action)) reload();
+      if (await runActionButton(btn, action)) reload();
     } catch (err) { toast(esc(err.message), "danger"); }
   }));
 }

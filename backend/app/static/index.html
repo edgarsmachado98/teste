@@ -109,8 +109,48 @@
       <p id="complete-title" class="wide"></p>
       <label class="wide">O que foi feito (evidência) <textarea name="completion_notes" rows="4" required
         placeholder="Ex.: DDS realizado em 12/03 com 18 colaboradores do turno B; lista de presença arquivada."></textarea></label>
+      <fieldset class="wide attach-field">
+        <legend>Comprovante assinado (opcional)</legend>
+        <label>Tipo de documento
+          <select name="kind">
+          <option value="advertencia_assinada">Advertência assinada</option>
+          <option value="dds">Registro de DDS / lista de presença</option>
+          <option value="ata_treinamento">Ata de treinamento / reciclagem</option>
+          <option value="evidencia">Foto ou evidência da correção</option>
+          <option value="outro">Outro documento</option>
+          </select>
+        </label>
+        <label class="file-drop">Arquivo (PDF ou foto, até 10 MB cada)
+          <input type="file" name="files" accept="application/pdf,image/jpeg,image/png,image/webp" multiple>
+        </label>
+        <p class="hint">Fotografe ou escaneie a advertência, a lista do DDS ou a ata da reciclagem assinada pelo colaborador.</p>
+      </fieldset>
       <div class="actions wide">
         <button type="submit" value="save">Concluir</button>
+        <button type="button" class="secondary" data-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Anexar documento a uma ação -->
+  <dialog id="attach-dialog" class="form-dialog">
+    <form id="attach-form" method="dialog" class="form">
+      <h2>Anexar documento</h2>
+      <p id="attach-title" class="wide"></p>
+      <label class="wide">Tipo de documento
+        <select name="kind">
+          <option value="advertencia_assinada">Advertência assinada</option>
+          <option value="dds">Registro de DDS / lista de presença</option>
+          <option value="ata_treinamento">Ata de treinamento / reciclagem</option>
+          <option value="evidencia">Foto ou evidência da correção</option>
+          <option value="outro">Outro documento</option>
+        </select>
+      </label>
+      <label class="wide file-drop">Arquivo (PDF ou foto, até 10 MB cada)
+        <input type="file" name="files" accept="application/pdf,image/jpeg,image/png,image/webp" multiple required>
+      </label>
+      <div class="actions wide">
+        <button type="submit" value="save">Anexar</button>
         <button type="button" class="secondary" data-close>Cancelar</button>
       </div>
     </form>

@@ -269,6 +269,36 @@ class ActionItem(Base):
     event: Mapped[Event | None] = relationship(back_populates="actions")
     responsible: Mapped[User | None] = relationship(foreign_keys=[responsible_id])
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="action", cascade="all, delete-orphan", lazy="selectin", order_by="Attachment.id")
+
+
+ATTACHMENT_KINDS = {
+    "advertencia_assinada": "Advertência assinada",
+    "dds": "Registro de DDS / lista de presença",
+    "ata_treinamento": "Ata de treinamento / reciclagem",
+    "evidencia": "Foto ou evidência da correção",
+    "outro": "Outro documento",
+}
+
+
+class Attachment(Base):
+    """Documento anexado a uma ação do plano (ex.: advertência assinada, ata de reciclagem)."""
+
+    __tablename__ = "attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    action_id: Mapped[int] = mapped_column(ForeignKey("actions.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(30), default="outro")
+    filename: Mapped[str] = mapped_column(String(200))  # nome original, só para exibição
+    file: Mapped[str] = mapped_column(String(200))  # caminho relativo à pasta de evidências
+    content_type: Mapped[str] = mapped_column(String(60))
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    action: Mapped[ActionItem] = relationship(back_populates="attachments")
+    uploaded_by: Mapped[User | None] = relationship(lazy="selectin")
 
 
 MEASURE_TYPES = ("orientacao", "treinamento", "advertencia", "rh")

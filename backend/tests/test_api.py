@@ -657,3 +657,51 @@ def test_camera_with_history_is_protected_and_orphans_render(client, admin):
     # câmera sem histórico continua podendo ser excluída
     cam2 = client.post("/api/cameras", headers=admin, json={"name": "Sem uso", "source": "0"}).json()
     assert client.delete(f"/api/cameras/{cam2['id']}", headers=admin).status_code == 204
+
+
+def test_action_attachments(client, admin):
+    import zipfile
+    from app.common import EVIDENCE_DIR
+    from app.backup import run_backup
+    resp_id, resp = make_user(client, admin, "resp-anexo@vigia.local", "operador")
+    _, other = make_user(client, admin, "outro-anexo@vigia.local", "operador")
+    _, gestor = make_user(client, admin, "gestor-anexo@vigia.local", "gestor")
+    _, tecnico = make_user(client, admin, "tec-anexo@vigia.local", "tecnico")
+    action = client.post("/api/actions", headers=admin,
+                         json={"title": "Advertência – uso de máscara", "responsible_id": resp_id}).json()
+    url = f"/api/actions/{action['id']}/attachments"
+    pdf = b"%PDF-1.4\n% advertencia assinada\n"
+    # conteúdo que não é PDF/imagem é recusado, mesmo com extensão .pdf
+    bad = client.post(url, headers=resp, files={"file": ("x.pdf", b"MZ\x90 executavel", "application/pdf")},
+                      data={"kind": "advertencia_assinada"})
+    assert bad.status_code == 400
+    assert client.post(url, headers=other, files={"file": ("a.pdf", pdf, "application/pdf")}).status_code == 403
+    up = client.post(url, headers=resp, files={"file": ("Advertência João.pdf", pdf, "application/pdf")},
+                     data={"kind": "advertencia_assinada"})
+    assert up.status_code == 201, up.text
+    att = up.json()
+    assert att["kind_label"] == "Advertência assinada" and att["filename"] == "Advertência João.pdf"
+    # aparece na ação e na conclusão
+    done = client.patch(f"/api/actions/{action['id']}", headers=resp,
+                        json={"status": "concluida", "completion_notes": "Advertência aplicada e assinada"}).json()
+    assert [a["id"] for a in done["attachments"]] == [att["id"]]
+    # download: responsável e equipe de segurança sim, outros não; acesso auditado
+    assert client.get(f"/api/attachments/{att['id']}", headers=other).status_code == 403
+    dl = client.get(f"/api/attachments/{att['id']}", headers=resp)
+    assert dl.status_code == 200 and dl.content == pdf and dl.headers["content-type"] == "application/pdf"
+    audit = client.get("/api/audit", headers=admin).json()
+    assert any(a["action"] == "anexo_visualizado" for a in audit)
+    # via assinada que chegou depois: ainda dá para anexar à ação concluída
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    late = client.post(url, headers=tecnico, files={"file": ("foto.png", png, "image/png")}, data={"kind": "outro"})
+    assert late.status_code == 201
+    # documentos anexados entram até no backup simples (sem imagens das ocorrências)
+    info = run_backup(include_evidence=False, rotate=False)
+    from app.backup import backup_dir
+    with zipfile.ZipFile(backup_dir() / info["name"]) as zf:
+        assert any(n.startswith("evidencias/anexos/") for n in zf.namelist())
+    # ação concluída: técnico não remove comprovante, gestor sim (e o arquivo some do disco)
+    assert client.delete(f"/api/attachments/{att['id']}", headers=tecnico).status_code == 403
+    path = next((EVIDENCE_DIR / "anexos").rglob(f"acao{action['id']}-*.pdf"))
+    assert client.delete(f"/api/attachments/{att['id']}", headers=gestor).status_code == 204
+    assert not path.exists()

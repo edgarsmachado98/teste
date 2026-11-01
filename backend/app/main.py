@@ -17,7 +17,7 @@ from .database import SessionLocal
 from .health import health_loop
 from .migrate import migrate
 from .models import AuditLog, Camera, Event, RuleStat, Session
-from .routers import access, cameras, config, detector, events, measures, people, reports, sectors, system
+from .routers import access, attachments, cameras, config, detector, events, measures, people, reports, sectors, system
 from .sectors import ensure_default_unit
 from .settings_store import apply_overrides
 from .scheduler import scheduler_loop
@@ -125,7 +125,7 @@ async def unexpected_error(request: Request, exc: Exception):
         pass  # disco cheio ou sem permissão: o rastro já foi para o console
     return JSONResponse(status_code=500, content={
         "detail": f"Erro interno em {request.url.path}: {type(exc).__name__}: {str(exc)[:300]}"})
-for module in (access, cameras, events, reports, detector, system, config, sectors, people, measures):
+for module in (access, cameras, events, reports, detector, system, config, sectors, people, measures, attachments):
     app.include_router(module.router)
 
 
