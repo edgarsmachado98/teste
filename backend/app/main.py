@@ -16,7 +16,7 @@ from .database import SessionLocal
 from .health import health_loop
 from .migrate import migrate
 from .models import AuditLog, Event, Session
-from .routers import access, cameras, config, detector, events, reports, sectors, system
+from .routers import access, cameras, config, detector, events, people, reports, sectors, system
 from .sectors import ensure_default_unit
 from .settings_store import apply_overrides
 from .scheduler import scheduler_loop
@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="VigIA – Gestão de Segurança Industrial", lifespan=lifespan)
-for module in (access, cameras, events, reports, detector, system, config, sectors):
+for module in (access, cameras, events, reports, detector, system, config, sectors, people):
     app.include_router(module.router)
 
 

@@ -259,3 +259,86 @@ class StatItem(BaseModel):
 class StatsIn(BaseModel):
     camera_id: int
     items: list[StatItem]
+
+
+# ---------- Pessoas ----------
+
+PersonStatus = Literal["ativo", "afastado", "desligado"]
+Employment = Literal["clt", "terceiro", "temporario", "estagiario"]
+
+
+class PersonIn(BaseModel):
+    unit_id: int
+    sector_id: int | None = None
+    name: str = Field(min_length=3, max_length=160)
+    cpf: str = Field(min_length=11, max_length=14)
+    registration: str | None = Field(None, max_length=40)
+    role: str = Field("", max_length=120)
+    shift: str = Field("", max_length=60)
+    employment: Employment = "clt"
+    company: str = Field("", max_length=160)
+    manager: str = Field("", max_length=160)
+    badge_code: str | None = Field(None, max_length=40)
+    photo_consent: bool = False
+    status: PersonStatus = "ativo"
+
+    @field_validator("registration", "badge_code")
+    @classmethod
+    def empty_to_none(cls, value: str | None) -> str | None:
+        value = (value or "").strip()
+        return value.upper() if value else None
+
+
+class PersonOut(BaseModel):
+    id: int
+    unit_id: int
+    unit: str
+    sector_id: int | None
+    sector: str | None
+    name: str
+    cpf: str  # mascarado, exceto para gestores e administradores no detalhe
+    registration: str | None
+    role: str
+    shift: str
+    employment: str
+    company: str
+    manager: str
+    badge_code: str | None
+    has_photo: bool
+    photo_consent: bool
+    photo_consent_on: date | None
+    status: str
+    ppe_alert: str | None = None  # ex.: "Máscara vence em 12 dias"
+    open_trainings: int = 0
+
+
+class DeliveryIn(BaseModel):
+    item: str = Field(min_length=1, max_length=120)
+    ca: str = Field("", max_length=20)
+    delivered_on: date
+    valid_until: date | None = None
+
+
+class DeliveryOut(DeliveryIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class TrainingIn(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    scheduled_on: date | None = None
+    valid_until: date | None = None
+    status: Literal["agendado", "concluido", "cancelado"] = "agendado"
+
+
+class TrainingOut(TrainingIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    measure_id: int | None = None
+
+
+class PersonDetail(PersonOut):
+    deliveries: list[DeliveryOut]
+    trainings: list[TrainingOut]
+    required_ppe: list[str] = []
+    delivery_ppe: list[str] = []

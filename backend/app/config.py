@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     timezone: str = "America/Sao_Paulo"
     shifts: str = "Turno A=06-14,Turno B=14-22,Turno C=22-06"
     session_hours: int = 12
+    # Fotos de identificação das pessoas (fora da pasta de evidências)
+    people_dir: str = "./data/pessoas"
+
     # Câmera sem imagem por mais que isto (segundos) é considerada offline
     camera_offline_after: int = 60
 

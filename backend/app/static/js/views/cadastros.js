@@ -1,9 +1,11 @@
 // Guia Cadastros: subguias de pessoas, setores e padrões, e regras de gradação.
 
 import { $, $$, can, esc, toast } from "../core.js";
+import * as pessoas from "./pessoas.js";
 import * as setores from "./setores.js";
 
 const TABS = [
+  { id: "pessoas", label: "Pessoas", module: pessoas, role: "tecnico" },
   { id: "setores", label: "Setores e padrões", module: setores, role: "tecnico" },
 ];
 

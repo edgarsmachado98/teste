@@ -93,3 +93,87 @@ def test_sector_standards_generate_rules(client, admin):
     # permissões
     _, operador = make_user(client, admin, "op-setor@fabrica.com", "operador")
     assert client.put(f"/api/sectors/{sector['id']}", headers=operador, json=new).status_code == 403
+
+
+VALID_CPFS = ["123.456.789-09", "529.982.247-25", "111.444.777-35", "390.533.447-05"]
+
+
+def person_payload(unit_id, **kw):
+    return {"unit_id": unit_id, "name": "Bruno Henrique Costa", "cpf": VALID_CPFS[0], "registration": "005177",
+            "role": "Soldador MIG", "shift": "Turno B", "badge_code": "0417", **kw}
+
+
+def test_people_registry(client, admin, tmp_path):
+    from app.models import Person
+    from app.database import SessionLocal
+    from app.people import people_dir
+
+    unit_id = client.get("/api/units", headers=admin).json()[0]["id"]
+    sector = next(s for s in client.get("/api/sectors", headers=admin).json() if s["name"] == "Solda")
+    _, tecnico = make_user(client, admin, "tec-pessoas@fabrica.com", "tecnico")
+
+    # validações
+    assert client.post("/api/people", headers=admin, json=person_payload(unit_id, cpf="123.456.789-00")).status_code == 422
+    assert client.post("/api/people", headers=tecnico, json=person_payload(unit_id)).status_code == 403
+    resp = client.post("/api/people", headers=admin, json=person_payload(unit_id, sector_id=sector["id"]))
+    assert resp.status_code == 201, resp.text
+    person = resp.json()
+    assert person["cpf"] == "123.456.789-09" and person["sector"] == "Solda"
+    dup = client.post("/api/people", headers=admin, json=person_payload(unit_id, registration="X1", badge_code="X1"))
+    assert dup.status_code == 409 and "CPF" in dup.json()["detail"]
+    dup = client.post("/api/people", headers=admin, json=person_payload(unit_id, cpf=VALID_CPFS[1], registration="X2"))
+    assert dup.status_code == 409 and "colete" in dup.json()["detail"]
+
+    # técnico vê CPF mascarado; gestor/admin vê completo (e fica na auditoria)
+    listed = client.get("/api/people?q=bruno", headers=tecnico).json()
+    assert listed["total"] == 1 and listed["items"][0]["cpf"] == "***.456.789-**"
+    assert client.get(f"/api/people/{person['id']}", headers=tecnico).json()["cpf"] == "***.456.789-**"
+    detail = client.get(f"/api/people/{person['id']}", headers=admin).json()
+    assert detail["cpf"] == "123.456.789-09" and detail["required_ppe"] == ["capacete", "máscara", "luvas"]
+    assert client.get("/api/people?q=0417", headers=tecnico).json()["total"] == 1   # pelo número do colete
+    assert client.get("/api/people?q=456789", headers=tecnico).json()["total"] == 1  # por parte do CPF
+
+    # foto exige ciência registrada, aceita só imagem
+    jpg = b"\xff\xd8\xff\xe0" + b"0" * 100
+    assert client.post(f"/api/people/{person['id']}/photo", headers=admin,
+                       files={"photo": ("f.jpg", jpg, "image/jpeg")}).status_code == 400
+    client.put(f"/api/people/{person['id']}", headers=admin, json=person_payload(unit_id, sector_id=sector["id"], photo_consent=True))
+    assert client.post(f"/api/people/{person['id']}/photo", headers=admin,
+                       files={"photo": ("f.txt", b"texto", "text/plain")}).status_code == 400
+    assert client.post(f"/api/people/{person['id']}/photo", headers=admin,
+                       files={"photo": ("f.jpg", jpg, "image/jpeg")}).status_code == 200
+    assert client.get(f"/api/people/{person['id']}/photo", headers=tecnico).content == jpg
+    detail = client.get(f"/api/people/{person['id']}", headers=admin).json()
+    assert detail["has_photo"] and detail["photo_consent_on"]
+
+    # EPI entregue com validade próxima gera alerta
+    from datetime import date, timedelta
+    client.post(f"/api/people/{person['id']}/deliveries", headers=tecnico, json={
+        "item": "Máscara de solda", "ca": "38422", "delivered_on": str(date.today() - timedelta(days=300)),
+        "valid_until": str(date.today() + timedelta(days=12))})
+    item = client.get("/api/people?q=bruno", headers=tecnico).json()["items"][0]
+    assert item["ppe_alert"] == "Máscara de solda vence em 12 dia(s)"
+    assert client.get("/api/people/summary", headers=tecnico).json()["ppe_expiring"] == 1
+
+    # desligamento apaga a foto (minimização)
+    with SessionLocal() as db:
+        photo = db.get(Person, person["id"]).photo_file
+    client.put(f"/api/people/{person['id']}", headers=admin, json=person_payload(unit_id, status="desligado", photo_consent=True))
+    assert not (people_dir() / photo).exists()
+    assert client.get("/api/people?q=bruno", headers=tecnico).json()["total"] == 0  # padrão: ativos e afastados
+    client.put(f"/api/people/{person['id']}", headers=admin, json=person_payload(unit_id, sector_id=sector["id"], photo_consent=True))
+
+    # importação de planilha (cp1252, ponto e vírgula), com erros por linha
+    csv_text = ("Nome;CPF;Matrícula;Setor;Função;Turno;Vínculo;Colete\n"
+                f"Camila Duarte;{VALID_CPFS[2]};003390;Solda;Conferente;Turno C;CLT;0501\n"
+                f"Bruno Henrique Costa;{VALID_CPFS[0]};005177;Solda;Soldador TIG;Turno B;CLT;0417\n"
+                "Sem CPF Válido;123.456.789-00;9;Solda;X;Turno A;CLT;\n"
+                f"Fábio Martins;{VALID_CPFS[3]};T-0187;Inexistente;Eletricista;Turno A;terceirizado;\n")
+    res = client.post("/api/people/import", headers=admin,
+                      files={"file": ("rh.csv", csv_text.encode("cp1252"), "text/csv")}).json()
+    assert res["created"] == 1 and res["updated"] == 1, res
+    assert [e["line"] for e in res["errors"]] == [4, 5]
+    assert "CPF inválido" in res["errors"][0]["message"] and "Inexistente" in res["errors"][1]["message"]
+    bruno = client.get(f"/api/people/{person['id']}", headers=admin).json()
+    assert bruno["role"] == "Soldador TIG"
+    assert client.get("/api/people/import/template", headers=admin).text.startswith("﻿nome;cpf")

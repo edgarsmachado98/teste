@@ -94,6 +94,69 @@ class Sector(Base):
     unit: Mapped[Unit] = relationship()
 
 
+PERSON_STATUSES = ("ativo", "afastado", "desligado")
+EMPLOYMENTS = ("clt", "terceiro", "temporario", "estagiario")
+
+
+class Person(Base):
+    """Colaborador ou terceiro. Dados mínimos para a segurança (LGPD): sem endereço, telefone
+    ou data de nascimento. A foto serve só para identificação visual pela equipe."""
+
+    __tablename__ = "people"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"))
+    sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectors.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(160), index=True)
+    cpf: Mapped[str] = mapped_column(String(11), unique=True)  # só dígitos
+    registration: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)  # matrícula
+    role: Mapped[str] = mapped_column(String(120), default="")  # função
+    shift: Mapped[str] = mapped_column(String(60), default="")
+    employment: Mapped[str] = mapped_column(String(20), default="clt")
+    company: Mapped[str] = mapped_column(String(160), default="")  # prestadora (terceiros)
+    manager: Mapped[str] = mapped_column(String(160), default="")
+    # Número do colete/capacete/crachá (identificação sem biometria)
+    badge_code: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)
+    photo_file: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    photo_consent: Mapped[bool] = mapped_column(Boolean, default=False)
+    photo_consent_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="ativo")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    unit: Mapped["Unit"] = relationship()
+    sector: Mapped["Sector | None"] = relationship()
+    deliveries: Mapped[list["PPEDelivery"]] = relationship(cascade="all, delete-orphan", order_by="PPEDelivery.delivered_on.desc()")
+    trainings: Mapped[list["TrainingRecord"]] = relationship(cascade="all, delete-orphan", order_by="TrainingRecord.id.desc()")
+
+
+class PPEDelivery(Base):
+    __tablename__ = "ppe_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"))
+    item: Mapped[str] = mapped_column(String(120))
+    ca: Mapped[str] = mapped_column(String(20), default="")  # certificado de aprovação
+    delivered_on: Mapped[date] = mapped_column(Date)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+TRAINING_STATUSES = ("agendado", "concluido", "cancelado")
+
+
+class TrainingRecord(Base):
+    __tablename__ = "trainings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(160))
+    scheduled_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="agendado")
+    measure_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
 class Camera(Base):
     __tablename__ = "cameras"
 
