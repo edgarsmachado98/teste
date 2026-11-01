@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import audit
 from ..auth import current_user, require_role
-from ..common import TYPE_LABELS, is_overdue
+from ..common import TYPE_LABELS, camera_location, camera_name, is_overdue
 from ..database import get_db
 from ..models import ActionItem, Camera, Event, RuleStat, User
 from ..timeutil import as_utc, shift_names, shift_of, to_local
@@ -65,9 +65,9 @@ def build_summary(db: Session, start: date, end: date, camera_id: int | None) ->
     cameras = defaultdict(lambda: {"count": 0})
     for e in deviations:
         c = cameras[e.camera_id]
-        c.update(camera_id=e.camera_id, camera=e.camera.name, location=e.camera.location or "–")
+        c.update(camera_id=e.camera_id, camera=camera_name(e), location=camera_location(e) or "–")
         c["count"] += 1
-    locations = Counter(e.camera.location or "Sem local" for e in deviations)
+    locations = Counter(camera_location(e) or "Sem local" for e in deviations)
 
     # Conformidade de EPI (observações do detector)
     stats = _stats(db, start, end, camera_id)
@@ -201,7 +201,7 @@ def events_csv(request: Request, start: date | None = None, end: date | None = N
     for e in db.scalars(query):
         local = to_local(e.created_at)
         writer.writerow([
-            e.id, f"{local:%d/%m/%Y}", f"{local:%H:%M:%S}", shift_of(local), e.camera.name, e.camera.location,
+            e.id, f"{local:%d/%m/%Y}", f"{local:%H:%M:%S}", shift_of(local), camera_name(e), camera_location(e),
             TYPE_LABELS.get(e.type, e.type), e.rule.name if e.rule else "", e.message, e.severity,
             status.get(e.status, e.status), CLASS_LABELS_PT.get(e.classification, "") if e.classification else "",
             e.person.name if e.person else ("não identificada" if e.identification == "nao_identificado" else ""),

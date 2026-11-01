@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import audit, grading
 from ..auth import has_role, require_role
-from ..common import get_or_404
+from ..common import camera_name, get_or_404
 from ..database import get_db
 from ..models import Camera, Event, Measure, Person, TrainingRecord, User
 from ..people import mask_cpf, only_digits, people_dir
@@ -38,7 +38,7 @@ def measure_out(m: Measure) -> dict:
         "created_by": m.created_by.name if m.created_by else None, "created_at": m.created_at,
         "event_message": m.event.message if m.event else None,
         "event_at": m.event.created_at if m.event else None,
-        "camera_name": m.event.camera.name if m.event and m.event.camera else None,
+        "camera_name": camera_name(m.event) if m.event else None,
     }
 
 
@@ -302,7 +302,7 @@ def person_history(person_id: int, request: Request, user: User = Depends(tecnic
     timeline = []
     for e in events:
         timeline.append({"kind": "ocorrencia", "at": e.created_at, "event_id": e.id, "title": e.message,
-                         "detail": f"{e.camera.name} · identificada por {e.identified_by.name if e.identified_by else '–'}",
+                         "detail": f"{camera_name(e)} · identificada por {e.identified_by.name if e.identified_by else '–'}",
                          "status": e.status})
     for m in measures:
         timeline.append({"kind": "medida", "at": m.created_at, "event_id": m.event_id, "measure_id": m.id,

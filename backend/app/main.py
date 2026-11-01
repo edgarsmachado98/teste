@@ -16,7 +16,7 @@ from .config import settings
 from .database import SessionLocal
 from .health import health_loop
 from .migrate import migrate
-from .models import AuditLog, Event, Session
+from .models import AuditLog, Camera, Event, RuleStat, Session
 from .routers import access, cameras, config, detector, events, measures, people, reports, sectors, system
 from .sectors import ensure_default_unit
 from .settings_store import apply_overrides
@@ -71,6 +71,22 @@ async def retention_loop() -> None:
         await asyncio.sleep(3600)
 
 
+def repair_orphan_cameras() -> int:
+    """Versões antigas permitiam excluir câmeras com ocorrências; como o SQLite não aplica
+    chaves estrangeiras, o histórico ficava apontando para uma câmera inexistente (e uma câmera
+    nova poderia herdar o número). Recria essas câmeras desativadas para preservar o histórico."""
+    with SessionLocal() as db:
+        existing = select(Camera.id)
+        ids = set(db.scalars(select(Event.camera_id).where(Event.camera_id.not_in(existing)).distinct()))
+        ids |= set(db.scalars(select(RuleStat.camera_id).where(RuleStat.camera_id.not_in(existing)).distinct()))
+        for cid in sorted(i for i in ids if i is not None):
+            db.add(Camera(id=cid, name=f"Câmera excluída (#{cid})", source="(removida)", enabled=False,
+                          location="histórico preservado"))
+            log.warning("câmera %s não existia mais; recriada desativada para preservar o histórico", cid)
+        db.commit()
+        return len(ids)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -78,6 +94,7 @@ async def lifespan(app: FastAPI):
     apply_overrides()  # configurações salvas pelo painel (guia Configurações)
     with SessionLocal() as db:
         ensure_default_unit(db)
+    repair_orphan_cameras()
     tasks = [asyncio.create_task(retention_loop()), asyncio.create_task(health_loop()),
              asyncio.create_task(scheduler_loop()), asyncio.create_task(storage_loop()),
              asyncio.create_task(usage_loop())]

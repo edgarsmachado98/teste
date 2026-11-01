@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import audit
 from ..auth import current_user, require_role
 from ..common import EVIDENCE_DIR, get_or_404
 from ..database import get_db
-from ..models import Camera, Rule, Sector, User
+from ..models import Camera, Event, Rule, Sector, User
 from ..schemas import CameraIn, CameraOut, RuleIn, RuleOut
 from ..sectors import apply_sector
 
@@ -69,6 +69,12 @@ def update_camera(camera_id: int, data: CameraIn, request: Request, user: User =
 def delete_camera(camera_id: int, request: Request, user: User = Depends(require_role("gestor")),
                   db: Session = Depends(get_db)):
     camera = get_or_404(db, Camera, camera_id)
+    events = db.scalar(select(func.count()).select_from(Event).where(Event.camera_id == camera.id))
+    if events:
+        # O histórico de ocorrências (e advertências ligadas a elas) é registro de segurança:
+        # não pode sumir junto com a câmera.
+        raise HTTPException(409, f"Esta câmera tem {events} ocorrência(s) no histórico e não pode ser excluída. "
+                                 "Desmarque \"Ativa\" para desligá-la mantendo o histórico.")
     audit.record(db, user, "camera_excluida", "camera", camera.id, camera.name, request)
     db.delete(camera)
     db.commit()

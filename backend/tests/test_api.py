@@ -625,3 +625,35 @@ def test_header_meta(client, admin):
     assert {s["name"] for s in data["shifts"]} >= {"Turno A", "Turno B", "Turno C"}
     assert data["shift"] in {"Turno A", "Turno B", "Turno C"}
     assert isinstance(data["units"], list) and "company_name" in data
+
+
+def test_camera_with_history_is_protected_and_orphans_render(client, admin):
+    from sqlalchemy import text
+    from app.database import engine
+    cam = client.post("/api/cameras", headers=admin, json={"name": "Cam temporária", "source": "0"}).json()
+    rule = client.post("/api/rules", headers=admin, json={"camera_id": cam["id"], "name": "Zona", "type": "restricted_zone"}).json()
+    ev = client.post("/api/detector/events", headers=DET,
+                     data={"camera_id": cam["id"], "rule_id": rule["id"], "message": "pessoa na zona"}).json()
+    # câmera com histórico não pode ser excluída
+    resp = client.delete(f"/api/cameras/{cam['id']}", headers=admin)
+    assert resp.status_code == 409 and "histórico" in resp.json()["detail"]
+    # instalações antigas: câmera apagada deixando ocorrências órfãs (SQLite sem chave estrangeira)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM rules WHERE camera_id = :c"), {"c": cam["id"]})
+        conn.execute(text("DELETE FROM cameras WHERE id = :c"), {"c": cam["id"]})
+    events = client.get("/api/events", headers=admin)
+    assert events.status_code == 200
+    orphan = next(e for e in events.json() if e["id"] == ev["id"])
+    assert orphan["camera_name"] == f"Câmera excluída (#{cam['id']})"
+    assert client.get("/api/reports/summary", headers=admin).status_code == 200
+    assert client.get(f"/api/events/{ev['id']}", headers=admin).status_code == 200
+    assert client.get("/api/reports/events.csv", headers=admin).status_code == 200
+    # na inicialização a câmera perdida é recriada desativada, e uma câmera nova não herda o número
+    from app.main import repair_orphan_cameras
+    assert repair_orphan_cameras() == 1
+    cams = {c["id"]: c for c in client.get("/api/cameras", headers=admin).json()}
+    assert cams[cam["id"]]["name"] == f"Câmera excluída (#{cam['id']})" and not cams[cam["id"]]["enabled"]
+    assert repair_orphan_cameras() == 0
+    # câmera sem histórico continua podendo ser excluída
+    cam2 = client.post("/api/cameras", headers=admin, json={"name": "Sem uso", "source": "0"}).json()
+    assert client.delete(f"/api/cameras/{cam2['id']}", headers=admin).status_code == 204

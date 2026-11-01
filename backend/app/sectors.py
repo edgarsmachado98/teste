@@ -139,7 +139,7 @@ def apply_sector(db: Session, sector: Sector, dry_run: bool = False) -> ApplyRes
     stale = db.scalars(select(Rule).where(Rule.sector_id == sector.id)).all()
     for rule in stale:
         if rule.camera_id not in camera_ids:
-            result.removed.append(f"{rule.camera.name}: {rule.name}")
+            result.removed.append(f"{rule.camera.name if rule.camera else rule.camera_id}: {rule.name}")
             if not dry_run:
                 db.delete(rule)
 

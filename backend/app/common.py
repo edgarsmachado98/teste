@@ -56,12 +56,22 @@ def action_out(action: ActionItem) -> dict:
     ).model_dump()
 
 
+def camera_name(event: Event) -> str:
+    """Nome da câmera da ocorrência. Ocorrências antigas podem ter perdido a câmera
+    (excluída antes da proteção do histórico); o registro continua válido."""
+    return event.camera.name if event.camera else f"Câmera excluída (#{event.camera_id})"
+
+
+def camera_location(event: Event) -> str:
+    return (event.camera.location if event.camera else "") or ""
+
+
 def event_out(event: Event) -> dict:
     return EventOut(
         id=event.id,
         camera_id=event.camera_id,
-        camera_name=event.camera.name,
-        location=event.camera.location,
+        camera_name=camera_name(event),
+        location=camera_location(event),
         rule_id=event.rule_id,
         rule_name=event.rule.name if event.rule else None,
         type=event.type,

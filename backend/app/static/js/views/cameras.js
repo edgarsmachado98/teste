@@ -94,7 +94,7 @@ export async function show(element) {
       $("#camera-form-title", el).textContent = `Editar câmera: ${c.name}`;
       f.scrollIntoView({ behavior: "smooth" });
     }
-    if (del && confirm("Excluir a câmera, suas regras e todas as ocorrências dela?")) {
+    if (del && confirm("Excluir a câmera e suas regras? Câmeras com ocorrências no histórico não podem ser excluídas – desative-as.")) {
       try {
         await api(`/api/cameras/${del}`, { method: "DELETE" });
         load();
