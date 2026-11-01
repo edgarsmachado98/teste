@@ -142,14 +142,14 @@ async function openPerson(id) {
         <div class="label-strong">Foto de identificação</div>
         <div class="photo-frame">${p.has_photo ? `<img src="${esc(withToken(`/api/people/${p.id}/photo?t=${Date.now()}`))}" alt="Foto de ${esc(p.name)}">`
           : `<span class="hint">Sem foto</span>`}</div>
-        ${can("gestor") && id !== "new" ? `
-          <div class="actions">
-            <button type="button" class="secondary small" id="photo-camera" ${p.photo_consent ? "" : "disabled"}>Tirar foto</button>
-            <label class="button secondary small file-btn ${p.photo_consent ? "" : "disabled"}">Enviar arquivo
-              <input type="file" id="photo-file" accept="image/jpeg,image/png" ${p.photo_consent ? "" : "disabled"} hidden></label>
+        ${can("gestor") ? `
+          <div class="actions photo-actions">
+            <label class="button secondary small file-btn">📎 Anexar foto
+              <input type="file" id="photo-file" accept="image/jpeg,image/png" hidden></label>
+            <button type="button" class="secondary small" id="photo-camera">📷 Tirar foto</button>
             ${p.has_photo ? `<button type="button" class="danger small" id="photo-remove">Remover</button>` : ""}
           </div>
-          ${p.photo_consent ? "" : `<p class="warn-text">Marque a ciência do colaborador e salve antes de enviar a foto.</p>`}` : ""}
+          <p class="hint" id="photo-pending" hidden></p>` : ""}
         <ul class="hint tight"><li>Rosto inteiro, de frente, fundo neutro</li><li>Sem óculos escuros, boné ou capacete</li><li>JPG ou PNG, até 5 MB</li></ul>
       </aside>
 
@@ -223,9 +223,22 @@ async function openPerson(id) {
     $("#cpf-hint", root).textContent = f.cpf.value.replace(/\D/g, "").length < 11 ? "" : ok ? "✓ CPF válido" : "✗ CPF inválido";
     $("#cpf-hint", root).className = ok ? "hint good-text" : "hint bad-text";
   });
+  // Foto escolhida antes de salvar (pessoa nova, ou ciência marcada agora): fica em espera e
+  // é enviada junto com o cadastro, depois que a ciência estiver gravada.
+  let pendingPhoto = null;
+  const consentNow = () => f.photo_consent.checked;
+  const requireConsent = () => {
+    if (consentNow()) return true;
+    toast("Marque a ciência do colaborador sobre o uso da foto (termo assinado) antes de anexar ou tirar a foto.", "warn", 5000);
+    f.photo_consent.closest("label").scrollIntoView({ behavior: "smooth", block: "center" });
+    f.photo_consent.focus();
+    return false;
+  };
+
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!validCpf(f.cpf.value)) return toast("CPF inválido.", "warn");
+    if (pendingPhoto && !consentNow()) return requireConsent();
     const body = {
       unit_id: Number(f.unit_id.value), sector_id: f.sector_id.value ? Number(f.sector_id.value) : null,
       name: f.name.value, cpf: f.cpf.value, registration: f.registration.value, role: f.role.value, shift: f.shift.value,
@@ -236,11 +249,29 @@ async function openPerson(id) {
     try {
       const saved = id === "new" ? await api("/api/people", { method: "POST", body })
         : await api(`/api/people/${id}`, { method: "PUT", body });
-      toast(id === "new" ? "Pessoa cadastrada. Agora você pode enviar a foto." : "Cadastro salvo.", "ok", 3000);
+      if (pendingPhoto) {
+        const data = new FormData();
+        data.append("photo", pendingPhoto, "foto.jpg");
+        try {
+          await api(`/api/people/${saved.id}/photo`, { method: "POST", body: data });
+        } catch (err) { toast(`Cadastro salvo, mas a foto não foi enviada: ${esc(err.message)}`, "danger"); }
+      }
+      toast(id === "new" ? "Pessoa cadastrada." : "Cadastro salvo.", "ok", 3000);
       openPerson(saved.id);
     } catch (err) { toast(esc(err.message), "danger"); }
   });
 
+  const usePhoto = (blob) => {
+    if (!/^image\/(jpeg|png)$/.test(blob.type)) return toast("Use uma foto JPG ou PNG.", "warn");
+    if (blob.size > 5 * 1024 * 1024) return toast("A foto tem mais de 5 MB.", "warn");
+    if (id !== "new" && p.photo_consent) return uploadPhoto(blob); // ciência já gravada: envia na hora
+    pendingPhoto = blob;
+    const frame = $(".photo-frame", root);
+    frame.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Prévia da foto">`;
+    const note = $("#photo-pending", root);
+    note.hidden = false;
+    note.textContent = `Prévia – a foto será enviada ao clicar em "${id === "new" ? "Cadastrar" : "Salvar cadastro"}".`;
+  };
   const uploadPhoto = async (blob) => {
     const data = new FormData();
     data.append("photo", blob, "foto.jpg");
@@ -250,8 +281,9 @@ async function openPerson(id) {
       openPerson(p.id);
     } catch (err) { toast(esc(err.message), "danger"); }
   };
-  $("#photo-file", root)?.addEventListener("change", (e) => { if (e.target.files[0]) uploadPhoto(e.target.files[0]); });
-  $("#photo-camera", root)?.addEventListener("click", () => captureFromCamera(uploadPhoto));
+  $("#photo-file", root)?.addEventListener("click", (e) => { if (!requireConsent()) e.preventDefault(); });
+  $("#photo-file", root)?.addEventListener("change", (e) => { if (e.target.files[0]) usePhoto(e.target.files[0]); e.target.value = ""; });
+  $("#photo-camera", root)?.addEventListener("click", () => { if (requireConsent()) captureFromCamera(usePhoto); });
   $("#photo-remove", root)?.addEventListener("click", async () => {
     if (!confirm("Remover a foto?")) return;
     await api(`/api/people/${p.id}/photo`, { method: "DELETE" });
@@ -304,7 +336,8 @@ function captureFromCamera(onBlob) {
   dialog.className = "form-dialog";
   dialog.innerHTML = `
     <h2>Tirar foto</h2>
-    <video autoplay playsinline style="width:100%;border-radius:8px;background:#000"></video>
+    <p class="hint">Enquadre o rosto no centro. A foto sai no formato 3×4, como na prévia.</p>
+    <video autoplay playsinline muted style="display:block;height:min(60vh,520px);max-width:100%;aspect-ratio:3/4;object-fit:cover;margin:0 auto;border-radius:8px;background:#000"></video>
     <div class="actions" style="margin-top:12px">
       <button type="button" data-shot>Capturar</button><button type="button" class="secondary" data-cancel>Cancelar</button>
     </div>`;
@@ -314,7 +347,7 @@ function captureFromCamera(onBlob) {
   const close = () => { stream?.getTracks().forEach((t) => t.stop()); dialog.close(); dialog.remove(); };
   navigator.mediaDevices?.getUserMedia({ video: { width: 960, height: 1280 } })
     .then((s) => { stream = s; video.srcObject = s; })
-    .catch(() => { toast("Não foi possível acessar a câmera. Use 'Enviar arquivo' (a câmera exige HTTPS ou acesso local).", "warn"); close(); });
+    .catch(() => { toast("Não foi possível acessar a câmera. Use 'Anexar foto' (a câmera exige HTTPS ou acesso local, e permissão no navegador).", "warn"); close(); });
   dialog.querySelector("[data-cancel]").addEventListener("click", close);
   dialog.querySelector("[data-shot]").addEventListener("click", () => {
     const canvas = document.createElement("canvas");
