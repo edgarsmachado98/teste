@@ -78,7 +78,7 @@ Câmeras IP (RTSP) ─► detector/ (YOLO + motor de regras) ──HTTP──►
 
 Na primeira vez ele instala tudo (alguns minutos), cria o `.env` com uma chave aleatória para o
 detector e abre o painel no navegador. **No primeiro acesso, crie o usuário administrador na própria
-tela**; depois cadastre os demais usuários em *Usuários*. Servidor e detector rodam juntos na mesma
+tela**; depois cadastre os demais usuários em *Cadastros → Usuários do sistema*. Servidor e detector rodam juntos na mesma
 janela; para encerrar, feche a janela ou pressione Ctrl+C.
 
 No Linux ou Mac, o equivalente é:
@@ -101,7 +101,7 @@ docker compose up -d --build
 
 Acesse http://localhost:8000 e crie o administrador. Depois:
 
-1. **Usuários**: cadastre técnicos de segurança, gestores e operadores.
+1. **Cadastros → Usuários do sistema**: cadastre técnicos de segurança, gestores e operadores.
 2. **Cadastros → Setores e padrões e Cadastros → Câmeras**: crie os setores e cadastre cada câmera (nome, setor e URL RTSP), por exemplo `rtsp://usuario:senha@192.168.0.10:554/stream1`, e a
    **área** de forma padronizada (os indicadores agrupam por ela).
    Para testar sem câmera, coloque um vídeo em `./videos/` e use `videos/teste.mp4` como fonte.

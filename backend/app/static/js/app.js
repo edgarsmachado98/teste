@@ -14,9 +14,8 @@ import * as regras from "./views/regras.js";
 import * as configuracoes from "./views/configuracoes.js";
 import * as parametros from "./views/parametros.js";
 import * as sistema from "./views/sistema.js";
-import * as usuarios from "./views/usuarios.js";
 
-const VIEWS = { cadastros, painel, ocorrencias, acoes, indicadores, aovivo, regras, usuarios, auditoria, sistema,
+const VIEWS = { cadastros, painel, ocorrencias, acoes, indicadores, aovivo, regras, auditoria, sistema,
   parametros, configuracoes };
 let current = null;
 
@@ -120,9 +119,9 @@ document.addEventListener("click", (e) => {
 function route() {
   if (!session.user) return;
   let hash = location.hash.slice(1) || "painel";
-  if (hash === "cameras") {
-    // o cadastro de câmeras fica em Cadastros (endereço antigo continua funcionando)
-    cadastros.openTab("cameras");
+  if (hash === "cameras" || hash === "usuarios") {
+    // câmeras e usuários ficam em Cadastros (os endereços antigos continuam funcionando)
+    cadastros.openTab(hash);
     history.replaceState(null, "", "#cadastros");
     hash = "cadastros";
   }

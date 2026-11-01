@@ -34,7 +34,8 @@ function openForm(user = null) {
 export async function show(element) {
   el = element;
   el.innerHTML = `
-    <div class="toolbar"><h2>Usuários</h2><button id="user-new">+ Novo usuário</button></div>
+    <div class="toolbar" style="margin-top:0"><span class="hint">Quem acessa o VigIA e com qual perfil. Os colaboradores monitorados ficam em Pessoas.</span>
+      <button id="user-new">+ Novo usuário</button></div>
     <p class="hint">Desative usuários que saíram da empresa em vez de excluí-los: o histórico das
       ocorrências continua mostrando quem fez cada ação.</p>
     <div class="table-wrap"><table id="users-table"></table></div>`;
@@ -58,3 +59,6 @@ $("#user-form").addEventListener("submit", async (e) => {
     load();
   } catch (err) { toast(esc(err.message), "danger"); }
 });
+
+// Usado como subguia de Cadastros
+export const render = show;

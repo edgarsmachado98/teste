@@ -6,12 +6,14 @@ import * as gradacao from "./gradacao.js";
 import * as historico from "./historico.js";
 import * as pessoas from "./pessoas.js";
 import * as setores from "./setores.js";
+import * as usuarios from "./usuarios.js";
 
 const TABS = [
   { id: "setores", label: "Setores e padrões", module: setores, role: "tecnico" },
   { id: "cameras", label: "Câmeras", module: cameras, role: "tecnico" },
   { id: "pessoas", label: "Pessoas", module: pessoas, role: "tecnico" },
   { id: "gradacao", label: "Regras de gradação", module: gradacao, role: "tecnico" },
+  { id: "usuarios", label: "Usuários do sistema", module: usuarios, role: "admin" },
 ];
 
 let pendingHistory = null;
