@@ -4,7 +4,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, select
 
@@ -86,6 +87,27 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="VigIA – Gestão de Segurança Industrial", lifespan=lifespan)
+
+ERROR_LOG = Path(__file__).resolve().parents[2] / "logs" / "erros.log"
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception):
+    """Erro inesperado: registra o rastro completo em logs/erros.log e devolve à tela
+    a rota e a causa, para o suporte identificar o problema sem precisar do console."""
+    import traceback
+    trace = "".join(traceback.format_exception(exc))
+    log.error("Erro em %s %s\n%s", request.method, request.url.path, trace)
+    try:
+        ERROR_LOG.parent.mkdir(parents=True, exist_ok=True)
+        if ERROR_LOG.exists() and ERROR_LOG.stat().st_size > 5 * 1024 * 1024:
+            ERROR_LOG.replace(ERROR_LOG.with_suffix(".log.1"))
+        with open(ERROR_LOG, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {request.method} {request.url.path}\n{trace}\n")
+    except OSError:
+        pass  # disco cheio ou sem permissão: o rastro já foi para o console
+    return JSONResponse(status_code=500, content={
+        "detail": f"Erro interno em {request.url.path}: {type(exc).__name__}: {str(exc)[:300]}"})
 for module in (access, cameras, events, reports, detector, system, config, sectors, people, measures):
     app.include_router(module.router)
 

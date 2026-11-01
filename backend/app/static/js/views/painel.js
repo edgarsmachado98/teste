@@ -39,12 +39,16 @@ function card(ev) {
 }
 
 async function load() {
+  // Cada bloco carrega por conta própria: uma falha não deixa o painel em branco.
+  const failures = [];
+  const safe = (label, promise, fallback) => promise.catch((err) => { failures.push(`${label}: ${err.message}`); return fallback; });
+  const emptySummary = { totals: { pending: 0, deviations: 0 }, compliance: { rate: null }, actions: { overdue: 0, open: 0 } };
   const [summary, pending, cameras, overdue, approvals] = await Promise.all([
-    api("/api/reports/summary"),
-    api("/api/events?status=nova&limit=24"),
-    api("/api/cameras"),
-    api("/api/actions?overdue=true"),
-    can("gestor") ? api("/api/measures?status=pendente_aprovacao") : Promise.resolve([]),
+    safe("Indicadores", api("/api/reports/summary"), emptySummary),
+    safe("Alertas", api("/api/events?status=nova&limit=24"), []),
+    safe("Câmeras", api("/api/cameras"), []),
+    safe("Ações", api("/api/actions?overdue=true"), []),
+    can("gestor") ? safe("Advertências", api("/api/measures?status=pendente_aprovacao"), []) : Promise.resolve([]),
   ]);
   const t = summary.totals;
   const c = summary.compliance;
@@ -52,6 +56,9 @@ async function load() {
 
   el.innerHTML = `
     ${greeting(t, summary.actions.overdue, problems.length)}
+    ${failures.length ? `
+      <div class="card alert-strip"><b>▲ Parte do painel não carregou:</b>
+        ${failures.map((f) => `<span>${esc(f)}</span>`).join(" · ")}</div>` : ""}
     ${cameras.length ? "" : `
       <div class="card onboarding">
         <h2>Primeiros passos</h2>
