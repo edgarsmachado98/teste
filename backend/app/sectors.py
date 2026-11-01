@@ -26,6 +26,7 @@ TEMPLATES = {
         "behaviors": {"restricted_zone": {"enabled": True, "severity": "critica"},
                       "max_people": {"enabled": True, "max": 2, "severity": "alta"},
                       "fire_smoke": {"enabled": True, "severity": "critica"}},
+        "required_exams": ["aso", "audiometria", "espirometria", "acuidade_visual"],
         "reference": "NR-6 · NR-12",
     },
     "prensas": {
@@ -35,6 +36,7 @@ TEMPLATES = {
         "behaviors": {"restricted_zone": {"enabled": True, "severity": "critica"},
                       "max_people": {"enabled": False, "max": 2, "severity": "alta"},
                       "fire_smoke": {"enabled": False, "severity": "critica"}},
+        "required_exams": ["aso", "audiometria", "acuidade_visual"],
         "reference": "NR-6 · NR-12",
     },
     "docas": {
@@ -44,6 +46,7 @@ TEMPLATES = {
         "behaviors": {"restricted_zone": {"enabled": True, "severity": "alta"},
                       "max_people": {"enabled": True, "max": 3, "severity": "media"},
                       "fire_smoke": {"enabled": False, "severity": "critica"}},
+        "required_exams": ["aso", "acuidade_visual", "ecg", "glicemia"],
         "reference": "NR-6 · NR-11",
     },
     "laboratorio": {
@@ -53,6 +56,7 @@ TEMPLATES = {
         "behaviors": {"restricted_zone": {"enabled": False, "severity": "alta"},
                       "max_people": {"enabled": False, "max": 4, "severity": "media"},
                       "fire_smoke": {"enabled": True, "severity": "critica"}},
+        "required_exams": ["aso", "espirometria", "hemograma", "indicador_biologico"],
         "reference": "NR-6 · NR-32",
     },
     "alimentos": {
@@ -62,6 +66,7 @@ TEMPLATES = {
         "behaviors": {"restricted_zone": {"enabled": True, "severity": "alta"},
                       "max_people": {"enabled": False, "max": 4, "severity": "media"},
                       "fire_smoke": {"enabled": False, "severity": "critica"}},
+        "required_exams": ["aso"],
         "reference": "NR-6 · NR-36",
     },
 }

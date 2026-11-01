@@ -80,6 +80,8 @@ class Sector(Base):
     required_ppe: Mapped[list] = mapped_column(JSON, default=list)
     # EPI só com controle de entrega (a câmera não identifica com segurança), ex.: "Botina"
     delivery_ppe: Mapped[list] = mapped_column(JSON, default=list)
+    # Exames ocupacionais exigidos de quem trabalha no setor (códigos de exams.CATALOG)
+    required_exams: Mapped[list] = mapped_column(JSON, default=list)
     ppe_severity: Mapped[str] = mapped_column(String(20), default="alta")
     # {"restricted_zone": {"enabled", "severity"}, "max_people": {"enabled", "max", "severity"},
     #  "fire_smoke": {"enabled", "severity"}}
@@ -128,6 +130,8 @@ class Person(Base):
     sector: Mapped["Sector | None"] = relationship()
     deliveries: Mapped[list["PPEDelivery"]] = relationship(cascade="all, delete-orphan", order_by="PPEDelivery.delivered_on.desc()")
     trainings: Mapped[list["TrainingRecord"]] = relationship(cascade="all, delete-orphan", order_by="TrainingRecord.id.desc()")
+    exams: Mapped[list["ExamRecord"]] = relationship(cascade="all, delete-orphan",
+                                                     order_by="(ExamRecord.performed_on.desc(), ExamRecord.id.desc())")
 
 
 class PPEDelivery(Base):
@@ -154,6 +158,25 @@ class TrainingRecord(Base):
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="agendado")
     measure_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class ExamRecord(Base):
+    """Exame ocupacional (PCMSO – NR-7). Só datas e aptidão: sem diagnóstico (LGPD, dado sensível)."""
+
+    __tablename__ = "exams"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), index=True)
+    exam: Mapped[str] = mapped_column(String(30))  # aso, audiometria, espirometria...
+    aso_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # admissional, periodico...
+    performed_on: Mapped[date] = mapped_column(Date)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    result: Mapped[str | None] = mapped_column(String(20), nullable=True)  # apto | apto_restricao | inapto
+    restrictions: Mapped[str] = mapped_column(String(300), default="")  # restrição funcional, nunca diagnóstico
+    aptitudes: Mapped[list] = mapped_column(JSON, default=list)  # altura, espaco_confinado, eletricidade...
+    provider: Mapped[str] = mapped_column(String(160), default="")  # clínica / médico examinador
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 

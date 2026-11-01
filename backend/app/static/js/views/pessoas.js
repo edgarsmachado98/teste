@@ -1,4 +1,4 @@
-// Cadastros › Pessoas: lista, cadastro com foto de identificação, EPIs entregues, treinamentos e importação.
+// Cadastros › Pessoas: lista, cadastro com foto de identificação, EPIs entregues, treinamentos, exames (PCMSO) e importação.
 
 import { $, api, badge, can, esc, fmtDate, toast, withToken } from "../core.js";
 
@@ -12,6 +12,153 @@ let sectors = [];
 let filters = { q: "", unit_id: "", sector_id: "", status: "ativo,afastado", offset: 0 };
 let editing = null; // id da pessoa aberta, "new" ou null (lista)
 let onOpenHistory = null;
+let catalog = null; // exames ocupacionais (PCMSO)
+
+const EXAM_STATUS = {
+  em_dia: ["Em dia", "good"], vence: ["Vence em breve", "warn"], vencido: ["Vencido", "bad"], pendente: ["Não realizado", "bad"],
+  inapto: ["Inapto", "bad"], encerrado: ["Demissional", "muted"], sem_validade: ["Sem validade", "muted"],
+};
+const RESULT_KIND = { apto: "good", apto_restricao: "warn", inapto: "bad" };
+const shortExam = (label) => label.split(" – ")[0];
+const isoDate = (d) => d.toISOString().slice(0, 10);
+function addMonths(iso, months) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const target = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, last));
+  return isoDate(target);
+}
+
+function examStatusText(i) {
+  if (i.status === "pendente") return i.required ? "exigido pelo setor · não realizado" : "não realizado";
+  if (i.status === "vencido") return `vencido desde ${fmtDate(i.valid_until)}`;
+  if (i.status === "vence") return `vence em ${i.days} dia(s) · ${fmtDate(i.valid_until)}`;
+  if (i.status === "em_dia") return `válido até ${fmtDate(i.valid_until)}`;
+  if (i.status === "inapto") return `inapto em ${fmtDate(i.performed_on)}`;
+  if (i.status === "encerrado") return `demissional em ${fmtDate(i.performed_on)}`;
+  return `realizado em ${fmtDate(i.performed_on)}`;
+}
+
+function examCard(p) {
+  const c = catalog;
+  const lastAso = p.exams.find((e) => e.exam === "aso");
+  const editable = can("tecnico");
+  return `
+    <div class="card exam-card" style="margin-top:16px">
+      <div class="toolbar" style="margin:0 0 6px"><h3 style="margin:0">Exames ocupacionais (PCMSO · NR-7)</h3>
+        ${p.sector ? `<span class="hint">Exigidos pelo setor ${esc(p.sector)}: ${p.required_exams.length ? esc(p.required_exams.map((x) => shortExam(c.exams.find((e) => e.id === x)?.label || x)).join(", ")) : "só o ASO"}</span>` : `<span class="hint">Sem setor: exigido apenas o ASO</span>`}</div>
+      <div class="exam-status">
+        ${p.exam_status.map((i) => `<div class="exam-chip st-${i.status}">
+          <b>${esc(shortExam(i.label))}</b> ${badge(EXAM_STATUS[i.status][0], EXAM_STATUS[i.status][1])}
+          <small>${esc(examStatusText(i))}</small></div>`).join("")}
+      </div>
+      ${lastAso ? `<div class="aso-box">
+        <span>Último ASO <b>${esc(c.aso_types[lastAso.aso_type] || "")}</b> em ${fmtDate(lastAso.performed_on)}:</span>
+        ${badge(c.results[lastAso.result] || "–", RESULT_KIND[lastAso.result] || "")}
+        ${lastAso.aptitudes.map((a) => badge(`apto: ${c.aptitudes[a] || a}`, "good")).join(" ")}
+        ${lastAso.restrictions ? `<span class="warn-text">Restrição: ${esc(lastAso.restrictions)}</span>` : ""}
+      </div>` : ""}
+      <table class="compact">
+        <tr><th>Exame</th><th>Realizado</th><th>Validade</th><th>Resultado</th><th>Clínica / médico</th><th></th></tr>
+        ${p.exams.map((e) => `<tr>
+          <td>${esc(shortExam(e.label))}${e.aso_type ? `<div class="hint">${esc(c.aso_types[e.aso_type])}</div>` : ""}</td>
+          <td>${fmtDate(e.performed_on)}</td>
+          <td>${e.valid_until ? fmtDate(e.valid_until) : "–"} ${e.status === "vencido" ? badge("vencido", "bad") : e.status === "vence" ? badge(`${e.days} dia(s)`, "warn") : ""}</td>
+          <td>${e.result ? badge(c.results[e.result], RESULT_KIND[e.result]) : "–"}</td>
+          <td>${esc(e.provider || "–")}</td>
+          <td class="actions">${editable ? `<button class="small secondary" data-edit-exam="${e.id}">Editar</button>
+            <button class="small danger" data-del-exam="${e.id}">×</button>` : ""}</td></tr>`).join("")
+          || `<tr><td class="hint" colspan="6">Nenhum exame registrado.</td></tr>`}
+      </table>
+      ${editable ? `
+      <form id="exam-form" class="form exam-form">
+        <input type="hidden" name="id">
+        <h4 class="wide" id="exam-form-title" style="margin:6px 0 0">Registrar exame</h4>
+        <label>Exame <select name="exam">${c.exams.map((x) => `<option value="${x.id}">${esc(x.label)}</option>`).join("")}</select></label>
+        <label data-aso>Tipo de ASO <select name="aso_type">${Object.entries(c.aso_types).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select></label>
+        <label>Data do exame <input name="performed_on" type="date" required max="${isoDate(new Date())}"></label>
+        <label>Validade <input name="valid_until" type="date"><small class="hint" id="exam-valid-hint"></small></label>
+        <label data-aso>Resultado <select name="result">${Object.entries(c.results).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select></label>
+        <label>Clínica / médico examinador <input name="provider" maxlength="160" placeholder="ex.: Clínica Vida · Dr. Silva CRM 12345"></label>
+        <fieldset class="wide" data-aso><legend>Aptidões específicas indicadas no ASO</legend>
+          ${Object.entries(c.aptitudes).map(([k, v]) => `<label class="check"><input type="checkbox" name="apt_${k}"> ${esc(v)}</label>`).join("")}
+        </fieldset>
+        <label class="wide" data-restriction>Restrição funcional <input name="restrictions" maxlength="300"
+          placeholder="ex.: não operar empilhadeira; não trabalhar em altura"></label>
+        <p class="hint wide" id="exam-basis"></p>
+        <p class="hint wide">🔒 Dado de saúde (LGPD): registre só datas, aptidão e restrições de trabalho. <b>Não</b> registre diagnósticos,
+          CID ou resultados clínicos — eles ficam com o médico do trabalho.</p>
+        <div class="actions wide"><button type="submit" class="secondary" id="exam-submit">Registrar exame</button>
+          <button type="button" class="secondary" id="exam-cancel" hidden>Cancelar edição</button></div>
+      </form>` : ""}
+    </div>`;
+}
+
+function bindExamForm(p, reopen) {
+  root.querySelectorAll("[data-del-exam]").forEach((b) => b.addEventListener("click", async () => {
+    const e = p.exams.find((x) => x.id === Number(b.dataset.delExam));
+    if (!confirm(`Excluir o registro de ${shortExam(e.label)} de ${fmtDate(e.performed_on)}? A exclusão fica na auditoria.`)) return;
+    try { await api(`/api/people/${p.id}/exams/${e.id}`, { method: "DELETE" }); reopen(); }
+    catch (err) { toast(esc(err.message), "danger"); }
+  }));
+  const f = $("#exam-form", root);
+  if (!f) return;
+  let validTouched = false;
+  const sync = () => {
+    const aso = f.exam.value === "aso";
+    root.querySelectorAll("#exam-form [data-aso]").forEach((el) => { el.hidden = !aso; });
+    $("[data-restriction]", f).hidden = !(aso && f.result.value === "apto_restricao");
+    const item = catalog.exams.find((x) => x.id === f.exam.value);
+    $("#exam-basis", root).textContent = item ? `Quando se aplica: ${item.basis}` : "";
+    const demissional = aso && f.aso_type.value === "demissional";
+    if (!validTouched) {
+      f.valid_until.value = f.performed_on.value && !demissional ? addMonths(f.performed_on.value, item.months) : "";
+    }
+    $("#exam-valid-hint", root).textContent = demissional ? "Demissional: sem próxima validade"
+      : `Sugestão: ${item.months} meses após o exame — ajuste conforme o PCMSO`;
+  };
+  ["exam", "aso_type", "result", "performed_on"].forEach((n) => f[n].addEventListener("change", sync));
+  f.performed_on.addEventListener("input", sync);
+  f.valid_until.addEventListener("input", () => { validTouched = !!f.valid_until.value; });
+  const resetForm = () => {
+    f.reset(); f.id.value = ""; validTouched = false;
+    $("#exam-form-title", root).textContent = "Registrar exame";
+    $("#exam-submit", root).textContent = "Registrar exame";
+    $("#exam-cancel", root).hidden = true;
+    sync();
+  };
+  $("#exam-cancel", root).addEventListener("click", resetForm);
+  root.querySelectorAll("[data-edit-exam]").forEach((b) => b.addEventListener("click", () => {
+    const e = p.exams.find((x) => x.id === Number(b.dataset.editExam));
+    f.id.value = e.id; f.exam.value = e.exam; f.aso_type.value = e.aso_type || "periodico";
+    f.performed_on.value = e.performed_on; f.valid_until.value = e.valid_until || ""; validTouched = true;
+    f.result.value = e.result || "apto"; f.provider.value = e.provider; f.restrictions.value = e.restrictions;
+    Object.keys(catalog.aptitudes).forEach((k) => { f[`apt_${k}`].checked = e.aptitudes.includes(k); });
+    $("#exam-form-title", root).textContent = `Editar ${shortExam(e.label)} de ${fmtDate(e.performed_on)}`;
+    $("#exam-submit", root).textContent = "Salvar alteração";
+    $("#exam-cancel", root).hidden = false;
+    sync();
+    f.scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+  f.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const aso = f.exam.value === "aso";
+    const body = {
+      exam: f.exam.value, performed_on: f.performed_on.value, valid_until: f.valid_until.value || null,
+      provider: f.provider.value, aso_type: aso ? f.aso_type.value : null, result: aso ? f.result.value : null,
+      aptitudes: aso ? Object.keys(catalog.aptitudes).filter((k) => f[`apt_${k}`].checked) : [],
+      restrictions: aso && f.result.value === "apto_restricao" ? f.restrictions.value : "",
+    };
+    try {
+      await api(f.id.value ? `/api/people/${p.id}/exams/${f.id.value}` : `/api/people/${p.id}/exams`,
+        { method: f.id.value ? "PUT" : "POST", body });
+      toast(f.id.value ? "Exame atualizado." : "Exame registrado.", "ok", 2500);
+      reopen();
+    } catch (err) { toast(esc(err.message), "danger"); }
+  });
+  f.aso_type.value = "periodico";
+  sync();
+}
 
 export function setHistoryHandler(fn) { onOpenHistory = fn; }
 
@@ -32,14 +179,16 @@ async function loadList() {
   const [data, summary] = await Promise.all([api(`/api/people?${params}`), api("/api/people/summary")]);
   $("#people-count", root).textContent = `${data.total} pessoa(s)`;
   $("#people-table", root).innerHTML = data.items.length ? `
-    <tr><th>Pessoa</th><th>CPF</th><th>Setor · função</th><th>Unidade</th><th>Turno</th><th>EPI e treinamento</th><th>Situação</th></tr>
+    <tr><th>Pessoa</th><th>CPF</th><th>Setor · função</th><th>Unidade</th><th>Turno</th><th>Pendências</th><th>Situação</th></tr>
     ${data.items.map((p) => `
       <tr class="clickable" data-id="${p.id}">
         <td><div class="person-cell">${avatar(p)}<div><b>${esc(p.name)}</b><div class="hint mono">${p.registration ? `Mat. ${esc(p.registration)}` : ""}${p.badge_code ? ` · colete ${esc(p.badge_code)}` : ""}</div></div></div></td>
         <td class="mono">${esc(p.cpf)}</td>
         <td>${esc(p.sector || "–")}<div class="hint">${esc(p.role)}</div></td>
         <td>${esc(p.unit)}</td><td>${esc(p.shift || "–")}</td>
-        <td>${p.ppe_alert ? badge(p.ppe_alert, p.ppe_alert.includes("vencido") ? "bad" : "warn") : badge("Em dia", "good")}
+        <td class="pend">${p.exam_alert ? badge(p.exam_alert, /vencido|pendente|inapto/.test(p.exam_alert) ? "bad" : "warn") : ""}
+          ${p.ppe_alert ? badge(p.ppe_alert, p.ppe_alert.includes("vencido") ? "bad" : "warn") : ""}
+          ${!p.exam_alert && !p.ppe_alert ? badge("Em dia", "good") : ""}
           ${p.open_trainings ? badge(`${p.open_trainings} treinamento(s)`, "") : ""}</td>
         <td>${badge(STATUS[p.status][0], STATUS[p.status][1])}${p.employment === "terceiro" ? ` ${badge("terceiro", "")}` : ""}</td>
       </tr>`).join("")}`
@@ -58,6 +207,13 @@ async function loadList() {
       <div><span>EPI vencido</span><b class="${summary.ppe_expired ? "bad-text" : ""}">${summary.ppe_expired}</b></div>
       <div><span>Sem foto</span><b>${summary.without_photo}</b></div>
       <div><span>Treinamentos agendados</span><b>${summary.trainings_scheduled}</b></div>
+    </div>
+    <div class="label-strong" style="margin-top:14px">Exames ocupacionais (PCMSO)</div>
+    <div class="kv-list">
+      <div><span>Vencidos</span><b class="${summary.exams_expired ? "bad-text" : ""}">${summary.exams_expired}</b></div>
+      <div><span>Vencendo em 30 dias</span><b class="${summary.exams_expiring ? "warn-text" : ""}">${summary.exams_expiring}</b></div>
+      <div><span>Exigidos e não realizados</span><b class="${summary.exams_missing ? "bad-text" : ""}">${summary.exams_missing}</b></div>
+      <div><span>ASO inapto</span><b class="${summary.aso_unfit ? "bad-text" : ""}">${summary.aso_unfit}</b></div>
     </div>
     <div class="label-strong" style="margin-top:14px">Por setor</div>
     ${summary.by_sector.map((s) => `<div class="kv-row"><span>${esc(s.sector)}</span><b>${s.count}</b></div>`).join("")}`;
@@ -212,8 +368,10 @@ async function openPerson(id) {
           <div class="actions"><button type="submit" class="secondary">Registrar</button></div>
         </form>` : ""}
       </div>
-    </div>` : ""}`;
+    </div>
+    ${examCard(p)}` : ""}`;
 
+  if (id !== "new") bindExamForm(p, () => openPerson(p.id));
   const f = $("#person-form", root);
   $("#person-back", root).addEventListener("click", () => { editing = null; renderList(); });
   $("#person-history", root)?.addEventListener("click", () => onOpenHistory?.(p.id));
@@ -392,7 +550,8 @@ function openImport() {
 
 export async function render(container, openId = null) {
   root = container;
-  [units, sectors] = await Promise.all([api("/api/units"), api("/api/sectors")]);
+  [units, sectors, catalog] = await Promise.all([api("/api/units"), api("/api/sectors"),
+    catalog ? Promise.resolve(catalog) : api("/api/people/exams/catalog")]);
   if (openId) return openPerson(openId);
   editing = null;
   renderList();

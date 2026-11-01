@@ -574,3 +574,18 @@ button { border-radius: 4px; }
   background: var(--accent); flex: 0 0 auto; }
 .identify-main { padding: 11px 20px; font-size: 15px; white-space: nowrap; }
 @media (max-width: 640px) { .identify-callout { flex-wrap: wrap; } .identify-main { width: 100%; } }
+
+/* Exames ocupacionais (PCMSO) */
+.exam-status { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin: 10px 0 12px; }
+.exam-chip { border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 4px; padding: 8px 10px;
+  display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; background: var(--panel); }
+.exam-chip small { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+.exam-chip.st-vence { border-left-color: var(--warn); }
+.exam-chip.st-vencido, .exam-chip.st-pendente, .exam-chip.st-inapto { border-left-color: var(--danger); }
+.exam-chip.st-encerrado, .exam-chip.st-sem_validade { border-left-color: var(--line-strong); }
+.aso-box { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 10px 12px; margin-bottom: 12px;
+  background: var(--panel-2); border-radius: 4px; font-size: 14px; }
+.exam-form { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.exam-pick { gap: 8px 16px; }
+.exam-pick .hint { flex-basis: 100%; margin: 0 0 4px; }
+td.pend .badge { margin: 1px 0; }

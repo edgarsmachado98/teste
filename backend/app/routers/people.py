@@ -7,14 +7,14 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import audit
+from .. import audit, exams
 from ..auth import has_role, require_role
 from ..common import get_or_404
 from ..database import get_db
-from ..models import Person, PPEDelivery, Sector, TrainingRecord, Unit, User
+from ..models import ExamRecord, Person, PPEDelivery, Sector, TrainingRecord, Unit, User
 from ..people import (EMPLOYMENT_ALIASES, TEMPLATE_CSV, delete_photo, format_cpf, mask_cpf, only_digits, parse_csv,
                       people_dir, save_photo, valid_cpf)
-from ..schemas import DeliveryIn, DeliveryOut, PersonDetail, PersonIn, PersonOut, TrainingIn, TrainingOut
+from ..schemas import DeliveryIn, DeliveryOut, ExamIn, ExamOut, PersonDetail, PersonIn, PersonOut, TrainingIn, TrainingOut
 from ..sectors import PPE_LABELS
 
 router = APIRouter(prefix="/api/people")
@@ -32,6 +32,17 @@ def ppe_alert(person: Person, today: date | None = None) -> str | None:
     return f"{first.item} vencido" if days < 0 else f"{first.item} vence em {days} dia(s)"
 
 
+def required_exams(person: Person) -> list[str]:
+    return list(person.sector.required_exams or []) if person.sector else []
+
+
+def exam_out(r: ExamRecord) -> ExamOut:
+    st, days = exams.status_of(r.valid_until)
+    return ExamOut(id=r.id, exam=r.exam, aso_type=r.aso_type, performed_on=r.performed_on, valid_until=r.valid_until,
+                   result=r.result, restrictions=r.restrictions, aptitudes=r.aptitudes or [], provider=r.provider,
+                   label=exams.label(r.exam), status=st, days=days)
+
+
 def person_out(person: Person, full_cpf: bool = False) -> dict:
     return PersonOut(
         id=person.id, unit_id=person.unit_id, unit=person.unit.name, sector_id=person.sector_id,
@@ -41,12 +52,14 @@ def person_out(person: Person, full_cpf: bool = False) -> dict:
         manager=person.manager, badge_code=person.badge_code, has_photo=bool(person.photo_file),
         photo_consent=person.photo_consent, photo_consent_on=person.photo_consent_on, status=person.status,
         ppe_alert=ppe_alert(person), open_trainings=sum(1 for t in person.trainings if t.status == "agendado"),
+        exam_alert=exams.alert(person.exams, required_exams(person)) if person.status != "desligado" else None,
     ).model_dump()
 
 
 def person_query():
     return select(Person).options(selectinload(Person.unit), selectinload(Person.sector),
-                                  selectinload(Person.deliveries), selectinload(Person.trainings))
+                                  selectinload(Person.deliveries), selectinload(Person.trainings),
+                                  selectinload(Person.exams))
 
 
 @router.get("")
@@ -91,7 +104,30 @@ def people_summary(unit_id: int | None = None, db: Session = Depends(get_db)):
         "ppe_expired": sum(1 for p in people for d in p.deliveries if d.valid_until and d.valid_until < today),
         "without_photo": sum(1 for p in people if not p.photo_file),
         "trainings_scheduled": sum(1 for p in people for t in p.trainings if t.status == "agendado"),
+        **_exam_counts(people),
     }
+
+
+def _exam_counts(people) -> dict:
+    counts = {"exams_expired": 0, "exams_expiring": 0, "exams_missing": 0, "aso_unfit": 0}
+    for p in people:
+        for item in exams.compliance(p.exams, required_exams(p)):
+            if item["status"] == "vencido":
+                counts["exams_expired"] += 1
+            elif item["status"] == "vence":
+                counts["exams_expiring"] += 1
+            elif item["status"] == "pendente" and item["required"]:
+                counts["exams_missing"] += 1
+            elif item["status"] == "inapto":
+                counts["aso_unfit"] += 1
+    return counts
+
+
+@router.get("/exams/catalog", dependencies=[Depends(viewer)])
+def exam_catalog():
+    """Exames, tipos de ASO, resultados e aptidões (para os formulários e o cadastro de setores)."""
+    return {"exams": [{"id": k, **v} for k, v in exams.CATALOG.items()], "aso_types": exams.ASO_TYPES,
+            "results": exams.RESULTS, "aptitudes": exams.APTITUDES, "soon_days": exams.SOON_DAYS}
 
 
 @router.get("/import/template")
@@ -148,6 +184,9 @@ def get_person(person_id: int, request: Request, user: User = Depends(viewer), d
     return {**person_out(person, full_cpf=full),
             "deliveries": [DeliveryOut.model_validate(d) for d in person.deliveries],
             "trainings": [TrainingOut.model_validate(t) for t in person.trainings],
+            "exams": [exam_out(r) for r in person.exams],
+            "exam_status": exams.compliance(person.exams, required_exams(person)),
+            "required_exams": required_exams(person),
             "required_ppe": [PPE_LABELS.get(p, p) for p in (person.sector.required_ppe if person.sector else [])],
             "delivery_ppe": list(person.sector.delivery_ppe) if person.sector else []}
 
@@ -319,3 +358,66 @@ async def import_people(request: Request, file: UploadFile = File(...), user: Us
                  f"{file.filename}: {created} novas, {updated} atualizadas, {len(errors)} com erro", request)
     db.commit()
     return {"created": created, "updated": updated, "errors": errors[:200], "total_errors": len(errors)}
+
+
+# ---------- Exames ocupacionais (PCMSO) ----------
+
+def _exam_values(data: ExamIn) -> dict:
+    values = data.model_dump()
+    if data.exam == "aso":
+        if not data.aso_type or not data.result:
+            raise HTTPException(422, "no ASO, informe o tipo (admissional, periódico...) e o resultado (apto/inapto)")
+        if data.result == "apto_restricao" and not data.restrictions.strip():
+            raise HTTPException(422, "descreva a restrição funcional (ex.: não operar empilhadeira) – sem diagnóstico")
+    else:
+        values.update(aso_type=None, result=None, aptitudes=[])
+    if values["valid_until"] is None:
+        values["valid_until"] = exams.default_valid_until(data.exam, data.performed_on, data.aso_type)
+    if values["valid_until"] and values["valid_until"] < data.performed_on:
+        raise HTTPException(422, "a validade não pode ser anterior à data do exame")
+    if data.performed_on > date.today():
+        raise HTTPException(422, "a data do exame não pode estar no futuro")
+    return values
+
+
+def _exam_detail(r: ExamRecord) -> str:
+    kind = f" {exams.ASO_TYPES.get(r.aso_type, '')}" if r.exam == "aso" else ""
+    until = f", válido até {r.valid_until:%d/%m/%Y}" if r.valid_until else ""
+    return f"{exams.label(r.exam)}{kind} em {r.performed_on:%d/%m/%Y}{until}"
+
+
+@router.post("/{person_id}/exams", response_model=ExamOut, status_code=201)
+def add_exam(person_id: int, data: ExamIn, request: Request, user: User = Depends(viewer), db: Session = Depends(get_db)):
+    person = get_or_404(db, Person, person_id)
+    record = ExamRecord(person_id=person.id, created_by_id=user.id, **_exam_values(data))
+    db.add(record)
+    db.flush()
+    audit.record(db, user, "exame_registrado", "pessoa", person.id, f"{person.name}: {_exam_detail(record)}", request)
+    db.commit()
+    return exam_out(record)
+
+
+@router.put("/{person_id}/exams/{exam_id}", response_model=ExamOut)
+def update_exam(person_id: int, exam_id: int, data: ExamIn, request: Request, user: User = Depends(viewer),
+                db: Session = Depends(get_db)):
+    record = get_or_404(db, ExamRecord, exam_id)
+    if record.person_id != person_id:
+        raise HTTPException(404, "não encontrado")
+    for key, value in _exam_values(data).items():
+        setattr(record, key, value)
+    person = db.get(Person, person_id)
+    audit.record(db, user, "exame_alterado", "pessoa", person_id, f"{person.name}: {_exam_detail(record)}", request)
+    db.commit()
+    return exam_out(record)
+
+
+@router.delete("/{person_id}/exams/{exam_id}", status_code=204)
+def delete_exam(person_id: int, exam_id: int, request: Request, user: User = Depends(viewer),
+                db: Session = Depends(get_db)):
+    record = get_or_404(db, ExamRecord, exam_id)
+    if record.person_id != person_id:
+        raise HTTPException(404, "não encontrado")
+    person = db.get(Person, person_id)
+    audit.record(db, user, "exame_excluido", "pessoa", person_id, f"{person.name}: {_exam_detail(record)}", request)
+    db.delete(record)
+    db.commit()

@@ -14,6 +14,7 @@ let root;
 let units = [];
 let sectors = [];
 let templates = [];
+let examCatalog = [];
 let cameras = [];
 let rules = [];
 let unitId = null;
@@ -24,7 +25,7 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const sevOptions = (value) => SEVERITIES.map(([v, l]) => `<option value="${v}" ${v === value ? "selected" : ""}>${l}</option>`).join("");
 
 function blank() {
-  return { unit_id: unitId, name: "", required_ppe: [], delivery_ppe: [], ppe_severity: "alta", reference: "",
+  return { unit_id: unitId, name: "", required_ppe: [], delivery_ppe: [], required_exams: ["aso"], ppe_severity: "alta", reference: "",
     behaviors: {}, start_hour: null, end_hour: null };
 }
 
@@ -40,6 +41,7 @@ function readForm() {
     unit_id: Number(f.unit_id.value), name: f.name.value.trim(), reference: f.reference.value,
     required_ppe: PPE.filter((p) => f[`ppe_${p}`].checked),
     delivery_ppe: f.delivery_ppe.value.split(",").map((s) => s.trim()).filter(Boolean),
+    required_exams: examCatalog.filter((x) => f[`exam_${x.id}`]?.checked).map((x) => x.id),
     ppe_severity: f.ppe_severity.value, behaviors,
     start_hour: num(f.start_hour.value), end_hour: num(f.end_hour.value),
   };
@@ -109,6 +111,15 @@ function renderEditor() {
       <label class="wide">EPI só com controle de entrega (a câmera não identifica com segurança), separados por vírgula
         <input name="delivery_ppe" value="${esc(s.delivery_ppe.join(", "))}" placeholder="ex.: Botina de segurança, Protetor auricular" ${ro}></label>
 
+      ${examCatalog.length ? `<fieldset class="wide exam-pick">
+        <legend>Exames ocupacionais exigidos (PCMSO · NR-7)</legend>
+        <p class="hint">O sistema avisa, em cada colaborador do setor, os exames vencidos, a vencer em 30 dias ou não realizados.
+          A lista e os intervalos são sugestões: siga o PCMSO do médico responsável.</p>
+        ${examCatalog.filter((x) => x.id !== "outro").map((x) => `<label class="check" title="${esc(x.basis)}">
+          <input type="checkbox" name="exam_${x.id}" ${x.id === "aso" ? "checked disabled" : (s.required_exams || []).includes(x.id) ? "checked" : ""} ${ro}>
+          ${esc(x.label.split(" – ")[0])}</label>`).join("")}
+      </fieldset>` : ""}
+
       <div class="wide">
         <div class="label-strong">Regras de comportamento</div>
         ${BEHAVIORS.map(([key, label, desc]) => `
@@ -176,7 +187,8 @@ async function load() {
 
 export async function render(container) {
   root = container;
-  templates = await api("/api/sectors/templates");
+  [templates, examCatalog] = await Promise.all([api("/api/sectors/templates"),
+    api("/api/people/exams/catalog").then((c) => c.exams).catch(() => [])]);
   root.innerHTML = `
     <div class="split">
       <aside class="split-side">
@@ -210,6 +222,7 @@ export async function render(container) {
     const t = templates.find((x) => x.id === btn.dataset.tpl);
     const base = current && current.id ? current : blank();
     current = { ...base, required_ppe: t.required_ppe, delivery_ppe: t.delivery_ppe, behaviors: t.behaviors,
+      required_exams: t.required_exams || ["aso"],
       reference: t.reference, name: base.name || t.label };
     renderEditor();
     toast(`Modelo "${esc(t.label)}" carregado. Revise e salve para aplicar.`, "ok", 4000);

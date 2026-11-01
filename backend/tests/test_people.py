@@ -318,3 +318,65 @@ def test_events_csv_export(client, admin):
     assert client.get("/api/reports/events.csv", headers=operador).status_code == 403
     log = client.get("/api/audit?entity=relatorio", headers=admin).json()
     assert any(a["action"] == "ocorrencias_exportadas" for a in log)
+
+
+def test_occupational_exams(client, admin):
+    from datetime import date, timedelta
+    from app.exams import add_months
+    unit = client.get("/api/units", headers=admin).json()[0]["id"]
+    sector = client.post("/api/sectors", headers=admin, json=sector_payload(
+        unit, name="Caldeiraria", required_exams=["aso", "audiometria", "espirometria"])).json()["sector"]
+    assert sector["required_exams"] == ["aso", "audiometria", "espirometria"]
+    assert client.post("/api/sectors", headers=admin, json=sector_payload(
+        unit, name="X", required_exams=["raio_x_do_pe"])).status_code == 422
+    person = client.post("/api/people", headers=admin, json=person_payload(
+        unit, name="Diego Exames", cpf="390.533.447-05", registration="EX-1", badge_code="EX1",
+        sector_id=sector["id"])).json()
+    pid = person["id"]
+    detail = client.get(f"/api/people/{pid}", headers=admin).json()
+    status = {i["exam"]: i["status"] for i in detail["exam_status"]}
+    assert status == {"aso": "pendente", "audiometria": "pendente", "espirometria": "pendente"}
+    url = f"/api/people/{pid}/exams"
+    today = date.today()
+    # ASO precisa de tipo e resultado; restrição exige descrição
+    assert client.post(url, headers=admin, json={"exam": "aso", "performed_on": str(today)}).status_code == 422
+    assert client.post(url, headers=admin, json={"exam": "aso", "aso_type": "periodico", "result": "apto_restricao",
+                                                  "performed_on": str(today)}).status_code == 422
+    assert client.post(url, headers=admin, json={"exam": "aso", "aso_type": "periodico", "result": "apto",
+                                                  "performed_on": str(today + timedelta(days=3))}).status_code == 422
+    aso = client.post(url, headers=admin, json={
+        "exam": "aso", "aso_type": "periodico", "result": "apto", "performed_on": str(today),
+        "aptitudes": ["altura", "inexistente"], "provider": "Clínica Vida"}).json()
+    assert aso["valid_until"] == str(add_months(today, 12))  # validade sugerida pelo catálogo
+    assert aso["aptitudes"] == ["altura"] and aso["status"] == "em_dia"
+    # audiometria vencida e espirometria a vencer em 10 dias (validade informada)
+    old = today - timedelta(days=400)
+    client.post(url, headers=admin, json={"exam": "audiometria", "performed_on": str(old), "aso_type": "admissional",
+                                          "result": "inapto", "aptitudes": ["altura"]})
+    esp = client.post(url, headers=admin, json={"exam": "espirometria", "performed_on": str(today - timedelta(days=700)),
+                                                "valid_until": str(today + timedelta(days=10))}).json()
+    assert esp["status"] == "vence" and esp["days"] == 10
+    detail = client.get(f"/api/people/{pid}", headers=admin).json()
+    audio = next(e for e in detail["exams"] if e["exam"] == "audiometria")
+    assert audio["aso_type"] is None and audio["result"] is None and audio["aptitudes"] == []  # campos só do ASO
+    status = {i["exam"]: i["status"] for i in detail["exam_status"]}
+    assert status == {"aso": "em_dia", "audiometria": "vencido", "espirometria": "vence"}
+    listed = client.get("/api/people", headers=admin, params={"q": "Diego Exames"}).json()["items"][0]
+    assert listed["exam_alert"] == "Audiometria tonal vencido"
+    summary = client.get("/api/people/summary", headers=admin).json()
+    assert summary["exams_expired"] >= 1 and summary["exams_expiring"] >= 1
+    # ASO inapto ganha destaque; demissional encerra sem próxima validade
+    client.put(f"{url}/{aso['id']}", headers=admin, json={**{k: aso[k] for k in ("exam", "aso_type", "performed_on",
+               "provider", "aptitudes")}, "result": "inapto", "valid_until": aso["valid_until"]})
+    listed = client.get("/api/people", headers=admin, params={"q": "Diego Exames"}).json()["items"][0]
+    assert listed["exam_alert"] == "ASO: inapto"
+    dem = client.post(url, headers=admin, json={"exam": "aso", "aso_type": "demissional", "result": "apto",
+                                                "performed_on": str(today)}).json()
+    assert dem["valid_until"] is None
+    # tudo auditado; exclusão
+    assert client.delete(f"{url}/{dem['id']}", headers=admin).status_code == 204
+    actions = [a["action"] for a in client.get("/api/audit", headers=admin).json()]
+    assert {"exame_registrado", "exame_alterado", "exame_excluido"} <= set(actions)
+    catalog = client.get("/api/people/exams/catalog", headers=admin).json()
+    assert {"aso", "audiometria", "toxicologico"} <= {e["id"] for e in catalog["exams"]}
+    assert "demissional" in catalog["aso_types"] and "altura" in catalog["aptitudes"]

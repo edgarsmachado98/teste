@@ -128,6 +128,7 @@ class SectorIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     required_ppe: list[PPEItem] = []
     delivery_ppe: list[str] = []
+    required_exams: list[str] = []
     ppe_severity: Severity = "alta"
     behaviors: dict[Literal["restricted_zone", "max_people", "fire_smoke"], BehaviorIn] = {}
     start_hour: int | None = Field(None, ge=0, le=23)
@@ -139,6 +140,15 @@ class SectorIn(BaseModel):
     def clean_delivery(cls, items: list[str]) -> list[str]:
         return [i.strip()[:80] for i in items if i.strip()][:30]
 
+    @field_validator("required_exams")
+    @classmethod
+    def known_exams(cls, items: list[str]) -> list[str]:
+        from .exams import CATALOG
+        unknown = [i for i in items if i not in CATALOG]
+        if unknown:
+            raise ValueError(f"exame desconhecido: {', '.join(unknown)}")
+        return list(dict.fromkeys(items))
+
 
 class SectorOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -147,6 +157,7 @@ class SectorOut(BaseModel):
     name: str
     required_ppe: list[str]
     delivery_ppe: list[str]
+    required_exams: list[str] = []
     ppe_severity: str
     behaviors: dict
     start_hour: int | None
@@ -329,6 +340,7 @@ class PersonOut(BaseModel):
     status: str
     ppe_alert: str | None = None  # ex.: "Máscara vence em 12 dias"
     open_trainings: int = 0
+    exam_alert: str | None = None  # ex.: "ASO vencido", "Audiometria vence em 12 dia(s)"
 
 
 class DeliveryIn(BaseModel):
@@ -356,8 +368,44 @@ class TrainingOut(TrainingIn):
     measure_id: int | None = None
 
 
+class ExamIn(BaseModel):
+    exam: str
+    aso_type: Literal["admissional", "periodico", "retorno", "mudanca_risco", "demissional"] | None = None
+    performed_on: date
+    valid_until: date | None = None  # vazio = calculada pela periodicidade sugerida
+    result: Literal["apto", "apto_restricao", "inapto"] | None = None
+    restrictions: str = Field("", max_length=300)
+    aptitudes: list[str] = []
+    provider: str = Field("", max_length=160)
+
+    @field_validator("exam")
+    @classmethod
+    def known_exam(cls, value: str) -> str:
+        from .exams import CATALOG
+        if value not in CATALOG:
+            raise ValueError("exame desconhecido")
+        return value
+
+    @field_validator("aptitudes")
+    @classmethod
+    def known_aptitudes(cls, items: list[str]) -> list[str]:
+        from .exams import APTITUDES
+        return [i for i in dict.fromkeys(items) if i in APTITUDES]
+
+
+class ExamOut(ExamIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    label: str = ""
+    status: str = ""
+    days: int | None = None
+
+
 class PersonDetail(PersonOut):
     deliveries: list[DeliveryOut]
     trainings: list[TrainingOut]
+    exams: list[ExamOut] = []
+    exam_status: list[dict] = []
+    required_exams: list[str] = []
     required_ppe: list[str] = []
     delivery_ppe: list[str] = []
