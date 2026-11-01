@@ -614,3 +614,14 @@ def test_capacity_projection_with_real_data():
     few = capacity.project({**m, "days_observed": 1, "events_total": 5}, 500e9, 300e9, 0)
     assert "insuficientes" in few["message"]
     assert capacity.plan(capacity.PlanInput(cameras=40)).compute["ram_gb"] == 16
+
+
+def test_header_meta(client, admin):
+    assert client.get("/api/meta").status_code == 401
+    _, op = make_user(client, admin, "meta-op@vigia.local", "operador")
+    r = client.get("/api/meta", headers=op)
+    assert r.status_code == 200
+    data = r.json()
+    assert {s["name"] for s in data["shifts"]} >= {"Turno A", "Turno B", "Turno C"}
+    assert data["shift"] in {"Turno A", "Turno B", "Turno C"}
+    assert isinstance(data["units"], list) and "company_name" in data
