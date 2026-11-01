@@ -303,3 +303,18 @@ def test_identification_and_measures(client, admin):
     log = client.get(f"/api/audit?entity=pessoa&entity_id={camila['id']}", headers=admin).json()
     assert any(a["action"] == "historico_consultado" for a in log)
     assert client.get(f"/api/events/{ev2['id']}", headers=tecnico).json()["measures"][0]["number"] == m2["number"]
+
+
+def test_events_csv_export(client, admin):
+    import csv
+    import io
+
+    resp = client.get("/api/reports/events.csv", headers=admin)
+    assert resp.status_code == 200 and resp.headers["content-type"].startswith("text/csv")
+    rows = list(csv.reader(io.StringIO(resp.content.decode("utf-8-sig")), delimiter=";"))
+    assert rows[0][:3] == ["Nº", "Data", "Hora"] and len(rows) > 1
+    assert any(r[12] == "Camila Duarte" for r in rows[1:])  # pessoa identificada
+    _, operador = make_user(client, admin, "op-csv@fabrica.com", "operador")
+    assert client.get("/api/reports/events.csv", headers=operador).status_code == 403
+    log = client.get("/api/audit?entity=relatorio", headers=admin).json()
+    assert any(a["action"] == "ocorrencias_exportadas" for a in log)

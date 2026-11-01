@@ -20,7 +20,7 @@ Os alertas chegam por **e-mail**, **WhatsApp** e **na tela**, em tempo real.
 | **Relatório automático** | PDF mensal ou semanal enviado por e-mail aos gestores |
 | **Armazenamento de rede (NAS)** | Fotos, clipes, backups e relatórios no storage de rede, com fila quando o NAS está fora do ar |
 | **Saúde das câmeras** | Alerta quando a câmera fica sem sinal, escura, obstruída/desfocada ou congelada |
-| **Usuários e auditoria** | Perfis de acesso e registro de quem fez o quê, quando e de onde |
+| **Relatórios e auditoria** | Relatório completo e PDF rápido por período e câmera, envio por e-mail, planilha de ocorrências (CSV), lista de medidas e termos, e auditoria (quem fez o quê, quando e de onde — administradores) |
 | **Cadastros: setores e padrões** | Por setor: EPI verificado pela câmera e EPI só com controle de entrega, regras de comportamento, severidade e horário. As regras de detecção das câmeras do setor são geradas automaticamente, com prévia e modelos prontos |
 | **Cadastros: pessoas** | CPF validado e mascarado, matrícula, setor, turno, nº do colete, foto de identificação (com ciência registrada), EPIs entregues com CA e validade, treinamentos e importação de planilha |
 | **Identificação e medidas** | Na ocorrência, o técnico identifica a pessoa (candidatos do setor e turno da câmera, busca por nome ou nº do colete — sem reconhecimento facial) e aplica a medida sugerida pela gradação: orientação, treinamento, advertência (com aprovação) ou RH; ciência com assinatura na tela, termo para impressão e histórico por pessoa |
@@ -130,11 +130,10 @@ Acesse http://localhost:8000 e crie o administrador. Depois:
    próprio, use `SSL_CERTFILE`/`SSL_KEYFILE`.
 3. **Backup**: automático todo dia (padrão 2h), guardando os 14 últimos em `backend/data/backups`.
    Configure `BACKUP_COPY_DIR` com uma pasta de rede para ter uma cópia fora do computador.
-   Na tela **Sistema** é possível fazer e baixar backups. Para restaurar: pare o VigIA e copie o
-   backup por cima de `backend/data/vigia.db`.
+   Em **Configurações → Backup do sistema** é possível fazer, baixar e restaurar backups.
 4. **Relatório automático**: configure SMTP e `REPORT_EMAILS`. Por padrão, todo dia 1 sai o PDF do
-   mês anterior (`REPORT_FREQUENCY=semanal` para toda segunda-feira). Na tela **Sistema** dá para
-   enviar um relatório na hora.
+   mês anterior (`REPORT_FREQUENCY=semanal` para toda segunda-feira). Em **Relatórios e auditoria** dá
+   para enviar um relatório na hora, baixar o PDF ou a planilha de ocorrências (CSV).
 
 ### Identificação de pessoas e medidas (LGPD)
 
@@ -212,7 +211,7 @@ QNAP, TrueNAS ou qualquer pasta compartilhada da rede).
 
    No Linux, monte o compartilhamento (`/etc/fstab` com `cifs` ou `nfs`) e use o ponto de montagem em
    `STORAGE_NAS_PATH`.
-3. Reinicie o VigIA e, na tela **Sistema → Armazenamento de rede**, clique em **Ativar**. Isso grava um
+3. Reinicie o VigIA e, em **Configurações → Conexão com storage de rede**, clique em **Ativar**. Isso grava um
    arquivo marcador na pasta. Sem ele o VigIA não grava nada, para não encher o disco local caso o
    compartilhamento não esteja conectado.
 

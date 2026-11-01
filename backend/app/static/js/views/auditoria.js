@@ -27,7 +27,6 @@ async function load() {
 export async function show(element) {
   el = element;
   el.innerHTML = `
-    <div class="toolbar"><h2>Auditoria</h2></div>
     <p class="hint">Registro de acessos e alterações (LGPD): quem fez o quê, quando e de onde.</p>
     <form id="audit-filters" class="filters">
       <label>Assunto <select name="entity">${Object.entries(ENTITY_LABELS)

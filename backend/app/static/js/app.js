@@ -5,7 +5,6 @@ import {
 import { openEvent, refreshIfOpen } from "./event-detail.js";
 import * as acoes from "./views/acoes.js";
 import * as aovivo from "./views/aovivo.js";
-import * as auditoria from "./views/auditoria.js";
 import * as cadastros from "./views/cadastros.js";
 import * as indicadores from "./views/indicadores.js";
 import * as ocorrencias from "./views/ocorrencias.js";
@@ -13,9 +12,9 @@ import * as painel from "./views/painel.js";
 import * as regras from "./views/regras.js";
 import * as configuracoes from "./views/configuracoes.js";
 import * as parametros from "./views/parametros.js";
-import * as sistema from "./views/sistema.js";
+import * as relatorios from "./views/relatorios.js";
 
-const VIEWS = { cadastros, painel, ocorrencias, acoes, indicadores, aovivo, regras, auditoria, sistema,
+const VIEWS = { cadastros, painel, ocorrencias, acoes, indicadores, aovivo, regras, relatorios,
   parametros, configuracoes };
 let current = null;
 
@@ -124,6 +123,11 @@ function route() {
     cadastros.openTab(hash);
     history.replaceState(null, "", "#cadastros");
     hash = "cadastros";
+  }
+  if (hash === "auditoria" || hash === "sistema") {
+    relatorios.openTab(hash === "auditoria" ? "auditoria" : "relatorios");
+    history.replaceState(null, "", "#relatorios");
+    hash = "relatorios";
   }
   const match = hash.match(/^ocorrencia-(\d+)$/);
   const name = match ? "ocorrencias" : (VIEWS[hash] ? hash : "painel");

@@ -172,3 +172,44 @@ def log_export(request: Request, start: date | None = None, end: date | None = N
     start, end = _period(start, end)
     audit.record(db, user, "relatorio_gerado", "relatorio", None, f"{start:%d/%m/%Y} a {end:%d/%m/%Y}", request)
     db.commit()
+
+
+@router.get("/events.csv")
+def events_csv(request: Request, start: date | None = None, end: date | None = None, camera_id: int | None = None,
+               user: User = Depends(require_role("tecnico")), db: Session = Depends(get_db)):
+    """Ocorrências do período em CSV (separador ';', compatível com o Excel em português)."""
+    import csv
+    import io
+
+    from fastapi.responses import Response
+
+    from ..common import CLASS_LABELS_PT
+
+    start, end = _period(start, end)
+    lo, hi = local_range(start, end)
+    query = (select(Event).options(selectinload(Event.camera), selectinload(Event.rule), selectinload(Event.person),
+                                   selectinload(Event.actions))
+             .where(Event.created_at >= lo, Event.created_at < hi).order_by(Event.created_at))
+    if camera_id is not None:
+        query = query.where(Event.camera_id == camera_id)
+    status = {"nova": "Nova", "confirmada": "Em tratamento", "descartada": "Falso alarme", "encerrada": "Encerrada"}
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter=";")
+    writer.writerow(["Nº", "Data", "Hora", "Turno", "Câmera", "Área", "Tipo", "Regra", "Descrição", "Severidade",
+                     "Situação", "Classificação", "Pessoa identificada", "Ações abertas", "Ações concluídas"])
+    rows = 0
+    for e in db.scalars(query):
+        local = to_local(e.created_at)
+        writer.writerow([
+            e.id, f"{local:%d/%m/%Y}", f"{local:%H:%M:%S}", shift_of(local), e.camera.name, e.camera.location,
+            TYPE_LABELS.get(e.type, e.type), e.rule.name if e.rule else "", e.message, e.severity,
+            status.get(e.status, e.status), CLASS_LABELS_PT.get(e.classification, "") if e.classification else "",
+            e.person.name if e.person else ("não identificada" if e.identification == "nao_identificado" else ""),
+            sum(1 for a in e.actions if a.status == "aberta"), sum(1 for a in e.actions if a.status == "concluida"),
+        ])
+        rows += 1
+    audit.record(db, user, "ocorrencias_exportadas", "relatorio", None,
+                 f"CSV {start:%d/%m/%Y} a {end:%d/%m/%Y}: {rows} ocorrências", request)
+    db.commit()
+    return Response(out.getvalue().encode("utf-8-sig"), media_type="text/csv; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="ocorrencias-vigia-{start:%Y%m%d}-{end:%Y%m%d}.csv"'})

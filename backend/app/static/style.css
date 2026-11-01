@@ -363,3 +363,6 @@ canvas.sign { width: 100%; height: 160px; background: #fff; border-radius: 8px; 
 }
 .ack-form .check { display: flex; gap: 8px; align-items: center; color: var(--text); }
 .ack-form .check input { width: auto; margin: 0; }
+.report-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.report-cards .card { margin: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.report-cards .card .hint { flex: 1; }

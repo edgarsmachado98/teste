@@ -248,7 +248,14 @@ export async function show(element) {
     <p class="hint">Somente administradores. Os valores salvos aqui têm prioridade sobre o arquivo <code>.env</code>.</p>
     <div class="card"><h3>Conexão com storage de rede (NAS)</h3><div id="cfg-nas"></div></div>
     <div class="card"><h3>Backup do sistema</h3><div id="cfg-backup"></div></div>
-    <div class="card"><h3>Restauração</h3><div id="cfg-restore"></div></div>`;
+    <div class="card"><h3>Restauração</h3><div id="cfg-restore"></div></div>
+    <div class="card"><h3>Instalação</h3>
+      <ul class="plain">
+        <li>Iniciar com o computador: <code>instalar_servico.bat</code> (como administrador)</li>
+        <li>HTTPS: <code>python vigia.py --gerar-certificado</code> e reinicie</li>
+        <li>Log do serviço: <code>logs/vigia.log</code></li>
+      </ul>
+    </div>`;
   await reload();
 }
 
