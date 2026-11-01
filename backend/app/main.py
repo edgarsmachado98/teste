@@ -16,7 +16,8 @@ from .database import SessionLocal
 from .health import health_loop
 from .migrate import migrate
 from .models import AuditLog, Event, Session
-from .routers import access, cameras, config, detector, events, reports, system
+from .routers import access, cameras, config, detector, events, reports, sectors, system
+from .sectors import ensure_default_unit
 from .settings_store import apply_overrides
 from .scheduler import scheduler_loop
 from .storage import storage_loop
@@ -74,6 +75,8 @@ async def lifespan(app: FastAPI):
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     migrate()
     apply_overrides()  # configurações salvas pelo painel (guia Configurações)
+    with SessionLocal() as db:
+        ensure_default_unit(db)
     tasks = [asyncio.create_task(retention_loop()), asyncio.create_task(health_loop()),
              asyncio.create_task(scheduler_loop()), asyncio.create_task(storage_loop()),
              asyncio.create_task(usage_loop())]
@@ -83,7 +86,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="VigIA – Gestão de Segurança Industrial", lifespan=lifespan)
-for module in (access, cameras, events, reports, detector, system, config):
+for module in (access, cameras, events, reports, detector, system, config, sectors):
     app.include_router(module.router)
 
 

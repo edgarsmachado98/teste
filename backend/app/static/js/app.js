@@ -6,6 +6,7 @@ import { openEvent, refreshIfOpen } from "./event-detail.js";
 import * as acoes from "./views/acoes.js";
 import * as aovivo from "./views/aovivo.js";
 import * as auditoria from "./views/auditoria.js";
+import * as cadastros from "./views/cadastros.js";
 import * as cameras from "./views/cameras.js";
 import * as indicadores from "./views/indicadores.js";
 import * as ocorrencias from "./views/ocorrencias.js";
@@ -16,7 +17,7 @@ import * as parametros from "./views/parametros.js";
 import * as sistema from "./views/sistema.js";
 import * as usuarios from "./views/usuarios.js";
 
-const VIEWS = { painel, ocorrencias, acoes, indicadores, aovivo, cameras, regras, usuarios, auditoria, sistema,
+const VIEWS = { cadastros, painel, ocorrencias, acoes, indicadores, aovivo, cameras, regras, usuarios, auditoria, sistema,
   parametros, configuracoes };
 let current = null;
 

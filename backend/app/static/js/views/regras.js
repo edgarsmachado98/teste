@@ -59,7 +59,8 @@ async function load() {
     <tr><th>Regra</th><th>Câmera</th><th>Tipo</th><th>Horário</th><th>Severidade</th><th>Ativa</th><th></th></tr>
     ${rules.map((r) => `
       <tr>
-        <td>${esc(r.name)}</td><td>${esc(camName(r.camera_id))}</td>
+        <td>${esc(r.name)}${r.sector_id ? ` <span class="badge" title="Gerada pelo padrão do setor: nome, EPI, severidade e horário vêm do setor; zona e ajustes finos são seus">padrão do setor</span>` : ""}
+          ${r.sector_id && r.type === "restricted_zone" && !r.zone.length ? `<div class="warn-text">▲ desenhe a zona e ative</div>` : ""}</td><td>${esc(camName(r.camera_id))}</td>
         <td>${esc(TYPE_LABELS[r.type])}${r.type === "ppe_missing"
           ? ` (${esc((r.params.required || []).map((i) => PPE_LABELS[i] || i).join(", "))})` : ""}</td>
         <td>${r.start_hour == null ? "sempre" : `${r.start_hour}h–${r.end_hour}h`}</td>

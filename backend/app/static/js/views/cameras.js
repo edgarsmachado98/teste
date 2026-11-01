@@ -2,14 +2,16 @@ import { $, api, can, esc, fmtDateTime, healthBadge, toast } from "../core.js";
 
 let el;
 let cameras = [];
+let sectors = [];
 
 async function load() {
   cameras = await api("/api/cameras");
   $("#cameras-table", el).innerHTML = `
-    <tr><th>Nome</th><th>Local / área</th><th>Fonte</th><th>Saúde da imagem</th><th>Última imagem</th><th>Ativa</th><th></th></tr>
+    <tr><th>Nome</th><th>Local / área</th><th>Setor</th><th>Fonte</th><th>Saúde da imagem</th><th>Última imagem</th><th>Ativa</th><th></th></tr>
     ${cameras.map((c) => `
       <tr>
         <td>${esc(c.name)}</td><td>${esc(c.location)}</td>
+        <td>${esc(sectors.find((s) => s.id === c.sector_id)?.name || "–")}</td>
         <td class="mono">${esc(c.source.replace(/\/\/[^@/]*@/, "//***@"))}</td>
         <td>${c.enabled ? healthBadge(c.health) : "–"}</td>
         <td>${c.last_frame_at ? fmtDateTime(c.last_frame_at) : "–"}</td>
@@ -23,6 +25,7 @@ async function load() {
 
 export async function show(element) {
   el = element;
+  sectors = await api("/api/sectors");
   el.innerHTML = `
     <h2>Câmeras</h2>
     ${can("tecnico") ? `
@@ -32,6 +35,10 @@ export async function show(element) {
       <label>Local / área <input name="location" placeholder="Galpão A – Prensas"></label>
       <label class="wide">Fonte (RTSP ou arquivo)
         <input name="source" required placeholder="rtsp://usuario:senha@192.168.0.10:554/stream1">
+      </label>
+      <label>Setor (aplica o padrão do setor)
+        <select name="sector_id"><option value="">Sem setor – regras manuais</option>
+          ${sectors.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select>
       </label>
       <label class="check"><input type="checkbox" name="enabled" checked> Ativa</label>
       <div class="actions">
@@ -48,7 +55,8 @@ export async function show(element) {
   if (f) {
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const body = { name: f.name.value, location: f.location.value, source: f.source.value, enabled: f.enabled.checked };
+      const body = { name: f.name.value, location: f.location.value, source: f.source.value, enabled: f.enabled.checked,
+        sector_id: f.sector_id.value ? Number(f.sector_id.value) : null };
       try {
         await api(f.id.value ? `/api/cameras/${f.id.value}` : "/api/cameras",
           { method: f.id.value ? "PUT" : "POST", body });
@@ -72,7 +80,7 @@ export async function show(element) {
     if (edit) {
       const c = cameras.find((x) => x.id === Number(edit));
       f.id.value = c.id; f.name.value = c.name; f.location.value = c.location;
-      f.source.value = c.source; f.enabled.checked = c.enabled;
+      f.source.value = c.source; f.enabled.checked = c.enabled; f.sector_id.value = c.sector_id ?? "";
       f.scrollIntoView({ behavior: "smooth" });
     }
     if (del && confirm("Excluir a câmera, suas regras e todas as ocorrências dela?")) {

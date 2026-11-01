@@ -60,6 +60,7 @@ class CameraIn(BaseModel):
     location: str = ""
     source: str = Field(min_length=1, max_length=500)
     enabled: bool = True
+    sector_id: int | None = None
 
 
 class CameraOut(CameraIn):
@@ -98,6 +99,64 @@ class RuleIn(BaseModel):
 class RuleOut(RuleIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    sector_id: int | None = None
+
+
+# ---------- Unidades e setores ----------
+
+PPEItem = Literal["helmet", "vest", "glasses", "gloves", "mask"]
+
+
+class UnitIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    active: bool = True
+
+
+class UnitOut(UnitIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class BehaviorIn(BaseModel):
+    enabled: bool = False
+    severity: Severity = "alta"
+    max: int | None = Field(None, ge=0, le=100)
+
+
+class SectorIn(BaseModel):
+    unit_id: int
+    name: str = Field(min_length=1, max_length=120)
+    required_ppe: list[PPEItem] = []
+    delivery_ppe: list[str] = []
+    ppe_severity: Severity = "alta"
+    behaviors: dict[Literal["restricted_zone", "max_people", "fire_smoke"], BehaviorIn] = {}
+    start_hour: int | None = Field(None, ge=0, le=23)
+    end_hour: int | None = Field(None, ge=0, le=24)
+    reference: str = Field("", max_length=200)
+
+    @field_validator("delivery_ppe")
+    @classmethod
+    def clean_delivery(cls, items: list[str]) -> list[str]:
+        return [i.strip()[:80] for i in items if i.strip()][:30]
+
+
+class SectorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    unit_id: int
+    name: str
+    required_ppe: list[str]
+    delivery_ppe: list[str]
+    ppe_severity: str
+    behaviors: dict
+    start_hour: int | None
+    end_hour: int | None
+    reference: str
+    version: int
+    updated_at: datetime
+    updated_by: str
+    cameras: int = 0
+    rules: int = 0
 
 
 # ---------- Ocorrências e plano de ação ----------

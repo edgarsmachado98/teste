@@ -56,6 +56,44 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
 
 
+class Unit(Base):
+    """Unidade (planta) do cliente."""
+
+    __tablename__ = "units"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Sector(Base):
+    """Setor com o seu padrão de segurança: EPI obrigatório e regras de comportamento.
+    Ao aplicar o padrão, as regras de detecção das câmeras do setor são geradas."""
+
+    __tablename__ = "sectors"
+    __table_args__ = (UniqueConstraint("unit_id", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    # EPI verificado pela câmera (helmet, vest, glasses, gloves, mask)
+    required_ppe: Mapped[list] = mapped_column(JSON, default=list)
+    # EPI só com controle de entrega (a câmera não identifica com segurança), ex.: "Botina"
+    delivery_ppe: Mapped[list] = mapped_column(JSON, default=list)
+    ppe_severity: Mapped[str] = mapped_column(String(20), default="alta")
+    # {"restricted_zone": {"enabled", "severity"}, "max_people": {"enabled", "max", "severity"},
+    #  "fire_smoke": {"enabled", "severity"}}
+    behaviors: Mapped[dict] = mapped_column(JSON, default=dict)
+    start_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reference: Mapped[str] = mapped_column(String(200), default="")  # ex.: OS-SOL-03 · NR-6
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_by: Mapped[str] = mapped_column(String(120), default="")
+
+    unit: Mapped[Unit] = relationship()
+
+
 class Camera(Base):
     __tablename__ = "cameras"
 
@@ -69,7 +107,9 @@ class Camera(Base):
     # Saúde: ok | offline | escura | obstruida | congelada (None = ainda sem imagem)
     health: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_frame_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectors.id", ondelete="SET NULL"), nullable=True)
 
+    sector: Mapped[Sector | None] = relationship()
     rules: Mapped[list["Rule"]] = relationship(back_populates="camera", cascade="all, delete-orphan")
 
 
@@ -92,6 +132,8 @@ class Rule(Base):
     end_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
     severity: Mapped[str] = mapped_column(String(20), default="alta")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Regra gerada pelo padrão de um setor (None = criada manualmente)
+    sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectors.id", ondelete="SET NULL"), nullable=True)
 
     camera: Mapped[Camera] = relationship(back_populates="rules")
 

@@ -7,8 +7,9 @@ from .. import audit
 from ..auth import current_user, require_role
 from ..common import EVIDENCE_DIR, get_or_404
 from ..database import get_db
-from ..models import Camera, Rule, User
+from ..models import Camera, Rule, Sector, User
 from ..schemas import CameraIn, CameraOut, RuleIn, RuleOut
+from ..sectors import apply_sector
 
 router = APIRouter(prefix="/api")
 viewer = [Depends(current_user)]
@@ -30,10 +31,15 @@ def list_cameras(db: Session = Depends(get_db)):
 @router.post("/cameras", response_model=CameraOut, status_code=201)
 def create_camera(data: CameraIn, request: Request, user: User = Depends(require_role("tecnico")),
                   db: Session = Depends(get_db)):
+    if data.sector_id is not None:
+        get_or_404(db, Sector, data.sector_id)
     camera = Camera(**data.model_dump())
     db.add(camera)
     db.flush()
     audit.record(db, user, "camera_criada", "camera", camera.id, f"{camera.name} – {_mask(camera.source)}", request)
+    if camera.sector_id:
+        db.refresh(camera)
+        apply_sector(db, camera.sector)  # gera as regras do padrão do setor
     db.commit()
     return camera
 
@@ -42,9 +48,19 @@ def create_camera(data: CameraIn, request: Request, user: User = Depends(require
 def update_camera(camera_id: int, data: CameraIn, request: Request, user: User = Depends(require_role("tecnico")),
                   db: Session = Depends(get_db)):
     camera = get_or_404(db, Camera, camera_id)
+    if data.sector_id is not None:
+        get_or_404(db, Sector, data.sector_id)
+    old_sector = camera.sector
     for key, value in data.model_dump().items():
         setattr(camera, key, value)
     audit.record(db, user, "camera_alterada", "camera", camera.id, camera.name, request)
+    if old_sector is None or old_sector.id != camera.sector_id:
+        db.flush()
+        db.refresh(camera)
+        if old_sector is not None:
+            apply_sector(db, old_sector)  # remove as regras do setor antigo desta câmera
+        if camera.sector is not None:
+            apply_sector(db, camera.sector)
     db.commit()
     return camera
 
