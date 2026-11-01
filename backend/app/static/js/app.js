@@ -7,7 +7,6 @@ import * as acoes from "./views/acoes.js";
 import * as aovivo from "./views/aovivo.js";
 import * as auditoria from "./views/auditoria.js";
 import * as cadastros from "./views/cadastros.js";
-import * as cameras from "./views/cameras.js";
 import * as indicadores from "./views/indicadores.js";
 import * as ocorrencias from "./views/ocorrencias.js";
 import * as painel from "./views/painel.js";
@@ -17,7 +16,7 @@ import * as parametros from "./views/parametros.js";
 import * as sistema from "./views/sistema.js";
 import * as usuarios from "./views/usuarios.js";
 
-const VIEWS = { cadastros, painel, ocorrencias, acoes, indicadores, aovivo, cameras, regras, usuarios, auditoria, sistema,
+const VIEWS = { cadastros, painel, ocorrencias, acoes, indicadores, aovivo, regras, usuarios, auditoria, sistema,
   parametros, configuracoes };
 let current = null;
 
@@ -120,7 +119,13 @@ document.addEventListener("click", (e) => {
 // ---------- Navegação (pelo endereço: #painel, #ocorrencia-12, ...) ----------
 function route() {
   if (!session.user) return;
-  const hash = location.hash.slice(1) || "painel";
+  let hash = location.hash.slice(1) || "painel";
+  if (hash === "cameras") {
+    // o cadastro de câmeras fica em Cadastros (endereço antigo continua funcionando)
+    cadastros.openTab("cameras");
+    history.replaceState(null, "", "#cadastros");
+    hash = "cadastros";
+  }
   const match = hash.match(/^ocorrencia-(\d+)$/);
   const name = match ? "ocorrencias" : (VIEWS[hash] ? hash : "painel");
   const link = $(`#nav a[href="#${name}"]`);

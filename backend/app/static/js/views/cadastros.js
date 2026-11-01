@@ -1,14 +1,16 @@
 // Guia Cadastros: subguias de pessoas, setores e padrões, e regras de gradação.
 
 import { $, $$, can, esc, toast } from "../core.js";
+import * as cameras from "./cameras.js";
 import * as gradacao from "./gradacao.js";
 import * as historico from "./historico.js";
 import * as pessoas from "./pessoas.js";
 import * as setores from "./setores.js";
 
 const TABS = [
-  { id: "pessoas", label: "Pessoas", module: pessoas, role: "tecnico" },
   { id: "setores", label: "Setores e padrões", module: setores, role: "tecnico" },
+  { id: "cameras", label: "Câmeras", module: cameras, role: "tecnico" },
+  { id: "pessoas", label: "Pessoas", module: pessoas, role: "tecnico" },
   { id: "gradacao", label: "Regras de gradação", module: gradacao, role: "tecnico" },
 ];
 
@@ -57,4 +59,9 @@ export async function show(element) {
 
 export function openTab(id) {
   active = id;
+  if (el && el.classList.contains("active")) open(id);
+}
+
+export function onRealtime(data) {
+  if (active === "cameras") cameras.onRealtime?.(data);
 }

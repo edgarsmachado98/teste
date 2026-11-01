@@ -130,8 +130,8 @@ function renderEditor() {
           const zr = rules.find((r) => r.camera_id === c.id && r.sector_id === current.id && r.type === "restricted_zone");
           const zoneInfo = !zr ? "" : zr.zone.length ? badge("✓ zona desenhada", "good") : `<a href="#regras">${badge("▲ desenhar zona", "warn")}</a>`;
           return `<div class="cam-row"><span class="mono">${esc(c.name)}</span><span class="hint">${esc(c.location || "")}</span>${zoneInfo}</div>`;
-        }).join("") || `<p class="hint">Nenhuma câmera. Associe câmeras a este setor na guia <a href="#cameras">Câmeras</a>.</p>`)
-          : `<p class="hint">Salve o setor e associe as câmeras na guia Câmeras.</p>`}
+        }).join("") || `<p class="hint">Nenhuma câmera. Associe câmeras a este setor em <a href="#cameras">Cadastros › Câmeras</a>.</p>`)
+          : `<p class="hint">Salve o setor e associe as câmeras em Cadastros › Câmeras.</p>`}
       </div>
       <div class="card preview-card"><h3>Prévia ao salvar</h3><div id="sector-preview"></div></div>
     </div>`;
@@ -148,7 +148,7 @@ function renderEditor() {
         : await api("/api/sectors", { method: "POST", body: data });
       const a = r.applied;
       toast(current.id ? `Padrão salvo (v${r.sector.version}): ${a.created.length} regra(s) criada(s), ${a.updated.length} atualizada(s), ${a.removed.length} removida(s).`
-        : "Setor criado. Associe as câmeras a ele na guia Câmeras.", "ok", 6000);
+        : "Setor criado. Associe as câmeras a ele em Cadastros › Câmeras.", "ok", 6000);
       current = r.sector;
       await load();
     } catch (err) { toast(esc(err.message), "danger"); }

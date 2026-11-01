@@ -3,6 +3,16 @@ import { $, api, can, esc, fmtDateTime, healthBadge, toast } from "../core.js";
 let el;
 let cameras = [];
 let sectors = [];
+let units = [];
+
+function sectorSelect() {
+  if (!sectors.length) return `<option value="">Nenhum setor cadastrado – crie em Setores e padrões</option>`;
+  const groups = units.map((u) => {
+    const list = sectors.filter((s) => s.unit_id === u.id);
+    return list.length ? `<optgroup label="${esc(u.name)}">${list.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</optgroup>` : "";
+  }).join("");
+  return `<option value="">Sem setor – regras manuais</option>${groups}`;
+}
 
 async function load() {
   cameras = await api("/api/cameras");
@@ -25,20 +35,20 @@ async function load() {
 
 export async function show(element) {
   el = element;
-  sectors = await api("/api/sectors");
+  [sectors, units] = await Promise.all([api("/api/sectors"), api("/api/units")]);
   el.innerHTML = `
-    <h2>Câmeras</h2>
     ${can("tecnico") ? `
     <form id="camera-form" class="card form">
+      <h3 class="wide" id="camera-form-title" style="margin:0">Nova câmera</h3>
       <input type="hidden" name="id">
-      <label>Nome <input name="name" required placeholder="Linha de produção 1"></label>
-      <label>Local / área <input name="location" placeholder="Galpão A – Prensas"></label>
+      <label>Nome da câmera <input name="name" required maxlength="120" placeholder="ex.: Prensa hidráulica 1">
+        <small class="hint">Como a câmera aparece nos alertas, ocorrências e relatórios</small></label>
+      <label>Setor <select name="sector_id">${sectorSelect()}</select>
+        <small class="hint">O padrão do setor gera as regras de detecção desta câmera</small></label>
+      <label>Local / área <input name="location" placeholder="ex.: Galpão A – Prensas">
+        <small class="hint">Use nomes padronizados: os indicadores agrupam por área</small></label>
       <label class="wide">Fonte (RTSP ou arquivo)
         <input name="source" required placeholder="rtsp://usuario:senha@192.168.0.10:554/stream1">
-      </label>
-      <label>Setor (aplica o padrão do setor)
-        <select name="sector_id"><option value="">Sem setor – regras manuais</option>
-          ${sectors.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select>
       </label>
       <label class="check"><input type="checkbox" name="enabled" checked> Ativa</label>
       <div class="actions">
@@ -47,8 +57,8 @@ export async function show(element) {
         <button type="reset" class="secondary">Limpar</button>
       </div>
     </form>` : ""}
-    <p class="hint">Use o campo <b>Local / área</b> de forma padronizada: os indicadores são agrupados por ele.
-      A saúde indica se a câmera está sem sinal, escura, obstruída ou congelada.</p>
+    <p class="hint">A saúde indica se a câmera está sem sinal, escura, obstruída ou congelada. Para ver as imagens, use a guia
+      <a href="#aovivo">Ao vivo</a>.</p>
     <div class="table-wrap"><table id="cameras-table"></table></div>`;
 
   const f = $("#camera-form", el);
@@ -66,7 +76,7 @@ export async function show(element) {
         load();
       } catch (err) { toast(esc(err.message), "danger"); }
     });
-    f.addEventListener("reset", () => { f.id.value = ""; });
+    f.addEventListener("reset", () => { f.id.value = ""; $("#camera-form-title", el).textContent = "Nova câmera"; });
     $("#use-webcam", el).addEventListener("click", () => {
       if (!f.name.value) f.name.value = "Webcam";
       f.source.value = "0";
@@ -81,6 +91,7 @@ export async function show(element) {
       const c = cameras.find((x) => x.id === Number(edit));
       f.id.value = c.id; f.name.value = c.name; f.location.value = c.location;
       f.source.value = c.source; f.enabled.checked = c.enabled; f.sector_id.value = c.sector_id ?? "";
+      $("#camera-form-title", el).textContent = `Editar câmera: ${c.name}`;
       f.scrollIntoView({ behavior: "smooth" });
     }
     if (del && confirm("Excluir a câmera, suas regras e todas as ocorrências dela?")) {
@@ -96,3 +107,6 @@ export async function show(element) {
 export function onRealtime(data) {
   if (data.kind === "camera_health") load();
 }
+
+// Usado como subguia de Cadastros
+export const render = show;

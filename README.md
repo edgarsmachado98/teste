@@ -102,7 +102,7 @@ docker compose up -d --build
 Acesse http://localhost:8000 e crie o administrador. Depois:
 
 1. **Usuários**: cadastre técnicos de segurança, gestores e operadores.
-2. **Câmeras**: cadastre a URL RTSP, por exemplo `rtsp://usuario:senha@192.168.0.10:554/stream1`, e a
+2. **Cadastros → Setores e padrões e Cadastros → Câmeras**: crie os setores e cadastre cada câmera (nome, setor e URL RTSP), por exemplo `rtsp://usuario:senha@192.168.0.10:554/stream1`, e a
    **área** de forma padronizada (os indicadores agrupam por ela).
    Para testar sem câmera, coloque um vídeo em `./videos/` e use `videos/teste.mp4` como fonte.
 3. **Ao vivo**: confira se o detector está recebendo a imagem.
