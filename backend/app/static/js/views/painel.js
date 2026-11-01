@@ -22,11 +22,12 @@ function card(ev) {
 }
 
 async function load() {
-  const [summary, pending, cameras, overdue] = await Promise.all([
+  const [summary, pending, cameras, overdue, approvals] = await Promise.all([
     api("/api/reports/summary"),
     api("/api/events?status=nova&limit=24"),
     api("/api/cameras"),
     api("/api/actions?overdue=true"),
+    can("gestor") ? api("/api/measures?status=pendente_aprovacao") : Promise.resolve([]),
   ]);
   const t = summary.totals;
   const c = summary.compliance;
@@ -60,6 +61,12 @@ async function load() {
       <div class="stat ${summary.actions.overdue ? "stat-bad" : ""}"><b>${summary.actions.overdue}</b>
         <span>Ações atrasadas · ${summary.actions.open} abertas</span></div>
     </div>
+
+    ${approvals.length ? `
+      <div class="card alert-strip" style="border-color: var(--accent); background: #2a2414">
+        <b>${approvals.length} advertência(s) aguardando sua aprovação:</b>
+        ${approvals.slice(0, 5).map((m) => `<a href="#ocorrencia-${m.event_id}">${esc(m.person_name)} (${esc(m.number)})</a>`).join(" · ")}
+      </div>` : ""}
 
     ${overdue.length ? `
       <div class="card">

@@ -182,6 +182,9 @@ class EventOut(BaseModel):
     closed_at: datetime | None
     open_actions: int
     created_at: datetime
+    person_id: int | None = None
+    person_name: str | None = None
+    identification: str | None = None
 
 
 class EventUpdate(BaseModel):
@@ -239,6 +242,9 @@ class AuditOut(BaseModel):
 class EventDetail(EventOut):
     actions: list[ActionOut]
     history: list[AuditOut]
+    measures: list[dict] = []
+    identified_by: str | None = None
+    identified_at: datetime | None = None
 
 
 # ---------- Detector ----------

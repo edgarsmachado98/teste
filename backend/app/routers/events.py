@@ -11,7 +11,7 @@ from .. import audit, notifier, storage
 from ..auth import current_user, has_role, require_role
 from ..common import EVIDENCE_DIR, action_out, event_out, get_or_404
 from ..database import get_db
-from ..models import ActionItem, AuditLog, Event, User
+from ..models import ActionItem, AuditLog, Event, Measure, User
 from ..schemas import ActionIn, ActionOut, ActionUpdate, AuditOut, EventDetail, EventOut, EventUpdate
 from ..timeutil import local_tz
 from ..ws import hub
@@ -38,7 +38,7 @@ def local_range(start: date | None, end: date | None) -> tuple[datetime | None, 
 def event_query():
     return select(Event).options(
         selectinload(Event.camera), selectinload(Event.rule), selectinload(Event.reviewed_by),
-        selectinload(Event.actions),
+        selectinload(Event.actions), selectinload(Event.person), selectinload(Event.identified_by),
     )
 
 
@@ -80,10 +80,16 @@ def event_detail(event_id: int, db: Session = Depends(get_db)):
         select(AuditLog).where(AuditLog.entity == "ocorrencia", AuditLog.entity_id == event_id)
         .order_by(AuditLog.created_at, AuditLog.id)
     ).all()
+    from .measures import measure_out, measure_query
+
+    measures = db.scalars(measure_query().where(Measure.event_id == event_id).order_by(Measure.id)).all()
     return {
         **event_out(event),
         "actions": [action_out(a) for a in sorted(event.actions, key=lambda a: a.id)],
         "history": [AuditOut.model_validate(h) for h in history],
+        "measures": [measure_out(m) for m in measures],
+        "identified_by": event.identified_by.name if event.identified_by else None,
+        "identified_at": event.identified_at,
     }
 
 

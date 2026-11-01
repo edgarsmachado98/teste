@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Termo – VigIA</title>
+  <link rel="stylesheet" href="relatorio.css">
+  <style>
+    #report { max-width: 190mm; font-family: Georgia, "IBM Plex Serif", serif; font-size: 14px; line-height: 1.6; }
+    .doc-head { display: flex; justify-content: space-between; font: 500 12px system-ui, sans-serif; color: var(--muted);
+      border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+    h1 { font: 600 20px Georgia, serif; margin: 22px 0 14px; }
+    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 56px; font: 12px system-ui, sans-serif; }
+    .sign-grid div { border-top: 1px solid #16191d; padding-top: 6px; text-align: center; min-height: 20px; position: relative; }
+    .sign-grid img { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); max-height: 70px; mix-blend-mode: multiply; }
+    .meta { font: 12px system-ui, sans-serif; color: var(--muted); margin-top: 28px; border-top: 1px solid var(--line); padding-top: 10px; }
+    .box { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin: 12px 0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="toolbar no-print"><span>Confira o termo e imprima para assinatura, ou salve em PDF para o dossiê.</span>
+    <button id="print">Imprimir / Salvar PDF</button></div>
+  <article id="report"><p>Carregando…</p></article>
+  <script type="module" src="js/termo.js"></script>
+</body>
+</html>

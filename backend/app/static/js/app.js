@@ -103,6 +103,13 @@ $("#logout").addEventListener("click", async () => {
 // Botões "Cancelar/Fechar" de todos os diálogos
 document.addEventListener("click", (e) => {
   if (e.target.matches("[data-close]")) e.target.closest("dialog").close();
+  const hist = e.target.closest("[data-history]");
+  if (hist) {
+    e.preventDefault();
+    hist.closest("dialog")?.close();
+    cadastros.openHistory(Number(hist.dataset.history));
+    location.hash = "#cadastros";
+  }
   const img = e.target.closest("img[data-full]");
   if (img) {
     $("#viewer-img").src = img.dataset.full;

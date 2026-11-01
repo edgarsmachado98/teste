@@ -231,11 +231,18 @@ class Event(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    # Pessoa envolvida, identificada por um técnico (lista | numero | busca | nao_identificado)
+    person_id: Mapped[int | None] = mapped_column(ForeignKey("people.id", ondelete="SET NULL"), nullable=True, index=True)
+    identification: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    identified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    identified_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     camera: Mapped[Camera] = relationship()
     rule: Mapped[Rule | None] = relationship()
-    reviewed_by: Mapped[User | None] = relationship()
+    reviewed_by: Mapped[User | None] = relationship(foreign_keys=[reviewed_by_id])
+    identified_by: Mapped[User | None] = relationship(foreign_keys=[identified_by_id])
+    person: Mapped["Person | None"] = relationship()
     actions: Mapped[list["ActionItem"]] = relationship(back_populates="event")
 
 
@@ -262,6 +269,43 @@ class ActionItem(Base):
     event: Mapped[Event | None] = relationship(back_populates="actions")
     responsible: Mapped[User | None] = relationship(foreign_keys=[responsible_id])
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+
+
+MEASURE_TYPES = ("orientacao", "treinamento", "advertencia", "rh")
+MEASURE_STATUSES = ("pendente_aprovacao", "aplicada", "cancelada")
+ACK_STATUSES = ("pendente", "assinada", "impressa", "recusada")
+
+
+class Measure(Base):
+    """Medida educativa ou disciplinar aplicada a partir de uma ocorrência."""
+
+    __tablename__ = "measures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)  # VIG-2026-0001
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), nullable=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(20))
+    suggested_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    justification: Mapped[str] = mapped_column(Text, default="")  # quando diferente da sugerida
+    description: Mapped[str] = mapped_column(Text, default="")
+    training_name: Mapped[str] = mapped_column(String(160), default="")
+    training_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="aplicada")
+    approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    ack: Mapped[str] = mapped_column(String(20), default="pendente")
+    signature_file: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    ack_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    statement: Mapped[str] = mapped_column(Text, default="")  # versão dos fatos do colaborador
+    witnesses: Mapped[str] = mapped_column(Text, default="")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    event: Mapped["Event | None"] = relationship()
+    person: Mapped["Person"] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+    approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
 
 
 class StorageDeletion(Base):

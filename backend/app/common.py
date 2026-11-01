@@ -78,6 +78,9 @@ def event_out(event: Event) -> dict:
         closed_at=event.closed_at,
         open_actions=sum(1 for a in event.actions if a.status == "aberta"),
         created_at=event.created_at,
+        person_id=event.person_id,
+        person_name=event.person.name if event.person_id and event.person else None,
+        identification=event.identification,
     ).model_dump()
 
 

@@ -177,3 +177,129 @@ def test_people_registry(client, admin, tmp_path):
     bruno = client.get(f"/api/people/{person['id']}", headers=admin).json()
     assert bruno["role"] == "Soldador TIG"
     assert client.get("/api/people/import/template", headers=admin).text.startswith("﻿nome;cpf")
+
+
+PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+
+def test_identification_and_measures(client, admin):
+    from datetime import datetime, timedelta, timezone
+
+    from app.database import SessionLocal
+    from app.models import Event
+
+    unit_id = client.get("/api/units", headers=admin).json()[0]["id"]
+    sector = next(s for s in client.get("/api/sectors", headers=admin).json() if s["name"] == "Solda")
+    _, tecnico = make_user(client, admin, "tec-medidas@fabrica.com", "tecnico")
+    _, gestor = make_user(client, admin, "gestor-medidas@fabrica.com", "gestor")
+    _, operador = make_user(client, admin, "op-medidas@fabrica.com", "operador")
+    cam = client.post("/api/cameras", headers=admin, json={"name": "Célula 9", "source": "9", "sector_id": sector["id"]}).json()
+    rule = next(r for r in client.get(f"/api/rules?camera_id={cam['id']}", headers=admin).json() if r["type"] == "ppe_missing")
+    people = client.get(f"/api/people?sector_id={sector['id']}", headers=admin).json()["items"]
+    camila = next(p for p in people if p["name"] == "Camila Duarte")
+
+    def new_event(days_ago=0, with_image=True):
+        files = {"snapshot": ("e.jpg", b"\xff\xd8img", "image/jpeg")} if with_image else None
+        ev = client.post("/api/detector/events", headers=DET, files=files,
+                         data={"camera_id": cam["id"], "rule_id": rule["id"], "message": "1 pessoa(s) sem capacete"}).json()
+        if days_ago:
+            with SessionLocal() as db:
+                db.get(Event, ev["id"]).created_at = datetime.now(timezone.utc) - timedelta(days=days_ago)
+                db.commit()
+        return ev
+
+    ev1 = new_event(days_ago=20)
+    # candidatos: pessoas do setor da câmera; busca pelo nº do colete
+    assert client.get(f"/api/events/{ev1['id']}/candidates", headers=operador).status_code == 403
+    cands = client.get(f"/api/events/{ev1['id']}/candidates", headers=tecnico).json()
+    assert cands["has_sector"] and {c["name"] for c in cands["candidates"]} >= {"Camila Duarte", "Bruno Henrique Costa"}
+    assert all(c["cpf"].startswith("***") for c in cands["candidates"])
+    by_badge = client.get(f"/api/events/{ev1['id']}/candidates?q=0501", headers=tecnico).json()["candidates"]
+    assert [c["name"] for c in by_badge] == ["Camila Duarte"]
+
+    # medida antes de identificar: erro claro
+    assert client.post("/api/measures", headers=tecnico, json={"event_id": ev1["id"], "type": "orientacao"}).status_code == 400
+    ident = client.post(f"/api/events/{ev1['id']}/identify", headers=tecnico, json={"person_id": camila["id"], "method": "numero"})
+    assert ident.status_code == 200
+    detail = client.get(f"/api/events/{ev1['id']}", headers=tecnico).json()
+    assert detail["person_name"] == "Camila Duarte" and detail["status"] == "confirmada"
+
+    # 1ª ocorrência → orientação
+    sug = client.get(f"/api/events/{ev1['id']}/suggestion", headers=tecnico).json()
+    assert sug["type"] == "orientacao" and sug["count"] == 1
+    m1 = client.post("/api/measures", headers=tecnico, json={"event_id": ev1["id"], "type": "orientacao",
+                                                            "description": "Conversa no posto",
+                                                            "training_name": "ignorado", "training_date": "2026-12-01"}).json()
+    assert m1["status"] == "aplicada" and m1["number"].startswith("VIG-")
+    assert m1["training_name"] == "" and m1["training_date"] is None  # só medidas de treinamento guardam o curso
+
+    # 2ª → treinamento (cria treinamento agendado); escolher outra exige justificativa
+    ev2 = new_event(days_ago=5)
+    client.post(f"/api/events/{ev2['id']}/identify", headers=tecnico, json={"person_id": camila["id"]})
+    sug = client.get(f"/api/events/{ev2['id']}/suggestion", headers=tecnico).json()
+    assert sug["type"] == "treinamento" and sug["count"] == 2 and sug["next_type"] == "advertencia"
+    bad = client.post("/api/measures", headers=tecnico, json={"event_id": ev2["id"], "type": "orientacao"})
+    assert bad.status_code == 422 and "justifique" in bad.json()["detail"]
+    m2 = client.post("/api/measures", headers=tecnico, json={"event_id": ev2["id"], "type": "treinamento",
+                                                            "training_name": "Reciclagem NR-6", "training_date": "2026-11-10"}).json()
+    person = client.get(f"/api/people/{camila['id']}", headers=admin).json()
+    assert any(t["name"] == "Reciclagem NR-6" and t["status"] == "agendado" and t["measure_id"] == m2["id"]
+               for t in person["trainings"])
+
+    # ciência: assinatura no celular, com a versão do colaborador
+    ack = client.post(f"/api/measures/{m2['id']}/ack", headers=tecnico, json={
+        "ack": "assinada", "signature": PNG, "statement": "Tirei o capacete para ajustar o protetor auricular"})
+    assert ack.status_code == 200 and ack.json()["ack"] == "assinada" and ack.json()["has_signature"]
+    assert client.get(f"/api/measures/{m2['id']}/signature", headers=tecnico).content.startswith(b"\x89PNG")
+    assert client.post(f"/api/measures/{m1['id']}/ack", headers=tecnico, json={"ack": "assinada"}).status_code == 422
+
+    # 3ª → advertência: criada por técnico fica aguardando aprovação do gestor; sem evidência é recusada
+    ev3 = new_event(with_image=False)
+    client.post(f"/api/events/{ev3['id']}/identify", headers=tecnico, json={"person_id": camila["id"]})
+    assert client.get(f"/api/events/{ev3['id']}/suggestion", headers=tecnico).json()["type"] == "advertencia"
+    noev = client.post("/api/measures", headers=tecnico, json={"event_id": ev3["id"], "type": "advertencia"})
+    assert noev.status_code == 400 and "evidência" in noev.json()["detail"]
+    ev4 = new_event()
+    client.post(f"/api/events/{ev4['id']}/identify", headers=tecnico, json={"person_id": camila["id"]})
+    m4 = client.post("/api/measures", headers=tecnico, json={"event_id": ev4["id"], "type": "rh",
+                                                            "justification": "quarta ocorrência no período"}).json()
+    assert m4["type"] == "rh"
+    ev5 = new_event()
+    client.post(f"/api/events/{ev5['id']}/identify", headers=tecnico, json={"person_id": camila["id"]})
+    m5 = client.post("/api/measures", headers=tecnico, json={"event_id": ev5["id"], "type": "advertencia",
+                                                            "justification": "advertência conforme regulamento"}).json()
+    assert m5["status"] == "pendente_aprovacao"
+    assert client.post(f"/api/measures/{m5['id']}/ack", headers=tecnico, json={"ack": "impressa"}).status_code == 400
+    assert client.post(f"/api/measures/{m5['id']}/decision", headers=tecnico, json={"approve": True}).status_code == 403
+    dec = client.post(f"/api/measures/{m5['id']}/decision", headers=gestor, json={"approve": True}).json()
+    assert dec["status"] == "aplicada" and dec["approved_by"]
+    pending = client.get("/api/measures?status=pendente_aprovacao", headers=gestor).json()
+    assert all(m["id"] != m5["id"] for m in pending)
+
+    # recusa com testemunhas obrigatórias (configurável) e exceção por gravidade
+    grading = client.get("/api/grading", headers=tecnico).json()
+    assert client.put("/api/grading", headers=tecnico, json=grading).status_code == 403
+    assert client.put("/api/grading", headers=admin, json={**grading, "window_days": 2}).status_code == 400
+    cfg = client.put("/api/grading", headers=admin, json={**grading, "require_witnesses_on_refusal": True,
+                                                         "type_start": {"restricted_zone": 2}}).json()
+    assert cfg["type_start"] == {"restricted_zone": 2}
+    assert client.post(f"/api/measures/{m5['id']}/ack", headers=tecnico, json={"ack": "recusada"}).status_code == 422
+    assert client.post(f"/api/measures/{m5['id']}/ack", headers=tecnico,
+                       json={"ack": "recusada", "witnesses": "Elaine Prado e João Vieira"}).status_code == 200
+
+    # não identificado
+    ev6 = new_event()
+    client.post(f"/api/events/{ev6['id']}/identify", headers=tecnico, json={"person_id": None})
+    assert client.get(f"/api/events/{ev6['id']}", headers=tecnico).json()["identification"] == "nao_identificado"
+
+    # histórico: linha do tempo, resumo e próximo passo; consulta auditada
+    hist = client.get(f"/api/people/{camila['id']}/history", headers=tecnico).json()
+    assert hist["summary"]["events_window"] == 5 and hist["summary"]["warnings"] == 1
+    assert hist["summary"]["orientations"] == 1 and hist["summary"]["trainings"] == 1
+    assert hist["next"]["type"] == "rh"
+    kinds = {t["kind"] for t in hist["timeline"]}
+    assert kinds == {"ocorrencia", "medida", "treinamento"}
+    assert client.get(f"/api/people/{camila['id']}/history", headers=operador).status_code == 403
+    log = client.get(f"/api/audit?entity=pessoa&entity_id={camila['id']}", headers=admin).json()
+    assert any(a["action"] == "historico_consultado" for a in log)
+    assert client.get(f"/api/events/{ev2['id']}", headers=tecnico).json()["measures"][0]["number"] == m2["number"]

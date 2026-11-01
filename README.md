@@ -21,6 +21,9 @@ Os alertas chegam por **e-mail**, **WhatsApp** e **na tela**, em tempo real.
 | **Armazenamento de rede (NAS)** | Fotos, clipes, backups e relatórios no storage de rede, com fila quando o NAS está fora do ar |
 | **Saúde das câmeras** | Alerta quando a câmera fica sem sinal, escura, obstruída/desfocada ou congelada |
 | **Usuários e auditoria** | Perfis de acesso e registro de quem fez o quê, quando e de onde |
+| **Cadastros: setores e padrões** | Por setor: EPI verificado pela câmera e EPI só com controle de entrega, regras de comportamento, severidade e horário. As regras de detecção das câmeras do setor são geradas automaticamente, com prévia e modelos prontos |
+| **Cadastros: pessoas** | CPF validado e mascarado, matrícula, setor, turno, nº do colete, foto de identificação (com ciência registrada), EPIs entregues com CA e validade, treinamentos e importação de planilha |
+| **Identificação e medidas** | Na ocorrência, o técnico identifica a pessoa (candidatos do setor e turno da câmera, busca por nome ou nº do colete — sem reconhecimento facial) e aplica a medida sugerida pela gradação: orientação, treinamento, advertência (com aprovação) ou RH; ciência com assinatura na tela, termo para impressão e histórico por pessoa |
 | **Parâmetros** (administradores) | Retenção de imagens e logs, uso do sistema (CPU, memória, disco) com limites de alerta, canais de alerta (e-mail, WhatsApp) e severidade por canal, com envio de teste, e dimensionamento de recursos |
 | **Configurações** (administradores) | Conexão com storage de rede (NAS), backup (agendado ou manual, com ou sem evidências) e restauração |
 
@@ -132,6 +135,27 @@ Acesse http://localhost:8000 e crie o administrador. Depois:
 4. **Relatório automático**: configure SMTP e `REPORT_EMAILS`. Por padrão, todo dia 1 sai o PDF do
    mês anterior (`REPORT_FREQUENCY=semanal` para toda segunda-feira). Na tela **Sistema** dá para
    enviar um relatório na hora.
+
+### Identificação de pessoas e medidas (LGPD)
+
+O objetivo é orientar, treinar e, em reincidência, advertir colaboradores que deixam de usar EPI ou entram
+em áreas de risco, **sem biometria**:
+
+- **Identificação assistida:** na ocorrência confirmada, o técnico escolhe a pessoa numa lista que o
+  sistema ordena pelo setor da câmera e pelo turno do horário (com a foto do cadastro para comparar), ou
+  busca por nome, matrícula, CPF ou **número do colete/crachá**. Não há reconhecimento facial: o
+  tratamento fica no nível comum da LGPD (obrigação legal de fiscalizar o uso de EPI — CLT art. 158 e NR-6).
+- **Gradação:** a medida é **sugerida** pelo histórico (padrão: 1ª orientação, 2ª treinamento, 3ª
+  advertência, 4ª RH, em 90 dias por tipo de desvio; desvios graves começam acima). Quem aplica decide;
+  escolher outra medida exige justificativa. Advertência registrada por técnico só é emitida após
+  aprovação de um gestor ou administrador e exige evidência.
+- **Ciência:** assinatura com o dedo na tela (celular ou tablet), termo impresso ou recusa com
+  testemunhas. O colaborador pode registrar a sua versão dos fatos; assinar indica ciência, não concordância.
+- **Acesso:** o histórico por pessoa é visível para técnicos, gestores e administradores, e cada consulta
+  fica na auditoria. O CPF completo só aparece para gestores e administradores. A foto é apagada quando a
+  pessoa é desligada.
+- **Transparência:** use o texto pronto da guia *Cadastros → Regras de gradação* na integração, na ordem de
+  serviço e no regulamento interno. Revise-o, e o modelo de termo, com o jurídico/RH de cada cliente.
 
 ### Parâmetros e Configurações pelo painel
 

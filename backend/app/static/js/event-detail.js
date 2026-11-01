@@ -2,6 +2,7 @@
 
 import { cancelAction, openActionForm, openCompleteForm } from "./actions-ui.js";
 import { mountClipPlayer } from "./clip-player.js";
+import { decideMeasure, openAck, openIdentify, openMeasure } from "./measures-ui.js";
 import {
   $, ACTION_STATUS, CLASS_LABELS, TYPE_LABELS, api, badge, can, esc, fmtDate, fmtDateTime, session,
   statusBadge, toast, withToken,
@@ -50,6 +51,40 @@ function actionRow(a) {
       </div>
       <div class="actions">${buttons}</div>
     </li>`;
+}
+
+const MEASURE_STATUS = { pendente_aprovacao: ["aguardando aprovação", "warn"], aplicada: ["aplicada", "good"], cancelada: ["cancelada", "muted"] };
+const ACK_KIND = { pendente: "warn", assinada: "good", impressa: "good", recusada: "bad" };
+
+function personSection(ev) {
+  if (!can("tecnico") || ev.status === "nova" || ev.status === "descartada") return "";
+  const who = ev.person_id
+    ? `<a href="#cadastros" data-history="${ev.person_id}"><b>${esc(ev.person_name)}</b></a>
+       <span class="hint">identificada por ${esc(ev.identified_by || "–")} em ${fmtDateTime(ev.identified_at)}</span>`
+    : ev.identification === "nao_identificado" ? `<span class="hint">Não foi possível identificar (${esc(ev.identified_by || "–")})</span>`
+      : `<span class="hint">Pessoa ainda não identificada.</span>`;
+  const measures = (ev.measures || []).map((m) => `
+    <li class="action-item">
+      <div><b>${esc(m.label)}</b> <span class="mono hint">${esc(m.number)}</span>
+        ${badge(MEASURE_STATUS[m.status][0], MEASURE_STATUS[m.status][1])} ${m.status === "aplicada" ? badge(`ciência: ${m.ack_label}`, ACK_KIND[m.ack]) : ""}
+        <div class="hint">${esc(m.created_by || "")} · ${fmtDateTime(m.created_at)}${m.training_name ? ` · ${esc(m.training_name)}` : ""}${m.justification ? ` · justificativa: ${esc(m.justification)}` : ""}</div>
+        ${m.statement ? `<div class="evidence">Versão do colaborador: ${esc(m.statement)}</div>` : ""}</div>
+      <div class="actions">
+        <a class="small-link" href="termo.html?id=${m.id}" target="_blank">Termo</a>
+        ${m.status === "pendente_aprovacao" && can("gestor") ? `<button class="small" data-decide="1" data-id="${m.id}">Aprovar</button>
+          <button class="small danger" data-decide="0" data-id="${m.id}">Recusar</button>` : ""}
+        ${m.status === "aplicada" && m.ack === "pendente" ? `<button class="small" data-ack="${m.id}">Colher ciência</button>` : ""}
+      </div>
+    </li>`).join("");
+  return `
+    <h3>Pessoa envolvida e medidas</h3>
+    <div class="person-line">${who}
+      <span class="actions">
+        <button class="small secondary" id="identify-btn">${ev.person_id ? "Alterar" : "Identificar pessoa"}</button>
+        ${ev.person_id ? `<button class="small" id="measure-btn">Aplicar medida</button>` : ""}
+      </span>
+    </div>
+    ${measures ? `<ul class="action-list">${measures}</ul>` : ""}`;
 }
 
 function render(ev) {
@@ -105,6 +140,8 @@ function render(ev) {
         </div>
       </div>
 
+      ${personSection(ev)}
+
       <h3>Plano de ação ${ev.open_actions ? badge(`${ev.open_actions} aberta(s)`, "warn") : ""}</h3>
       <ul class="action-list">${ev.actions.map(actionRow).join("") || `<li class="hint">Nenhuma ação registrada.</li>`}</ul>
       ${can("tecnico") && open ? `<button id="add-action">+ Adicionar ação</button>` : ""}
@@ -132,6 +169,25 @@ function render(ev) {
   }));
 
   const reload = async () => { await openEvent(ev.id); onChange(); };
+
+  d.querySelector("#identify-btn")?.addEventListener("click", async () => { if (await openIdentify(ev)) reload(); });
+  d.querySelector("#measure-btn")?.addEventListener("click", async () => {
+    try {
+      const m = await openMeasure(ev);
+      if (!m) return;
+      await reload();
+      if (m.status === "aplicada" && confirm("Colher a ciência do colaborador agora?")) { await openAck(m); reload(); }
+    } catch (err) { toast(esc(err.message), "danger"); }
+  });
+  d.querySelectorAll("[data-ack]").forEach((b) => b.addEventListener("click", async () => {
+    if (await openAck(ev.measures.find((m) => m.id === Number(b.dataset.ack)))) reload();
+  }));
+  d.querySelectorAll("[data-decide]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await decideMeasure(ev.measures.find((m) => m.id === Number(b.dataset.id)), b.dataset.decide === "1");
+      reload();
+    } catch (err) { toast(esc(err.message), "danger"); }
+  }));
 
   d.querySelector("#triage-form").addEventListener("submit", async (e) => {
     e.preventDefault();
