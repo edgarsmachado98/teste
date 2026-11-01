@@ -563,3 +563,14 @@ button { border-radius: 4px; }
 .attach-field { flex-direction: column; gap: 8px; padding: 10px 12px; }
 .attach-field .hint { margin: 0; }
 .file-drop input[type=file] { padding: 10px; border-style: dashed; cursor: pointer; background: var(--panel-2); }
+
+/* Destaque para identificar a pessoa da ocorrência */
+.identify-callout { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 4px 0 16px;
+  background: var(--t-warn-bg); border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--line));
+  border-left: 5px solid var(--accent); border-radius: 6px; }
+.identify-callout p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.identify-callout > div { flex: 1; min-width: 0; }
+.identify-ico { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 20px;
+  background: var(--accent); flex: 0 0 auto; }
+.identify-main { padding: 11px 20px; font-size: 15px; white-space: nowrap; }
+@media (max-width: 640px) { .identify-callout { flex-wrap: wrap; } .identify-main { width: 100%; } }

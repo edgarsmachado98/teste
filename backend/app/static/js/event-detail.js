@@ -78,13 +78,21 @@ function personSection(ev) {
       </div>
     </li>`).join("");
   return `
-    <h3>Pessoa envolvida e medidas</h3>
+    <h3 id="person-section">Pessoa envolvida e medidas</h3>
+    ${!ev.person_id && ev.identification !== "nao_identificado" ? `
+      <div class="identify-callout">
+        <span class="identify-ico" aria-hidden="true">👤</span>
+        <div><b>Quem é a pessoa nesta ocorrência?</b>
+          <p>Identifique o colaborador para registrar orientação, treinamento ou advertência no histórico dele.
+            A escolha é feita por você (sem reconhecimento facial).</p></div>
+        <button id="identify-btn" class="identify-main">Identificar pessoa</button>
+      </div>` : `
     <div class="person-line">${who}
       <span class="actions">
-        <button class="small secondary" id="identify-btn">${ev.person_id ? "Alterar" : "Identificar pessoa"}</button>
+        <button class="small secondary" id="identify-btn">${ev.person_id ? "Alterar" : "Tentar novamente"}</button>
         ${ev.person_id ? `<button class="small" id="measure-btn">Aplicar medida</button>` : ""}
       </span>
-    </div>
+    </div>`}
     ${measures ? `<ul class="action-list">${measures}</ul>` : ""}`;
 }
 
@@ -97,6 +105,9 @@ function render(ev) {
   }
   if (ev.status === "confirmada" && can("tecnico")) {
     statusButtons.push(`<button data-status="encerrada" ${ev.open_actions ? "disabled title='Conclua as ações abertas'" : ""}>Encerrar ocorrência</button>`);
+  }
+  if (ev.status === "confirmada" && can("tecnico") && !ev.person_id && ev.identification !== "nao_identificado") {
+    statusButtons.push(`<button class="secondary" data-jump-identify>👤 Identificar pessoa</button>`);
   }
   if ((ev.status === "descartada" || ev.status === "encerrada") && can("tecnico")) {
     statusButtons.push(`<button class="secondary" data-status="confirmada">Reabrir</button>`);
@@ -172,6 +183,7 @@ function render(ev) {
   const reload = async () => { await openEvent(ev.id); onChange(); };
 
   d.querySelector("#identify-btn")?.addEventListener("click", async () => { if (await openIdentify(ev)) reload(); });
+  d.querySelector("[data-jump-identify]")?.addEventListener("click", async () => { if (await openIdentify(ev)) reload(); });
   d.querySelector("#measure-btn")?.addEventListener("click", async () => {
     try {
       const m = await openMeasure(ev);
