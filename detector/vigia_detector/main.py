@@ -45,7 +45,8 @@ def main() -> None:
         collector = Collector(os.getenv("DATASET_DIR"), float(os.getenv("DATASET_INTERVAL", "60")))
         log.info("coleta de imagens para treinamento ativa em %s", os.getenv("DATASET_DIR"))
 
-    engine = Engine(model_paths, device=os.getenv("DEVICE") or None, imgsz=int(os.getenv("IMG_SIZE", "640")))
+    engine = Engine(model_paths, device=os.getenv("DEVICE") or None, imgsz=int(os.getenv("IMG_SIZE", "640")),
+                    ppe_crops=os.getenv("PPE_CROPS", "1") != "0")
     engine_lock = threading.Lock()
     client = BackendClient(backend, api_key, verify)
     workers: dict[int, CameraWorker] = {}

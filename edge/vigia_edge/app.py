@@ -190,6 +190,17 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
         except httpx.HTTPError:
             pass
 
+    class RuleStatusIn(BaseModel):
+        warning: str | None = None
+
+    @app.post("/api/detector/rules/{rule_id}/status", status_code=204, dependencies=guard)
+    async def detector_rule_status(rule_id: int, data: RuleStatusIn):
+        try:
+            (await client.post(f"/api/edge/rules/{rule_id}/status",
+                               json={"warning": (data.warning or None) and data.warning[:300]})).raise_for_status()
+        except httpx.HTTPError:
+            pass
+
     @app.post("/api/detector/stats", status_code=202, dependencies=guard)
     async def detector_stats(data: StatsIn):
         outbox.put("stats", {**data.model_dump(), "observed_at": datetime.now(timezone.utc).isoformat()})

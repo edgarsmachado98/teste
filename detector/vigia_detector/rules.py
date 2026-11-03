@@ -73,17 +73,64 @@ def in_schedule(rule: dict, now: datetime) -> bool:
     return hour >= start or hour < end  # turno que atravessa a meia-noite
 
 
-def missing_ppe(person: Detection, items: list[Detection], required: list[str]) -> list[str]:
-    """EPIs ausentes para uma pessoa. Conta como ausente se o modelo detectou 'no_<item>'
-    sobre a pessoa, ou se não há nenhuma detecção positiva do item sobre ela."""
+# Onde cada EPI fica no corpo, em fração da altura da caixa da pessoa (0 = topo da cabeça).
+# Capacete no chão ou na mão perto da pessoa não conta; capacete de outra pessoa ao lado também não.
+BODY_REGION = {"helmet": (-0.10, 0.35), "glasses": (0.0, 0.30), "mask": (0.0, 0.35), "vest": (0.12, 0.80),
+               "gloves": (0.0, 1.0)}
+DEFAULT_MIN_PERSON_HEIGHT = 0.10  # pessoa menor que 10% da altura da imagem: longe demais para avaliar EPI
+MIN_STANDING_RATIO = 1.15  # altura/largura em pixels: abaixo disso não parece pessoa em pé (máquina, sombra...)
+
+
+def in_region(person: Detection, item: Detection, region: tuple[float, float]) -> bool:
+    x1, y1, x2, y2 = person.box
+    h, w = y2 - y1, x2 - x1
+    cx, cy = item.center
+    top, bottom = region
+    return x1 - w * 0.15 <= cx <= x2 + w * 0.15 and y1 + h * top <= cy <= y1 + h * bottom
+
+
+def evaluable(person: Detection, rule: dict) -> bool:
+    """A pessoa aparece grande e nítida o bastante para julgar o EPI?"""
+    x1, y1, x2, y2 = person.box
+    height = y2 - y1
+    if height < float(rule.get("params", {}).get("min_person_height", DEFAULT_MIN_PERSON_HEIGHT)):
+        return False
+    aspect = rule.get("_aspect")  # largura/altura do quadro, informado pelo detector
+    if aspect and (x2 - x1) > 0 and (height / (x2 - x1)) / aspect < MIN_STANDING_RATIO:
+        return False
+    return True
+
+
+def missing_ppe(person: Detection, items: list[Detection], required: list[str],
+                detectable: set[str] | None = None) -> list[str]:
+    """EPIs ausentes para uma pessoa.
+
+    Ausente quando o modelo vê 'no_<item>' na região do corpo, ou quando o modelo SABE reconhecer o item
+    e não o encontrou ali. Item que nenhum modelo carregado reconhece não é julgado (sem modelo de
+    capacete, ninguém pode ser acusado de estar sem capacete)."""
     missing = []
     for item in required:
-        on_person = [d for d in items if contains(person.box, d.center)]
-        negative = any(d.label == f"no_{item}" for d in on_person)
-        positive = any(d.label == item for d in on_person)
-        if negative or not positive:
+        knows_item = detectable is None or item in detectable
+        knows_absence = detectable is None or f"no_{item}" in detectable
+        if not (knows_item or knows_absence):
+            continue
+        region = BODY_REGION.get(item, (0.0, 1.0))
+        near = [d for d in items if in_region(person, d, region)] if detectable is not None else \
+            [d for d in items if contains(person.box, d.center)]
+        negative = any(d.label == f"no_{item}" for d in near)
+        positive = any(d.label == item for d in near)
+        if negative or (knows_item and not positive):
             missing.append(item)
     return missing
+
+
+def unverifiable(rule: dict) -> list[str]:
+    """EPIs exigidos pela regra que nenhum modelo carregado reconhece."""
+    detectable = rule.get("_detectable")
+    if rule.get("type") != "ppe_missing" or detectable is None:
+        return []
+    required = rule.get("params", {}).get("required") or ["helmet"]
+    return [i for i in required if i not in detectable and f"no_{i}" not in detectable]
 
 
 def _filter(rule: dict, detections: list[Detection]) -> tuple[list[Detection], list[Detection]]:
@@ -96,16 +143,24 @@ def _filter(rule: dict, detections: list[Detection]) -> tuple[list[Detection], l
 
 
 def ppe_check(rule: dict, dets: list[Detection], people: list[Detection]) -> tuple[list[Detection], set[str]]:
-    """Pessoas sem algum EPI obrigatório e o conjunto de itens faltantes."""
+    """Pessoas sem algum EPI obrigatório e o conjunto de itens faltantes.
+    Pessoas longe demais ou que não parecem estar em pé ficam de fora (nem conformes, nem infratoras)."""
     required = rule.get("params", {}).get("required") or ["helmet"]
+    detectable = rule.get("_detectable")
     items = [d for d in dets if d.label != PERSON]
     offenders, missing_all = [], set()
     for person in people:
-        missing = missing_ppe(person, items, required)
+        missing = missing_ppe(person, items, required, detectable)
         if missing:
             offenders.append(person)
             missing_all.update(missing)
     return offenders, missing_all
+
+
+def ppe_people(rule: dict, people: list[Detection]) -> list[Detection]:
+    if rule.get("_detectable") is None:
+        return people  # chamada sem contexto do detector (testes antigos): comportamento original
+    return [p for p in people if evaluable(p, rule)]
 
 
 def observe(rule: dict, detections: list[Detection]) -> tuple[int, int] | None:
@@ -113,7 +168,10 @@ def observe(rule: dict, detections: list[Detection]) -> tuple[int, int] | None:
     Só se aplica a regras de EPI."""
     if rule["type"] != "ppe_missing":
         return None
+    if unverifiable(rule) == (rule.get("params", {}).get("required") or ["helmet"]):
+        return None  # nenhum EPI da regra pode ser verificado: não entra no índice
     dets, people = _filter(rule, detections)
+    people = ppe_people(rule, people)
     offenders, _ = ppe_check(rule, dets, people)
     return len(people), len(offenders)
 
@@ -130,7 +188,7 @@ def evaluate_frame(rule: dict, detections: list[Detection]) -> Violation | None:
 
     elif rtype == "ppe_missing":
         required = rule.get("params", {}).get("required") or ["helmet"]
-        offenders, missing_all = ppe_check(rule, dets, people)
+        offenders, missing_all = ppe_check(rule, dets, ppe_people(rule, people))
         if offenders:
             names = ", ".join(PPE_NAMES.get(m, m) for m in required if m in missing_all)
             return Violation(rule["id"], f"{len(offenders)} pessoa(s) sem {names}", offenders)

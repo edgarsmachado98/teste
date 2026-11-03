@@ -226,6 +226,8 @@ class Rule(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # Regra gerada pelo padrão de um setor (None = criada manualmente)
     sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectors.id", ondelete="SET NULL"), nullable=True)
+    # Aviso do detector (ex.: nenhum modelo carregado reconhece capacete: a regra não acusa ninguém)
+    warning: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     camera: Mapped[Camera] = relationship(back_populates="rules")
 

@@ -281,6 +281,19 @@ async def edge_camera_status(camera_id: int, data: EdgeCameraStatusIn, edge: Edg
     await apply_camera_status(db, _camera_of(db, edge, camera_id), data.error)
 
 
+class EdgeRuleStatusIn(BaseModel):
+    warning: str | None = Field(None, max_length=300)
+
+
+@router.post("/rules/{rule_id}/status", status_code=204)
+def edge_rule_status(rule_id: int, data: EdgeRuleStatusIn, edge: Edge = Depends(require_edge),
+                     db: Session = Depends(get_db)):
+    rule = get_or_404(db, Rule, rule_id)
+    _camera_of(db, edge, rule.camera_id)
+    rule.warning = data.warning or None
+    db.commit()
+
+
 class EdgeStatsIn(StatsIn):
     observed_at: str | None = None
 

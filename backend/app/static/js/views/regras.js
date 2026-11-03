@@ -59,7 +59,7 @@ async function load() {
     <tr><th>Regra</th><th>Câmera</th><th>Tipo</th><th>Horário</th><th>Severidade</th><th>Ativa</th><th></th></tr>
     ${rules.map((r) => `
       <tr>
-        <td>${esc(r.name)}${r.sector_id ? ` <span class="badge" title="Gerada pelo padrão do setor: nome, EPI, severidade e horário vêm do setor; zona e ajustes finos são seus">padrão do setor</span>` : ""}
+        <td>${esc(r.name)}${r.warning ? `<div class="warn-text">▲ ${esc(r.warning)}</div>` : ""}${r.sector_id ? ` <span class="badge" title="Gerada pelo padrão do setor: nome, EPI, severidade e horário vêm do setor; zona e ajustes finos são seus">padrão do setor</span>` : ""}
           ${r.sector_id && r.type === "restricted_zone" && !r.zone.length ? `<div class="warn-text">▲ desenhe a zona e ative</div>` : ""}</td><td>${esc(camName(r.camera_id))}</td>
         <td>${esc(TYPE_LABELS[r.type])}${r.type === "ppe_missing"
           ? ` (${esc((r.params.required || []).map((i) => PPE_LABELS[i] || i).join(", "))})` : ""}</td>
@@ -91,6 +91,10 @@ const FORM_HTML = `
       ${PPE_ITEMS.map((i) => `<label class="check"><input type="checkbox" name="req_${i}" ${i === "helmet" ? "checked" : ""}>
         ${PPE_LABELS[i][0].toUpperCase() + PPE_LABELS[i].slice(1)}</label>`).join("")}
     </fieldset>
+    <label class="param" data-for="ppe_missing">Tamanho mínimo da pessoa para avaliar EPI
+      <span class="with-suffix"><input type="number" name="min_person_height" min="3" max="60" value="10"><span>% da altura da imagem</span></span>
+      <small class="hint">Pessoas menores (longe da câmera) não são julgadas: evita falso alarme quando o capacete fica com poucos pixels.</small>
+    </label>
     <label class="param" data-for="max_people">Máx. de pessoas na zona
       <input type="number" name="max_people" min="0" value="2">
     </label>
@@ -143,7 +147,10 @@ export async function show(element) {
       e.preventDefault();
       const num = (v) => (v === "" ? null : Number(v));
       const params = {};
-      if (f.type.value === "ppe_missing") params.required = PPE_ITEMS.filter((i) => f[`req_${i}`].checked);
+      if (f.type.value === "ppe_missing") {
+        params.required = PPE_ITEMS.filter((i) => f[`req_${i}`].checked);
+        params.min_person_height = Math.min(0.6, Math.max(0.03, Number(f.min_person_height.value || 10) / 100));
+      }
       if (f.type.value === "max_people") params.max_people = Number(f.max_people.value);
       const body = {
         camera_id: Number(f.camera_id.value), name: f.name.value, type: f.type.value, severity: f.severity.value,
@@ -181,6 +188,7 @@ export async function show(element) {
       f.enabled.checked = r.enabled;
       PPE_ITEMS.forEach((i) => { f[`req_${i}`].checked = (r.params.required || []).includes(i); });
       f.max_people.value = r.params.max_people ?? 2;
+      f.min_person_height.value = Math.round((r.params.min_person_height ?? 0.10) * 100);
       zone = r.zone.map((p) => [...p]);
       toggleParams();
       loadZoneImage();

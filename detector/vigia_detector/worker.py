@@ -19,7 +19,7 @@ import numpy as np  # noqa: E402
 from .clips import ClipRecorder
 from .diagnose import diagnose, mask
 from .imagehealth import ImageHealth
-from .rules import Detection, RuleTracker, Violation, in_schedule, observe
+from .rules import PPE_NAMES, Detection, RuleTracker, Violation, in_schedule, observe, unverifiable
 
 log = logging.getLogger("vigia.worker")
 
@@ -82,6 +82,7 @@ class CameraWorker(threading.Thread):
         self.live_interval = live_interval
         self.stats_interval = stats_interval
         self.tracker = RuleTracker()
+        self._rule_warnings: dict[int, str] = {}
         self.health = ImageHealth()
         self.clips = ClipRecorder(*clip_seconds) if clip_seconds[0] + clip_seconds[1] > 0 else None
         self.collector = collector  # coleta de imagens para treinar o modelo (opcional)
@@ -149,6 +150,7 @@ class CameraWorker(threading.Thread):
             with self.engine_lock:
                 detections = self.engine.detect(frame)
             rules = self.rules
+            self._annotate_rules(rules, frame)
             wall = datetime.now()
             annotated = draw(frame, detections, rules)
             if self.clips:
@@ -173,6 +175,21 @@ class CameraWorker(threading.Thread):
             if now - last_stats >= self.stats_interval:
                 last_stats = now
                 self._flush_stats()
+
+    def _annotate_rules(self, rules: list[dict], frame) -> None:
+        """Informa às regras o que os modelos sabem ver e o formato do quadro; avisa o painel quando uma
+        regra de EPI não pode ser verificada (ex.: nenhum modelo reconhece capacete)."""
+        labels = getattr(self.engine, "labels", None)
+        h, w = frame.shape[:2]
+        for rule in rules:
+            rule["_detectable"] = labels
+            rule["_aspect"] = w / h if h else None
+            missing = unverifiable(rule) if labels is not None else []
+            warning = (f"nenhum modelo carregado reconhece {', '.join(PPE_NAMES.get(i, i) for i in missing)} – "
+                       "a regra não acusa ninguém por isso. Instale um modelo de EPI (modelos/epi.pt).") if missing else None
+            if self._rule_warnings.get(rule["id"], "") != (warning or ""):
+                self._rule_warnings[rule["id"]] = warning or ""
+                self.client.send_rule_status(rule["id"], warning)
 
     def _accumulate(self, rules: list[dict], detections: list[Detection], wall: datetime) -> None:
         """Soma pessoas observadas x sem EPI (base do índice de conformidade)."""

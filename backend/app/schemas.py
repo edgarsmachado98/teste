@@ -103,6 +103,7 @@ class RuleOut(RuleIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
     sector_id: int | None = None
+    warning: str | None = None
 
 
 # ---------- Unidades e setores ----------

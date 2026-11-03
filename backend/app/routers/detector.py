@@ -146,6 +146,18 @@ async def apply_camera_status(db: Session, camera: Camera, error: str | None) ->
         await hub.broadcast({"kind": "camera_status", "camera_id": camera.id, "error": camera.connect_error})
 
 
+class RuleStatusIn(BaseModel):
+    warning: str | None = Field(None, max_length=300)
+
+
+@router.post("/rules/{rule_id}/status", status_code=204)
+def receive_rule_status(rule_id: int, data: RuleStatusIn, db: Session = Depends(get_db)):
+    """Aviso do detector sobre a regra (None = regra funcionando normalmente)."""
+    rule = get_or_404(db, Rule, rule_id)
+    rule.warning = data.warning or None
+    db.commit()
+
+
 @router.post("/stats", status_code=204)
 def receive_stats(data: StatsIn, db: Session = Depends(get_db)):
     """Contagens de pessoas observadas x em violação, agregadas por hora (índice de conformidade)."""

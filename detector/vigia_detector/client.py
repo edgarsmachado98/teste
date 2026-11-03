@@ -62,6 +62,13 @@ class BackendClient:
         except httpx.HTTPError as exc:
             log.debug("falha ao enviar situação da câmera: %s", exc)
 
+    def send_rule_status(self, rule_id: int, warning: str | None) -> None:
+        """Aviso da regra no painel (ex.: EPI que nenhum modelo carregado reconhece)."""
+        try:
+            self.http.post(f"/api/detector/rules/{rule_id}/status", json={"warning": warning}).raise_for_status()
+        except httpx.HTTPError as exc:
+            log.debug("falha ao enviar aviso da regra: %s", exc)
+
     def send_stats(self, camera_id: int, items: list[dict]) -> None:
         try:
             self.http.post("/api/detector/stats", json={"camera_id": camera_id, "items": items}).raise_for_status()
