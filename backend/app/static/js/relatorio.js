@@ -56,7 +56,7 @@ function actionsTable(actions, done) {
     || b.created_at.localeCompare(a.created_at)).slice(0, 12);
   $("#events").innerHTML = top.map((ev) => `
     <figure>
-      ${ev.image_url ? `<img src="${esc(withToken(ev.image_url))}" alt="">` : ""}
+      ${ev.image_url ? `<img src="${esc(withToken(ev.thumb_url || ev.image_url))}" alt="">` : ""}
       <figcaption><b>#${ev.id} ${esc(ev.message)}</b><br>
         ${esc(ev.camera_name)} · ${fmtDateTime(ev.created_at)}<br>
         ${esc(TYPE_LABELS[ev.type] || ev.type)} · ${badge(ev.severity)} · ${ev.status === "encerrada" ? "encerrada" : "em tratamento"}

@@ -712,3 +712,41 @@ def test_static_files_are_revalidated(client):
     for path in ("/", "/js/app.js", "/style.css"):
         assert client.get(path).headers["cache-control"] == "no-cache"
     assert "max-age" in client.get("/fonts/fonts.css").headers["cache-control"]
+
+
+def test_edge_enrollment_and_security(client, admin):
+    unit = client.get("/api/units", headers=admin).json()[0]["id"]
+    other = client.post("/api/units", headers=admin, json={"name": "Zz Planta Edge B"}).json()["id"]
+    code = client.post("/api/edge/enrollments", headers=admin, json={"name": "Edge A", "unit_id": unit}).json()["code"]
+    assert client.post("/api/edge/enroll", json={"code": "0000-0000"}).status_code == 400
+    cred = client.post("/api/edge/enroll", json={"code": code.lower(), "version": "1.0.0"}).json()
+    assert client.post("/api/edge/enroll", json={"code": code}).status_code == 400  # uso único
+    eh = {"X-Edge-Id": str(cred["edge_id"]), "X-Edge-Key": cred["key"]}
+    assert client.get("/api/edge/detector/config", headers={**eh, "X-Edge-Key": "errada"}).status_code == 401
+    cam_a = client.post("/api/cameras", headers=admin, json={"name": "Cam Edge A", "source": "0", "unit_id": unit}).json()
+    cam_b = client.post("/api/cameras", headers=admin, json={"name": "Cam Edge B", "source": "0", "unit_id": other}).json()
+    names = [c["name"] for c in client.get("/api/edge/detector/config", headers=eh).json()]
+    assert "Cam Edge A" in names and "Cam Edge B" not in names  # só a unidade do Edge
+    rule_b = client.post("/api/rules", headers=admin, json={"camera_id": cam_b["id"], "name": "Z", "type": "restricted_zone"}).json()
+    rule_a = client.post("/api/rules", headers=admin, json={"camera_id": cam_a["id"], "name": "Z", "type": "restricted_zone"}).json()
+    bad = client.post("/api/edge/events", headers=eh, data={"camera_id": cam_b["id"], "rule_id": rule_b["id"],
+                                                            "message": "x", "edge_ref": "r0"})
+    assert bad.status_code == 403  # câmera de outra unidade
+    trav = client.post("/api/edge/events", headers=eh, data={"camera_id": cam_a["id"], "rule_id": rule_a["id"],
+                                                             "message": "x", "edge_ref": "r1", "media_ref": "../../etc/passwd"})
+    assert trav.status_code == 400
+    body = {"camera_id": cam_a["id"], "rule_id": rule_a["id"], "message": "via edge", "edge_ref": "r2",
+            "media_ref": "2026/11/03/a.jpg"}
+    first = client.post("/api/edge/events", headers=eh, data=body, files={"thumb": ("t.jpg", b"\xff\xd8thumb", "image/jpeg")})
+    assert first.status_code == 201 and first.json()["media_at_edge"] and first.json()["thumb_url"]
+    again = client.post("/api/edge/events", headers=eh, data=body)
+    assert again.json() == {"id": first.json()["id"], "duplicate": True}  # reenvio da fila não duplica
+    # Edge desconectado: miniatura abre, imagem completa avisa
+    assert client.get(first.json()["thumb_url"], headers=admin).content == b"\xff\xd8thumb"
+    assert client.get(first.json()["image_url"], headers=admin).status_code == 503
+    edges = client.get("/api/edge/edges", headers=admin).json()
+    assert edges[0]["name"] == "Edge A" and not edges[0]["online"]
+    assert client.delete(f"/api/edge/edges/{cred['edge_id']}", headers=admin).status_code == 204
+    assert client.get("/api/edge/detector/config", headers=eh).status_code == 401
+    _, op = make_user(client, admin, "op-edge@vigia.local", "operador")
+    assert client.get("/api/edge/edges", headers=op).status_code == 403

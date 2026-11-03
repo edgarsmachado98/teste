@@ -17,7 +17,7 @@ from .database import SessionLocal
 from .health import health_loop
 from .migrate import migrate
 from .models import AuditLog, Camera, Event, RuleStat, Session
-from .routers import access, attachments, cameras, config, dds, detector, events, measures, people, reports, sectors, system
+from .routers import access, attachments, cameras, config, dds, detector, edge, events, measures, people, reports, sectors, system
 from .sectors import ensure_default_unit
 from .settings_store import apply_overrides
 from .scheduler import scheduler_loop
@@ -34,8 +34,16 @@ STATIC_DIR = Path(__file__).parent / "static"
 def remove_media(event: Event, db=None) -> None:
     """Apaga a foto e o clipe da ocorrência (dados pessoais), no disco local e no NAS,
     mantendo o registro."""
-    storage.remove(event.image_file, db)
-    storage.remove(event.clip_dir, db)
+    if event.media_edge_id:
+        # Mídia no storage do cliente: o próprio Edge apaga pelo mesmo prazo de retenção
+        # (recebe o prazo da nuvem), inclusive se estiver sem internet nesse momento.
+        pass
+    else:
+        storage.remove(event.image_file, db)
+        storage.remove(event.clip_dir, db)
+    if event.thumb_file:
+        (EVIDENCE_DIR / event.thumb_file).unlink(missing_ok=True)
+        event.thumb_file = None
     event.image_file = None
     event.clip_dir = event.clip_frames = event.clip_duration = None
 
@@ -139,7 +147,7 @@ async def unexpected_error(request: Request, exc: Exception):
         pass  # disco cheio ou sem permissão: o rastro já foi para o console
     return JSONResponse(status_code=500, content={
         "detail": f"Erro interno em {request.url.path}: {type(exc).__name__}: {str(exc)[:300]}"})
-for module in (access, cameras, events, reports, detector, system, config, sectors, people, measures, attachments, dds):
+for module in (access, cameras, events, reports, detector, system, config, sectors, people, measures, attachments, dds, edge):
     app.include_router(module.router)
 
 

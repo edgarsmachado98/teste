@@ -170,8 +170,21 @@ function render(ev) {
   const showPhoto = () => {
     stopClip();
     media.innerHTML = ev.image_url
-      ? `<img class="evidence-img" src="${esc(withToken(ev.image_url))}" data-full="${esc(withToken(ev.image_url))}" alt="Evidência">`
+      ? `<img class="evidence-img" src="${esc(withToken(ev.image_url))}" data-full="${esc(withToken(ev.image_url))}" alt="Evidência">
+         ${ev.media_at_edge ? `<p class="hint edge-note">📍 Imagem guardada no storage da planta (VigIA Edge)</p>` : ""}`
       : `<div class="noimg">${ev.clip_frames ? "sem foto" : "sem imagem (apagada pela política de retenção ou não enviada)"}</div>`;
+    const img = media.querySelector(".evidence-img");
+    // Edge desconectado: mostra a miniatura que fica na nuvem
+    if (img && ev.thumb_url) {
+      img.addEventListener("error", () => {
+        if (img.dataset.fallback) return;
+        img.dataset.fallback = "1";
+        img.src = withToken(ev.thumb_url);
+        media.querySelector(".edge-note")?.remove();
+        img.insertAdjacentHTML("afterend", `<p class="hint warn-text">A imagem completa está no storage da planta e o VigIA Edge
+          está desconectado agora. Mostrando a miniatura.</p>`);
+      }, { once: false });
+    }
   };
   const showClip = () => { stopClip(); stopClip = mountClipPlayer(media, ev.id, ev.clip_frames, ev.clip_duration); };
   ev.clip_frames ? showClip() : showPhoto();

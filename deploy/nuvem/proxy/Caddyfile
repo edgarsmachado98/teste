@@ -1,0 +1,21 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# Cabeçalhos de segurança comuns a todos os clientes
+(seguranca) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	encode gzip
+	request_body {
+		max_size 25MB
+	}
+}
+
+# Um arquivo por cliente, gerado por novo_cliente.sh
+import /etc/caddy/sites/*.caddy

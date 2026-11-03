@@ -185,6 +185,8 @@ class EventOut(BaseModel):
     severity: str
     message: str
     image_url: str | None
+    thumb_url: str | None = None
+    media_at_edge: bool = False
     clip_frames: int | None = None
     clip_duration: float | None = None
     status: EventStatus

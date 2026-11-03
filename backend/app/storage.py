@@ -247,7 +247,7 @@ def sync_once(now: datetime | None = None) -> dict:
         # 2) Evidências ainda não copiadas (espera o clipe chegar, ou desiste dele após 2 min)
         pending = db.scalars(select(Event).where(
             Event.media_synced_at.is_(None),
-            or_(Event.image_file.is_not(None), Event.clip_dir.is_not(None)),
+            Event.media_edge_id.is_(None), or_(Event.image_file.is_not(None), Event.clip_dir.is_not(None)),
         ).order_by(Event.created_at).limit(500)).all()
         for event in pending:
             if event.clip_id and not event.clip_dir and now - event.created_at < CLIP_WAIT:
@@ -271,7 +271,7 @@ def sync_once(now: datetime | None = None) -> dict:
         if settings.storage_mode == "principal":
             cutoff = now - timedelta(days=max(settings.storage_local_days, 0))
             old = db.scalars(select(Event).where(Event.media_synced_at.is_not(None), Event.created_at < cutoff,
-                                                 or_(Event.image_file.is_not(None), Event.clip_dir.is_not(None)))).all()
+                                                 Event.media_edge_id.is_(None), or_(Event.image_file.is_not(None), Event.clip_dir.is_not(None)))).all()
             for event in old:
                 files = _event_files(event)
                 if not all(nas_path(rel).exists() for rel in files):
@@ -323,7 +323,7 @@ def write_to_nas(name: str, data: bytes, folder: str) -> str:
 def status() -> dict:
     with SessionLocal() as db:
         pending_count = db.scalar(select(func.count()).select_from(Event).where(
-            Event.media_synced_at.is_(None), or_(Event.image_file.is_not(None), Event.clip_dir.is_not(None))))
+            Event.media_synced_at.is_(None), Event.media_edge_id.is_(None), or_(Event.image_file.is_not(None), Event.clip_dir.is_not(None))))
         deletions = db.scalar(select(func.count()).select_from(StorageDeletion))
     info = {
         "enabled": enabled(),

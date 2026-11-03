@@ -10,3 +10,6 @@ videos/
 logs/
 certs/
 vigia.service
+edge/edge-data/
+deploy/nuvem/clientes/
+deploy/nuvem/proxy/sites/*.caddy

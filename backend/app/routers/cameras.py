@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+
+from ..edge_tunnel import EdgeOffline, hub as edge_hub
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -7,7 +9,7 @@ from .. import audit
 from ..auth import current_user, require_role
 from ..common import EVIDENCE_DIR, get_or_404, unit_cameras
 from ..database import get_db
-from ..models import Camera, Event, Rule, Sector, Unit, User
+from ..models import Camera, Edge, Event, Rule, Sector, Unit, User
 from ..schemas import CameraIn, CameraOut, RuleIn, RuleOut
 from ..sectors import apply_sector, ensure_default_unit
 
@@ -89,7 +91,17 @@ def delete_camera(camera_id: int, request: Request, user: User = Depends(require
 
 
 @router.get("/cameras/{camera_id}/frame", dependencies=viewer)
-def camera_frame(camera_id: int):
+async def camera_frame(camera_id: int, db: Session = Depends(get_db)):
+    camera = get_or_404(db, Camera, camera_id)
+    # Câmera atendida por um VigIA Edge: o quadro ao vivo vem da planta pelo túnel
+    edges = [e for e in db.scalars(select(Edge).where(Edge.unit_id == camera.unit_id, Edge.revoked_at.is_(None)))
+             if edge_hub.online(e.id)]
+    for edge in edges:
+        try:
+            data = await edge_hub.fetch(edge.id, f"ao-vivo/{camera_id}.jpg", cache_ttl=1.5)
+            return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+        except (EdgeOffline, FileNotFoundError):
+            continue
     path = EVIDENCE_DIR / "ao-vivo" / f"{camera_id}.jpg"
     if not path.exists():
         raise HTTPException(404, "sem imagem ainda – verifique se o detector está rodando")

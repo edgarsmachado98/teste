@@ -33,7 +33,7 @@ function greeting(t, overdueCount, problems) {
 function card(ev) {
   return `
     <article class="event sev-${esc(ev.severity)}">
-      ${ev.image_url ? `<img src="${esc(withToken(ev.image_url))}" alt="Evidência" data-full="${esc(withToken(ev.image_url))}">`
+      ${ev.image_url ? `<img src="${esc(withToken(ev.thumb_url || ev.image_url))}" alt="Evidência" loading="lazy" data-full="${esc(withToken(ev.image_url))}">`
         : `<div class="noimg">sem imagem</div>`}
       <div class="info">
         <a href="#ocorrencia-${ev.id}"><strong>${esc(ev.message)}</strong></a>

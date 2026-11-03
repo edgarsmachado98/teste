@@ -15,7 +15,7 @@ async function loadList() {
     <tr><th></th><th>#</th><th>Desvio</th><th>Câmera / área</th><th>Quando</th><th>Situação</th><th>Classificação</th><th>Ações</th></tr>
     ${events.map((ev) => `
       <tr class="clickable" data-id="${ev.id}">
-        <td>${ev.image_url ? `<img class="thumb" src="${esc(withToken(ev.image_url))}" alt="">` : ""}</td>
+        <td>${ev.image_url ? `<img class="thumb" src="${esc(withToken(ev.thumb_url || ev.image_url))}" alt="" loading="lazy">` : ""}</td>
         <td>${ev.id}</td>
         <td><b>${esc(ev.message)}</b><div class="hint">${esc(TYPE_LABELS[ev.type] || ev.type)} · ${badge(ev.severity, `sev-${ev.severity}`)}</div></td>
         <td>${esc(ev.camera_name)}<div class="hint">${esc(ev.location || "")}</div></td>

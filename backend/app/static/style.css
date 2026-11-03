@@ -631,3 +631,11 @@ td.pend .badge { margin: 1px 0; }
   display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 12px; }
 .att-list .att small { color: var(--muted); font-size: 11px; margin-left: 2px; }
 .plan-preview { max-height: 280px; overflow-y: auto; }
+
+/* VigIA Edge */
+.edge-code { font: 700 32px var(--font-mono); letter-spacing: .12em; text-align: center; padding: 14px; margin: 6px 0 10px;
+  background: var(--t-warn-bg); border: 2px dashed var(--accent); border-radius: 6px; }
+.edge-cmd { background: var(--tip-bg); color: var(--tip-fg); padding: 10px 12px; border-radius: 4px; font: 12px var(--font-mono);
+  white-space: pre-wrap; word-break: break-all; margin: 6px 0; }
+.muted-row td { opacity: .55; }
+.edge-note { margin: 6px 0 0; }

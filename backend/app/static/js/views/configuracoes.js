@@ -241,11 +241,84 @@ async function reload() {
   renderRestore();
 }
 
+// ---------- VigIA Edge (planta ligada à nuvem) ----------
+
+async function renderEdges() {
+  const box = $("#cfg-edge", el);
+  if (!box) return;
+  let edges = [];
+  let units = [];
+  try { [edges, units] = await Promise.all([api("/api/edge/edges"), api("/api/units")]); }
+  catch (err) { box.innerHTML = `<p class="bad-text">${esc(err.message)}</p>`; return; }
+  const active = edges.filter((e) => !e.revoked);
+  const state = (e) => {
+    if (e.revoked) return badge("Revogado", "muted");
+    if (e.online) return badge("Conectado", "good");
+    return badge(e.last_seen_at ? `Desconectado · visto ${fmtDateTime(e.last_seen_at)}` : "Aguardando 1ª conexão", "bad");
+  };
+  const storage = (s) => (s.media_ok == null ? "–" : s.media_ok
+    ? `${badge("ok", "good")} <span class="hint">${s.disk_free_gb ?? "?"} GB livres de ${s.disk_total_gb ?? "?"}</span>`
+    : badge("inacessível", "bad"));
+  box.innerHTML = `
+    <p class="hint">Cada planta roda o <b>VigIA Edge</b>: o detector e as imagens ficam no storage do cliente; aqui chegam os dados
+      da ocorrência e uma miniatura. A imagem completa, o clipe e o ao vivo vêm pela conexão segura de saída do Edge
+      (porta 443) só quando alguém abre — o cliente não abre portas nem precisa de VPN.</p>
+    ${edges.length ? `<div class="table-wrap"><table class="compact">
+      <tr><th>Edge</th><th>Unidade</th><th>Situação</th><th>Storage do cliente</th><th>Fila</th><th>Câmeras</th><th>Versão</th><th></th></tr>
+      ${edges.map((e) => `<tr class="${e.revoked ? "muted-row" : ""}">
+        <td><b>${esc(e.name)}</b><div class="hint mono">${esc(e.status.media_dir || "")}</div></td>
+        <td>${esc(e.unit || "–")}</td><td>${state(e)}</td><td>${e.revoked ? "–" : storage(e.status)}</td>
+        <td>${e.status.queue ? badge(`${e.status.queue} na fila`, "warn") : e.revoked ? "–" : "0"}</td>
+        <td>${e.status.cameras ?? "–"}</td><td class="mono">${esc(e.version || "–")}</td>
+        <td>${e.revoked ? "" : `<button class="small danger" data-revoke="${e.id}">Revogar</button>`}</td></tr>`).join("")}
+    </table></div>` : `<p class="hint">Nenhum Edge cadastrado: as câmeras são atendidas pelo detector desta instalação.</p>`}
+    <div class="actions" style="margin-top:12px"><button id="edge-new">+ Gerar código de instalação</button>
+      ${active.length ? `<span class="hint">${active.filter((e) => e.online).length} de ${active.length} conectado(s)</span>` : ""}</div>`;
+
+  box.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
+    const e = edges.find((x) => x.id === Number(b.dataset.revoke));
+    if (!confirm(`Revogar o Edge "${e.name}"? A conexão cai na hora e ele precisará de um novo código para voltar.`)) return;
+    try { await api(`/api/edge/edges/${e.id}`, { method: "DELETE" }); renderEdges(); }
+    catch (err) { toast(esc(err.message), "danger"); }
+  }));
+  $("#edge-new", box).addEventListener("click", () => {
+    const d = document.createElement("dialog");
+    d.className = "form-dialog";
+    d.innerHTML = `<form class="form" method="dialog">
+      <h2>Código de instalação do Edge</h2>
+      <label class="wide">Nome do Edge <input name="name" required minlength="2" maxlength="120" placeholder="ex.: Edge Joinville – galpão A"></label>
+      <label class="wide">Unidade atendida <select name="unit_id">${units.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join("")}</select></label>
+      <div class="wide" id="edge-code"></div>
+      <div class="actions wide"><button type="submit">Gerar código</button><button type="button" class="secondary" data-x>Fechar</button></div>
+    </form>`;
+    document.body.append(d);
+    d.addEventListener("close", () => { d.remove(); renderEdges(); });
+    d.querySelector("[data-x]").addEventListener("click", () => d.close());
+    const f = d.querySelector("form");
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        const r = await api("/api/edge/enrollments", { method: "POST", body: { name: f.name.value, unit_id: Number(f.unit_id.value) } });
+        const cmd = `python -m vigia_edge enroll --cloud ${location.origin} --code ${r.code} --media-dir "D:\\vigia"`;
+        $("#edge-code", d).innerHTML = `<div class="edge-code">${esc(r.code)}</div>
+          <p class="hint">Vale até ${fmtDateTime(r.expires_at)} e só pode ser usado uma vez. Na máquina do Edge, na pasta <code>edge</code>:</p>
+          <pre class="edge-cmd">${esc(cmd)}</pre>
+          <p class="hint">Troque <code>D:\\vigia</code> pela pasta do storage do cliente (pode ser um compartilhamento de rede).
+            Depois rode <code>python -m vigia_edge run</code> e aponte o detector para o Edge com o
+            <code>BACKEND_URL</code> e a <code>DETECTOR_API_KEY</code> que o comando mostrar.</p>`;
+        f.querySelector("button[type=submit]").hidden = true;
+      } catch (err) { toast(esc(err.message), "danger"); }
+    });
+    d.showModal();
+  });
+}
+
 export async function show(element) {
   el = element;
   el.innerHTML = `
     <h2>Configurações</h2>
     <p class="hint">Somente administradores. Os valores salvos aqui têm prioridade sobre o arquivo <code>.env</code>.</p>
+    <div class="card"><h3>VigIA Edge – plantas conectadas à nuvem</h3><div id="cfg-edge"></div></div>
     <div class="card"><h3>Conexão com storage de rede (NAS)</h3><div id="cfg-nas"></div></div>
     <div class="card"><h3>Backup do sistema</h3><div id="cfg-backup"></div></div>
     <div class="card"><h3>Restauração</h3><div id="cfg-restore"></div></div>
@@ -256,9 +329,10 @@ export async function show(element) {
         <li>Log do serviço: <code>logs/vigia.log</code></li>
       </ul>
     </div>`;
-  await reload();
+  await Promise.all([reload(), renderEdges()]);
 }
 
 export function onRealtime(data) {
   if (data.kind === "storage_health") reload();
+  if (data.kind === "edge_status") renderEdges();
 }

@@ -3,11 +3,12 @@
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import audit, notifier, storage
+from ..edge_tunnel import EdgeOffline, hub as edge_hub
 from ..auth import current_user, has_role, require_role
 from ..common import EVIDENCE_DIR, action_out, event_out, get_or_404, unit_cameras
 from ..database import get_db
@@ -139,11 +140,34 @@ async def update_event(event_id: int, data: EventUpdate, request: Request,
 
 
 @router.get("/events/{event_id}/image", dependencies=[Depends(current_user)])
-def event_image(event_id: int, db: Session = Depends(get_db)):
+async def event_image(event_id: int, db: Session = Depends(get_db)):
     event = get_or_404(db, Event, event_id)
     if not event.image_file:
         raise HTTPException(404, "evento sem imagem")
+    if event.media_edge_id:
+        return await _edge_media(event.media_edge_id, event.image_file, "private, max-age=3600")
     return FileResponse(_media_path(event.image_file), media_type="image/jpeg")
+
+
+@router.get("/events/{event_id}/thumb", dependencies=[Depends(current_user)])
+async def event_thumb(event_id: int, db: Session = Depends(get_db)):
+    """Miniatura para listas e painel: fica na nuvem, abre na hora mesmo com o Edge desligado."""
+    event = get_or_404(db, Event, event_id)
+    if event.thumb_file and (EVIDENCE_DIR / event.thumb_file).exists():
+        return FileResponse(EVIDENCE_DIR / event.thumb_file, media_type="image/jpeg",
+                            headers={"Cache-Control": "private, max-age=86400"})
+    return await event_image(event_id, db)
+
+
+async def _edge_media(edge_id: int, rel: str, cache: str):
+    """Arquivo guardado no storage do cliente, buscado pelo túnel do VigIA Edge."""
+    try:
+        data = await edge_hub.fetch(edge_id, rel)
+    except EdgeOffline:
+        raise HTTPException(503, "imagem guardada na planta: o VigIA Edge está desconectado no momento") from None
+    except FileNotFoundError:
+        raise HTTPException(404, "arquivo não encontrado no storage da planta (retenção ou exclusão)") from None
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": cache})
 
 
 def _media_path(rel: str):
@@ -157,10 +181,12 @@ def _media_path(rel: str):
 
 
 @router.get("/events/{event_id}/clip/{index}", dependencies=[Depends(current_user)])
-def event_clip_frame(event_id: int, index: int, db: Session = Depends(get_db)):
+async def event_clip_frame(event_id: int, index: int, db: Session = Depends(get_db)):
     event = get_or_404(db, Event, event_id)
     if not event.clip_dir or not 0 <= index < (event.clip_frames or 0):
         raise HTTPException(404, "quadro não encontrado")
+    if event.media_edge_id:
+        return await _edge_media(event.media_edge_id, f"{event.clip_dir}/{index:04d}.jpg", "private, max-age=86400")
     return FileResponse(_media_path(f"{event.clip_dir}/{index:04d}.jpg"), media_type="image/jpeg",
                         headers={"Cache-Control": "private, max-age=86400"})
 

@@ -1,0 +1,25 @@
+# Instância de UM cliente: servidor VigIA + banco próprio (SQLite em ./dados). Nada é compartilhado com
+# outros clientes, a não ser o proxy HTTPS. Criada por ../novo_cliente.sh (não edite à mão os nomes).
+# SQLite por cliente: carga de uma empresa, backup e restauração pelo próprio painel (Configurações).
+services:
+  backend:
+    image: vigia-backend:${VIGIA_VERSAO:-latest}
+    container_name: vigia-${CLIENTE:?}-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////data/vigia.db
+      EVIDENCE_DIR: /data/evidencias      # só miniaturas e anexos: as imagens ficam no Edge do cliente
+      BACKUP_DIR: /data/backups
+      PEOPLE_DIR: /data/pessoas
+      SECRET_KEY_FILE: /data/secret.key
+    # Um único processo: o túnel com os Edges fica em memória (ver app/edge_tunnel.py)
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--proxy-headers", "--forwarded-allow-ips", "*"]
+    volumes:
+      - ./dados:/data
+    networks: [vigia_proxy]
+
+networks:
+  vigia_proxy:
+    external: true

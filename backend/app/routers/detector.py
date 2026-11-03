@@ -63,15 +63,24 @@ async def receive_event(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(await snapshot.read())
 
+    return await register_event(db, background, camera, rule, message, _parse_boxes(boxes), clip_id, image_file)
+
+
+async def register_event(db: Session, background: BackgroundTasks, camera: Camera, rule: Rule, message: str,
+                         boxes: list | None, clip_id: str | None, image_file: str | None, **extra) -> dict:
+    """Grava a ocorrência, avisa as telas em tempo real e dispara as notificações.
+    extra: campos do Edge (media_edge_id, thumb_file, edge_ref, created_at)."""
     event = Event(camera_id=camera.id, rule_id=rule.id, type=rule.type, severity=rule.severity,
-                  message=message, image_file=image_file, boxes=_parse_boxes(boxes), clip_id=clip_id)
+                  message=message, image_file=image_file, boxes=boxes, clip_id=clip_id, **extra)
     db.add(event)
     db.commit()
     event = db.scalar(select(Event).where(Event.id == event.id).options(selectinload(Event.actions)))
 
     payload = event_out(event)
     await hub.broadcast({"kind": "event", "event": payload})
-    background.add_task(notifier.notify, payload, EVIDENCE_DIR / image_file if image_file else None)
+    # imagem do e-mail/WhatsApp: a local, ou a miniatura quando a imagem está no Edge
+    attach = event.thumb_file if event.media_edge_id else image_file
+    background.add_task(notifier.notify, payload, EVIDENCE_DIR / attach if attach else None)
     return payload
 
 
@@ -114,7 +123,12 @@ async def receive_frame(camera_id: int, background: BackgroundTasks, frame: Uplo
 @router.post("/stats", status_code=204)
 def receive_stats(data: StatsIn, db: Session = Depends(get_db)):
     """Contagens de pessoas observadas x em violação, agregadas por hora (índice de conformidade)."""
-    hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    record_stats(db, data)
+
+
+def record_stats(db: Session, data: StatsIn, at: datetime | None = None) -> None:
+    """at: momento da observação (o Edge reenvia depois de uma queda de internet)."""
+    hour = (at or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
     valid_rules = set(db.scalars(select(Rule.id).where(Rule.camera_id == data.camera_id)))
     for item in data.items:
         if item.rule_id not in valid_rules:

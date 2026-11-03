@@ -253,6 +253,11 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     # Caixas normalizadas das pessoas/objetos em violação (usadas no mapa de calor)
     boxes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Imagem e clipe guardados no storage do cliente, servidos pelo VigIA Edge sob demanda.
+    # image_file/clip_dir são então caminhos relativos no Edge; a miniatura fica aqui.
+    media_edge_id: Mapped[int | None] = mapped_column(ForeignKey("edges.id", ondelete="SET NULL"), nullable=True)
+    thumb_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    edge_ref: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)  # evita duplicar no reenvio
     classification: Mapped[str | None] = mapped_column(String(30), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -362,6 +367,40 @@ class Measure(Base):
     person: Mapped["Person"] = relationship()
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
     approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
+
+
+class Edge(Base):
+    """VigIA Edge: caixa local do cliente (detector + imagens no storage do cliente) ligada a esta
+    instância na nuvem por um túnel de saída. Só os dados da ocorrência e a miniatura sobem."""
+
+    __tablename__ = "edges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"))
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True)  # credencial do Edge (só o hash)
+    enrolled_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    version: Mapped[str] = mapped_column(String(40), default="")
+    status: Mapped[dict] = mapped_column(JSON, default=dict)  # disco, fila, storage, câmeras
+
+    unit: Mapped[Unit] = relationship(lazy="selectin")
+
+
+class EdgeEnrollment(Base):
+    """Código de instalação de uso único (vale 24 h) para cadastrar um Edge."""
+
+    __tablename__ = "edge_enrollments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"))
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class DDSTheme(Base):

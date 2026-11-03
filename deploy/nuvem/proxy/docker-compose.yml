@@ -1,0 +1,26 @@
+# Proxy único da nuvem: HTTPS automático (Let's Encrypt) para todos os clientes.
+# Cada cliente fica em https://<cliente>.<seu-dominio> e roda numa instância própria.
+services:
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL no .env do proxy}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [vigia_proxy]
+
+networks:
+  vigia_proxy:
+    name: vigia_proxy
+
+volumes:
+  caddy_data:
+  caddy_config:
