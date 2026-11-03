@@ -34,3 +34,43 @@ def test_retention_and_thumbnail(tmp_path):
     assert store.purge(30) == 1
     assert store.read(old) is None and store.read(new)
     assert store.ok() and "disk_free_gb" in store.usage()
+
+
+def test_clip_video(tmp_path):
+    import io
+    from PIL import Image
+    store = MediaStore(tmp_path / "m", tmp_path / "l")
+    frames = []
+    for i in range(10):
+        buf = io.BytesIO()
+        Image.new("RGB", (1280, 720), (i * 20, 50, 90)).save(buf, "JPEG")
+        frames.append(buf.getvalue())
+    rel = store.save_clip_video("abc", frames, 2.0)
+    assert rel and rel.endswith("abc.webm")
+    data = store.read(rel)
+    assert data[:4] == b"\x1a\x45\xdf\xa3" and len(data) < sum(map(len, frames))
+    assert store.save_clip_video("vazio", [b"nao-e-imagem"], 1.0) is None  # cai para os quadros JPEG
+
+
+def test_encrypted_storage(tmp_path):
+    import base64
+    import os as _os
+    from vigia_edge.crypto import MediaCipher
+    k1, k2 = base64.b64encode(_os.urandom(32)).decode(), base64.b64encode(_os.urandom(32)).decode()
+    old = MediaStore(tmp_path / "m", tmp_path / "l", MediaCipher({"aaaa0001": k1}, "aaaa0001"))
+    rel_old = old.save_event_image(b"\xff\xd8 imagem antiga")
+    assert (tmp_path / "m" / rel_old).read_bytes().startswith(b"VGE1")
+    # máquina trocada: Edge novo com chave nova + a antiga (vinda da nuvem) lê tudo
+    new = MediaStore(tmp_path / "m", tmp_path / "l", MediaCipher({"aaaa0001": k1, "bbbb0002": k2}, "bbbb0002"))
+    rel_new = new.save_event_image(b"\xff\xd8 imagem nova")
+    assert new.read(rel_old) == b"\xff\xd8 imagem antiga" and new.read(rel_new) == b"\xff\xd8 imagem nova"
+    # sem a chave: nada sai do storage
+    assert MediaStore(tmp_path / "m", tmp_path / "l").read(rel_new) is None
+    assert old.read(rel_new) is None  # chave desconhecida
+    # adulteração detectada
+    p = tmp_path / "m" / rel_new
+    blob = bytearray(p.read_bytes()); blob[-1] ^= 1; p.write_bytes(bytes(blob))
+    assert new.read(rel_new) is None
+    # arquivos gravados antes da criptografia continuam legíveis
+    (tmp_path / "m" / "antigo.jpg").write_bytes(b"\xff\xd8 sem cifra")
+    assert new.read("antigo.jpg") == b"\xff\xd8 sem cifra"

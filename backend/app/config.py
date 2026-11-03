@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     storage_sync_interval: int = 60
     storage_backup_keep: int = 60
     storage_offline_alert_minutes: int = 10
+    # VigIA Edge: avisar quando uma planta ficar sem conexão por este tempo
+    edge_offline_alert_minutes: int = 5
+    # mTLS: só aceitar o Edge com o certificado dele (impressão digital repassada pelo proxy HTTPS).
+    # Ativo nas instâncias da nuvem (deploy/nuvem); desligado no servidor local, que não tem proxy.
+    edge_require_mtls: bool = False
 
     # Relatório automático por e-mail: mensal | semanal | desligado
     report_frequency: str = "mensal"

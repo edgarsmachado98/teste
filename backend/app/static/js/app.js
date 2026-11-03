@@ -266,6 +266,11 @@ function connectWs() {
       toast(`<b>${data.online ? "✅" : "⚠️"} Armazenamento de rede</b><br>${esc(data.label)}`,
         data.online ? "ok" : "warn", 12000);
     }
+    if (data.kind === "edge_alert") {
+      if (!data.online) beep();
+      toast(`<b>${data.online ? "✅" : "⚠️"} ${esc(data.name)}</b><br>VigIA Edge ${esc(data.label)}`,
+        data.online ? "ok" : "warn", 15000);
+    }
     if (data.kind === "event_updated") refreshIfOpen(data.id);
     VIEWS[current]?.onRealtime?.(data);
   };

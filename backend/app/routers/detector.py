@@ -20,7 +20,12 @@ router = APIRouter(prefix="/api/detector", dependencies=[Depends(require_detecto
 
 @router.get("/config", response_model=list[DetectorCamera])
 def detector_config(db: Session = Depends(get_db)):
-    cameras = db.scalars(select(Camera).where(Camera.enabled).options(selectinload(Camera.rules))).all()
+    """Detector desta instalação. Câmeras de unidades atendidas por um VigIA Edge ficam com o Edge
+    (evita a mesma câmera ser analisada duas vezes quando se testa nuvem e Edge no mesmo computador)."""
+    from ..models import Edge
+    edge_units = select(Edge.unit_id).where(Edge.revoked_at.is_(None))
+    cameras = db.scalars(select(Camera).where(Camera.enabled, Camera.unit_id.not_in(edge_units))
+                         .options(selectinload(Camera.rules))).all()
     return [
         DetectorCamera(id=c.id, name=c.name, source=c.source,
                        rules=[RuleOut.model_validate(r) for r in c.rules if r.enabled])

@@ -72,6 +72,7 @@ FIELDS: dict[str, Field] = {
     "storage_sync_interval": Field("int", 10, 3600),
     "storage_offline_alert_minutes": Field("int", 1, 1440),
     "storage_backup_keep": Field("int", 1, 1000),
+    "edge_offline_alert_minutes": Field("int", 1, 1440),
     # Backup
     "backup_hour": Field("int", 0, 23),
     "backup_keep": Field("int", 1, 365),

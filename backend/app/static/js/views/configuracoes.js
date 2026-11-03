@@ -248,7 +248,8 @@ async function renderEdges() {
   if (!box) return;
   let edges = [];
   let units = [];
-  try { [edges, units] = await Promise.all([api("/api/edge/edges"), api("/api/units")]); }
+  let conf = { values: {} };
+  try { [edges, units, conf] = await Promise.all([api("/api/edge/edges"), api("/api/units"), api("/api/config")]); }
   catch (err) { box.innerHTML = `<p class="bad-text">${esc(err.message)}</p>`; return; }
   const active = edges.filter((e) => !e.revoked);
   const state = (e) => {
@@ -257,7 +258,8 @@ async function renderEdges() {
     return badge(e.last_seen_at ? `Desconectado · visto ${fmtDateTime(e.last_seen_at)}` : "Aguardando 1ª conexão", "bad");
   };
   const storage = (s) => (s.media_ok == null ? "–" : s.media_ok
-    ? `${badge("ok", "good")} <span class="hint">${s.disk_free_gb ?? "?"} GB livres de ${s.disk_total_gb ?? "?"}</span>`
+    ? `${badge("ok", "good")} ${s.encrypted ? badge("🔒 criptografado", "good") : badge("sem criptografia", "warn")}
+       <div class="hint">${s.disk_free_gb ?? "?"} GB livres de ${s.disk_total_gb ?? "?"}</div>`
     : badge("inacessível", "bad"));
   box.innerHTML = `
     <p class="hint">Cada planta roda o <b>VigIA Edge</b>: o detector e as imagens ficam no storage do cliente; aqui chegam os dados
@@ -267,13 +269,23 @@ async function renderEdges() {
       <tr><th>Edge</th><th>Unidade</th><th>Situação</th><th>Storage do cliente</th><th>Fila</th><th>Câmeras</th><th>Versão</th><th></th></tr>
       ${edges.map((e) => `<tr class="${e.revoked ? "muted-row" : ""}">
         <td><b>${esc(e.name)}</b><div class="hint mono">${esc(e.status.media_dir || "")}</div></td>
-        <td>${esc(e.unit || "–")}</td><td>${state(e)}</td><td>${e.revoked ? "–" : storage(e.status)}</td>
+        <td>${esc(e.unit || "–")}</td><td>${state(e)}
+          <div>${e.mtls ? badge("🔐 certificado (mTLS)", "good") : e.mtls_required ? badge("sem certificado – recadastrar", "bad") : ""}</div></td><td>${e.revoked ? "–" : storage(e.status)}</td>
         <td>${e.status.queue ? badge(`${e.status.queue} na fila`, "warn") : e.revoked ? "–" : "0"}</td>
         <td>${e.status.cameras ?? "–"}</td><td class="mono">${esc(e.version || "–")}</td>
         <td>${e.revoked ? "" : `<button class="small danger" data-revoke="${e.id}">Revogar</button>`}</td></tr>`).join("")}
     </table></div>` : `<p class="hint">Nenhum Edge cadastrado: as câmeras são atendidas pelo detector desta instalação.</p>`}
     <div class="actions" style="margin-top:12px"><button id="edge-new">+ Gerar código de instalação</button>
-      ${active.length ? `<span class="hint">${active.filter((e) => e.online).length} de ${active.length} conectado(s)</span>` : ""}</div>`;
+      ${active.length ? `<span class="hint">${active.filter((e) => e.online).length} de ${active.length} conectado(s)</span>` : ""}</div>
+    <form id="edge-alert-form" class="form" style="margin-top:12px">
+      ${field(conf.values, "edge_offline_alert_minutes", "Alertar se um Edge ficar sem conexão por", { type: "number", min: 1, max: 1440, suffix: "min",
+        hint: "Aviso na tela, e-mail e WhatsApp (se configurados) – uma vez ao cair e outra ao voltar" })}
+      <div class="actions"><button type="submit" class="secondary">Salvar</button></div>
+    </form>`;
+  $("#edge-alert-form", box).addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    await saveConfig(collect(ev.target, ["edge_offline_alert_minutes"]));
+  });
 
   box.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
     const e = edges.find((x) => x.id === Number(b.dataset.revoke));
@@ -334,5 +346,5 @@ export async function show(element) {
 
 export function onRealtime(data) {
   if (data.kind === "storage_health") reload();
-  if (data.kind === "edge_status") renderEdges();
+  if (data.kind === "edge_status" || data.kind === "edge_alert") renderEdges();
 }

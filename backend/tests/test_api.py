@@ -720,6 +720,12 @@ def test_edge_enrollment_and_security(client, admin):
     code = client.post("/api/edge/enrollments", headers=admin, json={"name": "Edge A", "unit_id": unit}).json()["code"]
     assert client.post("/api/edge/enroll", json={"code": "0000-0000"}).status_code == 400
     cred = client.post("/api/edge/enroll", json={"code": code.lower(), "version": "1.0.0"}).json()
+    assert [k["kid"] for k in cred["media_keys"]] == [cred["active_kid"]] and len(cred["media_keys"][0]["key"]) == 44
+    # troca de máquina na mesma unidade: o Edge novo recebe também a chave antiga
+    code2 = client.post("/api/edge/enrollments", headers=admin, json={"name": "Edge A2", "unit_id": unit}).json()["code"]
+    cred2 = client.post("/api/edge/enroll", json={"code": code2}).json()
+    assert [k["kid"] for k in cred2["media_keys"]] == [cred["active_kid"], cred2["active_kid"]]
+    client.delete(f"/api/edge/edges/{cred2['edge_id']}", headers=admin)
     assert client.post("/api/edge/enroll", json={"code": code}).status_code == 400  # uso único
     eh = {"X-Edge-Id": str(cred["edge_id"]), "X-Edge-Key": cred["key"]}
     assert client.get("/api/edge/detector/config", headers={**eh, "X-Edge-Key": "errada"}).status_code == 401
@@ -746,7 +752,58 @@ def test_edge_enrollment_and_security(client, admin):
     assert client.get(first.json()["image_url"], headers=admin).status_code == 503
     edges = client.get("/api/edge/edges", headers=admin).json()
     assert edges[0]["name"] == "Edge A" and not edges[0]["online"]
+    # detector desta instalação não analisa as câmeras que o Edge atende (sem duplicar)
+    local = [c["name"] for c in client.get("/api/detector/config", headers=DET).json()]
+    assert "Cam Edge A" not in local and "Cam Edge B" in local
     assert client.delete(f"/api/edge/edges/{cred['edge_id']}", headers=admin).status_code == 204
     assert client.get("/api/edge/detector/config", headers=eh).status_code == 401
+    assert "Cam Edge A" in [c["name"] for c in client.get("/api/detector/config", headers=DET).json()]
     _, op = make_user(client, admin, "op-edge@vigia.local", "operador")
     assert client.get("/api/edge/edges", headers=op).status_code == 403
+
+
+def test_edge_offline_alert_once():
+    from app.edge_tunnel import _watch, check_offline
+    _watch.clear()
+    edges = [(901, "Edge Teste")]
+    assert check_offline(edges, 5, now=0) == []          # acabou de cair: espera
+    assert check_offline(edges, 5, now=200) == []
+    assert check_offline(edges, 5, now=301) == [(901, "Edge Teste", False)]  # 5 min: avisa
+    assert check_offline(edges, 5, now=900) == []        # avisa uma vez só
+    from app.edge_tunnel import hub
+    hub.sockets[901] = object()                           # voltou
+    assert check_offline(edges, 5, now=950) == [(901, "Edge Teste", True)]
+    assert check_offline(edges, 5, now=990) == []
+    del hub.sockets[901]
+    assert check_offline([], 5, now=1000) == [] and 901 not in _watch  # revogado: para de monitorar
+
+
+def test_edge_mtls(client, admin, monkeypatch):
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    from app.config import settings
+    from app.edge_ca import ca_paths, fingerprint
+    key = ec.generate_private_key(ec.SECP256R1())
+    csr = x509.CertificateSigningRequestBuilder().subject_name(
+        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "x")])).sign(key, hashes.SHA256())
+    unit = client.get("/api/units", headers=admin).json()[0]["id"]
+    code = client.post("/api/edge/enrollments", headers=admin, json={"name": "Edge mTLS", "unit_id": unit}).json()["code"]
+    cred = client.post("/api/edge/enroll", json={"code": code, "csr": csr.public_bytes(serialization.Encoding.PEM).decode()}).json()
+    cert = x509.load_pem_x509_certificate(cred["client_cert"].encode())
+    ca = x509.load_pem_x509_certificate(ca_paths()[0].read_bytes())
+    assert cert.issuer == ca.subject and cred["ca_cert"].startswith("-----BEGIN CERTIFICATE")
+    ca.public_key().verify(cert.signature, cert.tbs_certificate_bytes, ec.ECDSA(hashes.SHA256()))  # assinado pela CA
+    fp = fingerprint(cert)
+    eh = {"X-Edge-Id": str(cred["edge_id"]), "X-Edge-Key": cred["key"]}
+    monkeypatch.setattr(settings, "edge_require_mtls", True)
+    assert client.get("/api/edge/settings", headers=eh).status_code == 401  # credencial certa, sem certificado
+    assert client.get("/api/edge/settings", headers={**eh, "X-Client-Cert-Sha256": "00" * 32}).status_code == 401
+    colon = ":".join(fp[i:i + 2] for i in range(0, 64, 2)).upper()  # formato com dois-pontos também vale
+    assert client.get("/api/edge/settings", headers={**eh, "X-Client-Cert-Sha256": colon}).status_code == 200
+    code2 = client.post("/api/edge/enrollments", headers=admin, json={"name": "Sem CSR", "unit_id": unit}).json()["code"]
+    assert client.post("/api/edge/enroll", json={"code": code2}).status_code == 400  # exige mTLS no cadastro
+    edges = {e["name"]: e for e in client.get("/api/edge/edges", headers=admin).json()}
+    assert edges["Edge mTLS"]["mtls"] and edges["Edge mTLS"]["mtls_required"]
+    client.delete(f"/api/edge/edges/{cred['edge_id']}", headers=admin)

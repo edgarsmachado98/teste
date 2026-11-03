@@ -257,6 +257,7 @@ class Event(Base):
     # image_file/clip_dir são então caminhos relativos no Edge; a miniatura fica aqui.
     media_edge_id: Mapped[int | None] = mapped_column(ForeignKey("edges.id", ondelete="SET NULL"), nullable=True)
     thumb_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    clip_format: Mapped[str | None] = mapped_column(String(10), nullable=True)  # None/jpg = quadros · webm = vídeo
     edge_ref: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)  # evita duplicar no reenvio
     classification: Mapped[str | None] = mapped_column(String(30), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -379,6 +380,7 @@ class Edge(Base):
     name: Mapped[str] = mapped_column(String(120))
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"))
     key_hash: Mapped[str] = mapped_column(String(64), unique=True)  # credencial do Edge (só o hash)
+    cert_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)  # mTLS (SHA-256 do certificado)
     enrolled_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
@@ -386,6 +388,20 @@ class Edge(Base):
     status: Mapped[dict] = mapped_column(JSON, default=dict)  # disco, fila, storage, câmeras
 
     unit: Mapped[Unit] = relationship(lazy="selectin")
+
+
+class EdgeMediaKey(Base):
+    """Cópia (cifrada com a chave da instância) das chaves AES das imagens gravadas pelos Edges de uma
+    unidade: se a máquina do Edge for trocada, o Edge novo continua lendo as imagens antigas do storage."""
+
+    __tablename__ = "edge_media_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"), index=True)
+    kid: Mapped[str] = mapped_column(String(8), unique=True)
+    key_enc: Mapped[str] = mapped_column(Text)
+    edge_id: Mapped[int | None] = mapped_column(ForeignKey("edges.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class EdgeEnrollment(Base):

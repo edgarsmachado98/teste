@@ -26,6 +26,9 @@ def ensure_packages() -> None:
 
 
 def first_setup() -> None:
+    local_ca = ROOT / "certs" / "vigia-ca.crt"
+    if local_ca.exists() and not os.getenv("EDGE_CLOUD_CA"):
+        os.environ["EDGE_CLOUD_CA"] = str(local_ca)  # cadastro no servidor local em HTTPS
     from vigia_edge.__main__ import enroll
     from vigia_edge.config import load
     if load().enrolled:
@@ -33,7 +36,7 @@ def first_setup() -> None:
     print("\n=== Cadastro deste VigIA Edge ===")
     print("Gere o código em: painel da nuvem → Configurações → VigIA Edge → Gerar código de instalação\n")
     while True:
-        cloud = input("Endereço da nuvem (ex.: https://cliente.seudominio.com.br): ").strip()
+        cloud = input("Endereço da nuvem (ex.: https://cliente.seudominio.com.br; teste local: http://localhost:8000): ").strip()
         code = input("Código de instalação (ex.: ABCD-1234): ").strip()
         media = input("Pasta do storage do cliente [D:\\vigia ou \\\\nas\\vigia] (Enter = pasta local): ").strip()
         args = type("A", (), {"cloud": cloud, "code": code, "media_dir": media or None})
@@ -42,11 +45,23 @@ def first_setup() -> None:
         print("Tente novamente.\n")
 
 
+def use_project_venv() -> None:
+    """No computador que já roda o iniciar.bat, reaproveita o .venv (mesmas dependências)."""
+    venv_py = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if venv_py.exists() and Path(sys.executable).resolve() != venv_py.resolve():
+        sys.exit(subprocess.call([str(venv_py), str(Path(__file__).resolve()), *sys.argv[1:]]))
+
+
 def main() -> int:
+    use_project_venv()
     ensure_packages()
     first_setup()
     from vigia_edge.config import load
     cfg = load()
+    # Teste com o servidor neste mesmo computador em HTTPS: confia no certificado gerado pelo vigia.py
+    local_ca = ROOT / "certs" / "vigia-ca.crt"
+    if cfg.cloud_url.startswith("https://localhost") and local_ca.exists() and not os.getenv("EDGE_CLOUD_CA"):
+        os.environ["EDGE_CLOUD_CA"] = str(local_ca)
     env = {**os.environ, "BACKEND_URL": f"http://127.0.0.1:{cfg.listen_port}", "DETECTOR_API_KEY": cfg.detector_key}
     procs: dict[str, subprocess.Popen | None] = {"edge": None, "detector": None}
     cmds = {"edge": ([sys.executable, "-m", "vigia_edge", "run"], HERE),

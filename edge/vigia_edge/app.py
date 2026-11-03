@@ -37,14 +37,20 @@ class StatsIn(BaseModel):
 
 
 def create_app(cfg: EdgeConfig) -> FastAPI:
-    store = MediaStore(cfg.media_dir, cfg.live_dir)
+    cipher = None
+    if cfg.media_keys and cfg.active_kid:
+        from .crypto import MediaCipher
+        cipher = MediaCipher(cfg.media_keys, cfg.active_kid)
+    store = MediaStore(cfg.media_dir, cfg.live_dir, cipher)
     outbox = Outbox(cfg.outbox_dir)
     config_cache = HOME / "config-cameras.json"
     state = {"detector_seen_at": None, "health": {}, "cameras": 0}
-    client = httpx.AsyncClient(base_url=cfg.cloud_url, headers=cfg.auth_headers, verify=cfg.verify, timeout=20)
+    client = httpx.AsyncClient(base_url=cfg.cloud_url, headers=cfg.auth_headers, timeout=20,
+                               verify=cfg.ssl_context() if cfg.cloud_url.startswith("https://") else True)
 
     def status() -> dict:
         return {"media_ok": store.ok(), "media_dir": str(cfg.media_dir), "queue": outbox.size(),
+                "encrypted": cipher is not None,
                 "cameras": state["cameras"], "retention_days": cfg.retention_days,
                 "detector_seen_at": state["detector_seen_at"], **store.usage()}
 
@@ -123,9 +129,15 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
         if len(frames) > 300 or not clip_id.replace("-", "").isalnum():
             raise HTTPException(400, "clipe inválido")
         jpegs = [await f.read() for f in frames]
-        folder = await asyncio.to_thread(store.save_clip, clip_id[:40], jpegs)
-        outbox.put("clip", {"clip_id": clip_id[:40], "folder": folder, "frames": len(jpegs),
-                            "duration": max(float(duration), 0.1)})
+        duration = max(float(duration), 0.1)
+        video = await asyncio.to_thread(store.save_clip_video, clip_id[:40], jpegs, duration)
+        if video:
+            outbox.put("clip", {"clip_id": clip_id[:40], "folder": video, "frames": len(jpegs),
+                                "duration": duration, "format": "webm"})
+        else:  # sem codificador de vídeo: quadros JPEG
+            folder = await asyncio.to_thread(store.save_clip, clip_id[:40], jpegs)
+            outbox.put("clip", {"clip_id": clip_id[:40], "folder": folder, "frames": len(jpegs),
+                                "duration": duration, "format": "jpg"})
         return {"queued": True}
 
     @app.post("/api/detector/cameras/{camera_id}/frame", status_code=204, dependencies=guard)

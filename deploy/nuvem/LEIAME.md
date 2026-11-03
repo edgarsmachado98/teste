@@ -55,6 +55,12 @@ detector rodando.
 ### Segurança
 
 - Túnel iniciado pelo Edge (saída 443, TLS). O Edge recusa endereço sem HTTPS.
+- **mTLS**: no cadastro o Edge gera a própria chave (que não sai da máquina) e a CA do cliente assina o
+  certificado dele. O Caddy valida o certificado e o servidor só aceita o Edge com o certificado certo
+  (`EDGE_REQUIRE_MTLS=true`, ativado por `novo_cliente.sh`). Cada cliente tem a sua CA.
+- **Imagens criptografadas no storage do cliente** (AES-256-GCM). Uma cópia da chave fica na nuvem,
+  cifrada com a chave da instância, para um Edge substituto continuar lendo as imagens antigas.
+  Guarde o `.env` e a pasta `dados/` do cliente: sem eles as imagens antigas não podem ser lidas.
 - Credencial própria por Edge, guardada só como hash na nuvem; revogável em Configurações (a conexão cai na hora).
 - Código de instalação de uso único, 24 h, com bloqueio após tentativas erradas.
 - O túnel só entrega imagens de dentro da pasta do storage (nada de caminhos fora dela).

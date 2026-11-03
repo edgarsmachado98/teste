@@ -17,6 +17,20 @@ from . import __version__
 from .config import CRED_FILE, check_cloud_url, load, save
 
 
+def new_client_key() -> tuple[str, bytes]:
+    """Chave privada do Edge (P-256) + pedido de certificado para a nuvem assinar."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    key = ec.generate_private_key(ec.SECP256R1())
+    csr = (x509.CertificateSigningRequestBuilder()
+           .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "vigia-edge")]))
+           .sign(key, hashes.SHA256()))
+    return (csr.public_bytes(serialization.Encoding.PEM).decode(),
+            key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+
+
 def enroll(args) -> int:
     cfg = load()
     try:
@@ -26,8 +40,10 @@ def enroll(args) -> int:
         return 2
     if args.media_dir:
         cfg.media_dir = Path(args.media_dir)
+    csr_pem, key_pem = new_client_key()
     try:
-        resp = httpx.post(f"{cfg.cloud_url}/api/edge/enroll", json={"code": args.code, "version": __version__},
+        resp = httpx.post(f"{cfg.cloud_url}/api/edge/enroll",
+                          json={"code": args.code, "version": __version__, "csr": csr_pem},
                           timeout=20, verify=cfg.verify)
     except httpx.HTTPError as exc:
         print(f"Erro: não foi possível falar com a nuvem ({exc}). Verifique o endereço e se a saída 443 está liberada.")
@@ -37,10 +53,22 @@ def enroll(args) -> int:
         return 1
     data = resp.json()
     cfg.edge_id, cfg.key, cfg.name = data["edge_id"], data["key"], data["name"]
+    if data.get("client_cert"):  # mTLS: a chave privada foi gerada aqui e nunca saiu desta máquina
+        cfg.client_key.parent.mkdir(parents=True, exist_ok=True)
+        cfg.client_key.write_bytes(key_pem)
+        try:
+            cfg.client_key.chmod(0o600)
+        except OSError:
+            pass
+        cfg.client_cert.write_text(data["client_cert"], encoding="utf-8")
     cfg.retention_days = data.get("retention_days", cfg.retention_days)
+    if data.get("media_keys"):
+        cfg.media_keys = {k["kid"]: k["key"] for k in data["media_keys"]}
+        cfg.active_kid = data["active_kid"]
     save(cfg)
     print(f"\n✔ Edge \"{cfg.name}\" cadastrado (nº {cfg.edge_id}). Credencial salva em {CRED_FILE}")
-    print(f"  Imagens serão guardadas em: {cfg.media_dir}")
+    print(f"  Imagens serão guardadas em: {cfg.media_dir}"
+          + (" (criptografadas, AES-256)" if cfg.active_kid else ""))
     print("\nConfigure o detector desta máquina com:")
     print(f"  BACKEND_URL=http://127.0.0.1:{cfg.listen_port}")
     print(f"  DETECTOR_API_KEY={cfg.detector_key}\n")

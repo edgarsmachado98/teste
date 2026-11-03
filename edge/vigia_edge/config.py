@@ -19,6 +19,9 @@ class EdgeConfig:
     # Chave que o detector local usa para falar com o Edge (gerada no cadastro)
     detector_key: str = field(default_factory=lambda: secrets.token_urlsafe(24))
     retention_days: int = 90
+    # Chaves das imagens (AES-256): {id: chave base64}; a ativa cifra o que for gravado agora
+    media_keys: dict = field(default_factory=dict)
+    active_kid: str = ""
     # Storage do cliente (pasta local, unidade mapeada ou caminho de rede montado)
     media_dir: Path = field(default_factory=lambda: Path(os.getenv("EDGE_MEDIA_DIR", HOME / "midia")))
     # Fila de envio para a nuvem e quadros ao vivo: ficam no disco da própria caixa
@@ -26,7 +29,8 @@ class EdgeConfig:
     live_dir: Path = field(default_factory=lambda: HOME / "ao-vivo")
     listen_host: str = os.getenv("EDGE_HOST", "127.0.0.1")
     listen_port: int = int(os.getenv("EDGE_PORT", "8100"))
-    verify: str | bool = os.getenv("EDGE_CLOUD_CA") or True  # certificado próprio da nuvem, se houver
+    # certificado próprio da nuvem (ex.: teste com o servidor local em HTTPS), se houver
+    verify: str | bool = field(default_factory=lambda: os.getenv("EDGE_CLOUD_CA") or True)
 
     @property
     def enrolled(self) -> bool:
@@ -35,6 +39,23 @@ class EdgeConfig:
     @property
     def auth_headers(self) -> dict:
         return {"X-Edge-Id": str(self.edge_id), "X-Edge-Key": self.key}
+
+    @property
+    def client_cert(self) -> Path:
+        return HOME / "edge-cliente.crt"
+
+    @property
+    def client_key(self) -> Path:
+        return HOME / "edge-cliente.key"
+
+    def ssl_context(self):
+        """TLS para a nuvem: confia na nuvem (certificado público ou o local de teste) e apresenta o
+        certificado deste Edge (mTLS), quando houver."""
+        import ssl
+        ctx = ssl.create_default_context(cafile=self.verify if isinstance(self.verify, str) else None)
+        if self.client_cert.exists() and self.client_key.exists():
+            ctx.load_cert_chain(self.client_cert, self.client_key)
+        return ctx
 
     @property
     def ws_url(self) -> str:
@@ -57,7 +78,7 @@ def load() -> EdgeConfig:
     cfg = EdgeConfig()
     if CRED_FILE.exists():
         data = json.loads(CRED_FILE.read_text(encoding="utf-8"))
-        for key in ("cloud_url", "edge_id", "key", "name", "detector_key", "retention_days"):
+        for key in ("cloud_url", "edge_id", "key", "name", "detector_key", "retention_days", "media_keys", "active_kid"):
             if key in data:
                 setattr(cfg, key, data[key])
         if data.get("media_dir") and not os.getenv("EDGE_MEDIA_DIR"):
@@ -68,7 +89,8 @@ def load() -> EdgeConfig:
 def save(cfg: EdgeConfig) -> None:
     HOME.mkdir(parents=True, exist_ok=True)
     data = {"cloud_url": cfg.cloud_url, "edge_id": cfg.edge_id, "key": cfg.key, "name": cfg.name,
-            "detector_key": cfg.detector_key, "retention_days": cfg.retention_days, "media_dir": str(cfg.media_dir)}
+            "detector_key": cfg.detector_key, "retention_days": cfg.retention_days, "media_dir": str(cfg.media_dir),
+            "media_keys": cfg.media_keys, "active_kid": cfg.active_kid}
     tmp = CRED_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     try:

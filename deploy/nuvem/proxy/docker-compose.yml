@@ -13,6 +13,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./sites:/etc/caddy/sites:ro
+      - ../clientes:/clientes:ro   # CA de cada cliente para validar o certificado dos Edges (mTLS)
       - caddy_data:/data
       - caddy_config:/config
     networks: [vigia_proxy]

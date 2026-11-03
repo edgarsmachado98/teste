@@ -147,3 +147,65 @@ class EdgeHub:
 
 
 hub = EdgeHub()
+
+
+# ---------- Monitoramento: Edge desconectado ----------
+
+_watch: dict[int, dict] = {}  # edge_id -> {"since": monotonic de quando caiu, "alerted": bool}
+
+
+def check_offline(edges: list[tuple[int, str]], minutes: int, now: float | None = None) -> list[tuple[int, str, bool]]:
+    """Avisa uma vez quando um Edge fica desconectado por `minutes` e uma vez quando volta.
+    Retorna [(edge_id, nome, voltou)]."""
+    now = time.monotonic() if now is None else now
+    out = []
+    active = set()
+    for edge_id, name in edges:
+        active.add(edge_id)
+        st = _watch.setdefault(edge_id, {"since": now, "alerted": False})
+        if hub.online(edge_id):
+            if st["alerted"]:
+                out.append((edge_id, name, True))
+            st["since"], st["alerted"] = None, False
+        else:
+            if st["since"] is None:
+                st["since"] = now
+            if not st["alerted"] and now - st["since"] >= minutes * 60:
+                st["alerted"] = True
+                out.append((edge_id, name, False))
+    for gone in set(_watch) - active:  # revogado: para de monitorar
+        _watch.pop(gone)
+    return out
+
+
+async def monitor_loop() -> None:
+    from sqlalchemy import select
+
+    from . import audit, notifier
+    from .config import settings
+    from .database import SessionLocal
+    from .models import Edge
+    from .ws import hub as ws_hub
+
+    while True:
+        await asyncio.sleep(30)
+        try:
+            with SessionLocal() as db:
+                edges = [(e.id, e.name) for e in db.scalars(select(Edge).where(Edge.revoked_at.is_(None)))]
+            for edge_id, name, back in check_offline(edges, settings.edge_offline_alert_minutes):
+                label = "conectado novamente" if back else \
+                    f"sem conexão há mais de {settings.edge_offline_alert_minutes} min"
+                await ws_hub.broadcast({"kind": "edge_alert", "edge_id": edge_id, "name": name, "online": back,
+                                        "label": label})
+                with SessionLocal() as db:
+                    audit.record(db, None, "edge_conectado" if back else "edge_desconectado", "edge", edge_id,
+                                 f"{name}: {label}")
+                    db.commit()
+                text = (f"{'✅' if back else '⚠️'} VigIA – planta \"{name}\" {label}." + ("" if back else
+                        " O detector da planta continua gravando no storage local e as ocorrências ficam na fila; "
+                        "verifique a internet e a energia da máquina do VigIA Edge."))
+                await asyncio.to_thread(notifier._safely, notifier.send_mail, settings.email_recipients,
+                                        f"[VigIA] Edge {name}: {'conexão restabelecida' if back else 'sem conexão'}", text)
+                await asyncio.to_thread(notifier._safely, notifier.send_whatsapp_text, text)
+        except Exception:  # noqa: BLE001
+            log.exception("falha no monitoramento dos Edges")

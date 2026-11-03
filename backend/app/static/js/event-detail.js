@@ -186,7 +186,21 @@ function render(ev) {
       }, { once: false });
     }
   };
-  const showClip = () => { stopClip(); stopClip = mountClipPlayer(media, ev.id, ev.clip_frames, ev.clip_duration); };
+  const showClip = () => {
+    stopClip();
+    if (ev.clip_video_url) {  // clipe em vídeo, gravado no storage da planta
+      media.innerHTML = `<video class="evidence-img clip-video" controls autoplay muted playsinline loop
+        src="${esc(withToken(ev.clip_video_url))}"></video>
+        <p class="hint edge-note">📍 Clipe guardado no storage da planta (VigIA Edge) · ${Number(ev.clip_duration || 0).toFixed(0)} s</p>`;
+      media.querySelector("video").addEventListener("error", () => {
+        media.querySelector(".edge-note").outerHTML = `<p class="hint warn-text">Não foi possível carregar o clipe: o VigIA Edge
+          da planta está desconectado agora.</p>`;
+      });
+      stopClip = () => media.querySelector("video")?.pause();
+      return;
+    }
+    stopClip = mountClipPlayer(media, ev.id, ev.clip_frames, ev.clip_duration);
+  };
   ev.clip_frames ? showClip() : showPhoto();
   d.querySelectorAll("[data-media]").forEach((btn) => btn.addEventListener("click", () => {
     d.querySelectorAll("[data-media]").forEach((b) => b.classList.toggle("secondary", b !== btn));

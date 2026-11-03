@@ -6,7 +6,6 @@ que alguém abriu na tela e manda apagar mídia; o Edge informa a sua saúde a c
 import asyncio
 import json
 import logging
-import ssl
 import time
 
 import websockets
@@ -24,10 +23,7 @@ class Tunnel:
         self.started = time.monotonic()
 
     def _ssl(self):
-        if not self.cfg.ws_url.startswith("wss://"):
-            return None
-        ctx = ssl.create_default_context(cafile=self.cfg.verify if isinstance(self.cfg.verify, str) else None)
-        return ctx
+        return self.cfg.ssl_context() if self.cfg.ws_url.startswith("wss://") else None
 
     async def run(self) -> None:
         backoff = 1

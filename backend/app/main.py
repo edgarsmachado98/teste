@@ -23,6 +23,7 @@ from .settings_store import apply_overrides
 from .scheduler import scheduler_loop
 from .storage import storage_loop
 from .usage import usage_loop
+from .edge_tunnel import monitor_loop as edge_monitor_loop
 from .ws import hub
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -115,11 +116,13 @@ async def lifespan(app: FastAPI):
         ensure_default_unit(db)
         from .dds import ensure_themes
         ensure_themes(db)  # temas de DDS de referência
+    from .edge_ca import ensure_ca
+    ensure_ca()  # CA do mTLS dos Edges (o proxy HTTPS da nuvem confia nela)
     repair_orphan_cameras()
     assign_camera_units()
     tasks = [asyncio.create_task(retention_loop()), asyncio.create_task(health_loop()),
              asyncio.create_task(scheduler_loop()), asyncio.create_task(storage_loop()),
-             asyncio.create_task(usage_loop())]
+             asyncio.create_task(usage_loop()), asyncio.create_task(edge_monitor_loop())]
     yield
     for task in tasks:
         task.cancel()

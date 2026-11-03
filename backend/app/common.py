@@ -97,6 +97,7 @@ def event_out(event: Event) -> dict:
         image_url=f"/api/events/{event.id}/image" if event.image_file else None,
         thumb_url=f"/api/events/{event.id}/thumb" if (event.thumb_file or event.image_file) else None,
         media_at_edge=bool(event.media_edge_id),
+        clip_video_url=f"/api/events/{event.id}/clip.webm" if event.clip_dir and event.clip_format == "webm" else None,
         clip_frames=event.clip_frames if event.clip_dir else None,
         clip_duration=event.clip_duration if event.clip_dir else None,
         status=event.status,

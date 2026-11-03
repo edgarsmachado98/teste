@@ -21,18 +21,33 @@ cat > "$DIR/.env" <<ENV
 CLIENTE=$CLIENTE
 SECRET_KEY=$(openssl rand -hex 32)
 DETECTOR_API_KEY=$(openssl rand -hex 24)
+EDGE_REQUIRE_MTLS=true
 COMPANY_NAME=
 TIMEZONE=America/Sao_Paulo
 ENV
 
+(cd "$DIR" && docker compose -p "vigia-$CLIENTE" up -d)
+
+# A instância cria a CA dos Edges na primeira inicialização; o proxy passa a confiar nela
+for _ in $(seq 1 30); do [[ -f "$DIR/dados/edge-ca.crt" ]] && break; sleep 1; done
+[[ -f "$DIR/dados/edge-ca.crt" ]] || { echo "a instância não criou dados/edge-ca.crt – veja: docker logs vigia-$CLIENTE-backend"; exit 1; }
+
 cat > "proxy/sites/$CLIENTE.caddy" <<SITE
 $CLIENTE.$DOMINIO {
 	import seguranca
-	reverse_proxy vigia-$CLIENTE-backend:8000
+	# mTLS: navegadores entram sem certificado; os Edges apresentam o certificado emitido pela CA do cliente
+	tls {
+		client_auth {
+			mode verify_if_given
+			trust_pool file /clientes/$CLIENTE/dados/edge-ca.crt
+		}
+	}
+	reverse_proxy vigia-$CLIENTE-backend:8000 {
+		# impressão digital do certificado validado (substitui qualquer valor enviado pelo cliente)
+		header_up X-Client-Cert-Sha256 {http.request.tls.client.fingerprint}
+	}
 }
 SITE
-
-(cd "$DIR" && docker compose -p "vigia-$CLIENTE" up -d)
 docker compose -f proxy/docker-compose.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null \
   || echo "aviso: suba o proxy com: (cd proxy && docker compose up -d)"
 

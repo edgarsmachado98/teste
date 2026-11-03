@@ -159,7 +159,16 @@ async def event_thumb(event_id: int, db: Session = Depends(get_db)):
     return await event_image(event_id, db)
 
 
-async def _edge_media(edge_id: int, rel: str, cache: str):
+@router.get("/events/{event_id}/clip.webm", dependencies=[Depends(current_user)])
+async def event_clip_video(event_id: int, db: Session = Depends(get_db)):
+    """Clipe em vídeo (gravado pelo VigIA Edge no storage da planta)."""
+    event = get_or_404(db, Event, event_id)
+    if event.clip_format != "webm" or not event.clip_dir or not event.media_edge_id:
+        raise HTTPException(404, "clipe em vídeo não disponível")
+    return await _edge_media(event.media_edge_id, event.clip_dir, "private, max-age=86400", "video/webm")
+
+
+async def _edge_media(edge_id: int, rel: str, cache: str, media_type: str = "image/jpeg"):
     """Arquivo guardado no storage do cliente, buscado pelo túnel do VigIA Edge."""
     try:
         data = await edge_hub.fetch(edge_id, rel)
@@ -167,7 +176,7 @@ async def _edge_media(edge_id: int, rel: str, cache: str):
         raise HTTPException(503, "imagem guardada na planta: o VigIA Edge está desconectado no momento") from None
     except FileNotFoundError:
         raise HTTPException(404, "arquivo não encontrado no storage da planta (retenção ou exclusão)") from None
-    return Response(data, media_type="image/jpeg", headers={"Cache-Control": cache})
+    return Response(data, media_type=media_type, headers={"Cache-Control": cache})
 
 
 def _media_path(rel: str):

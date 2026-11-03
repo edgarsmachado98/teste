@@ -1,6 +1,7 @@
 """VigIA Edge: cadastro por código, credencial por Edge, rotas do detector via Edge e túnel."""
 
 import json
+from typing import Literal
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -16,9 +17,10 @@ from ..auth import require_role
 from ..common import EVIDENCE_DIR, get_or_404
 from ..config import settings
 from ..database import SessionLocal, get_db
+from ..edge_ca import normalize, sign_csr
 from ..edge_tunnel import hub as edge_hub
 from ..health import set_camera_health
-from ..models import Camera, Edge, EdgeEnrollment, Event, Rule, Unit, User
+from ..models import Camera, Edge, EdgeEnrollment, EdgeMediaKey, Event, Rule, Unit, User
 from ..schemas import DetectorCamera, RuleOut, StatsIn
 from ..security import token_hash
 from ..timeutil import as_utc
@@ -35,18 +37,23 @@ _enroll_failures: dict[str, list[float]] = {}  # tentativas erradas por IP (cont
 
 # ---------- Autenticação do Edge ----------
 
-def _edge_from_headers(db: Session, edge_id: str | None, key: str | None) -> Edge | None:
+def _edge_from_headers(db: Session, edge_id: str | None, key: str | None, cert_sha256: str | None = None) -> Edge | None:
     if not edge_id or not key or not edge_id.isdigit():
         return None
     edge = db.get(Edge, int(edge_id))
     if edge is None or edge.revoked_at is not None or not secrets.compare_digest(edge.key_hash, token_hash(key)):
         return None
+    if settings.edge_require_mtls:
+        # o proxy HTTPS validou o certificado contra a CA desta instância e repassou a impressão digital
+        given = normalize(cert_sha256)
+        if not edge.cert_fingerprint or not given or not secrets.compare_digest(given, edge.cert_fingerprint):
+            return None
     return edge
 
 
 def require_edge(x_edge_id: str | None = Header(None), x_edge_key: str | None = Header(None),
-                 db: Session = Depends(get_db)) -> Edge:
-    edge = _edge_from_headers(db, x_edge_id, x_edge_key)
+                 x_client_cert_sha256: str | None = Header(None), db: Session = Depends(get_db)) -> Edge:
+    edge = _edge_from_headers(db, x_edge_id, x_edge_key, x_client_cert_sha256)
     if edge is None:
         raise HTTPException(401, "credencial do Edge inválida ou revogada")
     edge.last_seen_at = datetime.now(timezone.utc)
@@ -68,7 +75,8 @@ def edge_out(e: Edge) -> dict:
     return {"id": e.id, "name": e.name, "unit_id": e.unit_id, "unit": e.unit.name if e.unit else None,
             "enrolled_at": e.enrolled_at, "revoked": e.revoked_at is not None, "last_seen_at": e.last_seen_at,
             "online": online, "recent": bool(seen and datetime.now(timezone.utc) - seen < ONLINE_GRACE),
-            "version": e.version, "status": e.status or {}}
+            "version": e.version, "status": e.status or {}, "mtls": bool(e.cert_fingerprint),
+            "mtls_required": settings.edge_require_mtls}
 
 
 class EnrollmentIn(BaseModel):
@@ -108,6 +116,7 @@ async def revoke_edge(edge_id: int, request: Request, user: User = Depends(admin
 class EnrollIn(BaseModel):
     code: str = Field(min_length=4, max_length=20)
     version: str = Field("", max_length=40)
+    csr: str | None = Field(None, max_length=4000)  # pedido de certificado do Edge (mTLS)
 
 
 @router.post("/enroll")
@@ -129,11 +138,31 @@ def enroll(data: EnrollIn, request: Request, db: Session = Depends(get_db)):
     enr.used_at = now
     db.add(edge)
     db.flush()
+    client_cert = ca_pem = None
+    if data.csr:
+        try:
+            client_cert, ca_pem, edge.cert_fingerprint = sign_csr(data.csr, edge.id, edge.name)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+    elif settings.edge_require_mtls:
+        raise HTTPException(400, "esta instância exige mTLS: atualize o VigIA Edge e cadastre de novo")
+    # Criptografia das imagens: chave nova para este Edge + chaves anteriores da unidade (troca de máquina)
+    import base64
+    import os
+
+    from ..settings_store import decrypt, encrypt
+    kid = secrets.token_hex(4)
+    db.add(EdgeMediaKey(unit_id=edge.unit_id, kid=kid, key_enc=encrypt(base64.b64encode(os.urandom(32)).decode()),
+                        edge_id=edge.id))
+    db.flush()
+    keys = [{"kid": k.kid, "key": decrypt(k.key_enc)} for k in
+            db.scalars(select(EdgeMediaKey).where(EdgeMediaKey.unit_id == edge.unit_id).order_by(EdgeMediaKey.id))]
     audit.record(db, None, "edge_cadastrado", "edge", edge.id,
                  f"{edge.name} – {request.client.host if request.client else ''}", request)
     db.commit()
     return {"edge_id": edge.id, "key": key, "name": edge.name, "unit_id": edge.unit_id,
-            "retention_days": settings.retention_days}
+            "retention_days": settings.retention_days, "media_keys": [k for k in keys if k["key"]], "active_kid": kid,
+            "client_cert": client_cert, "ca_cert": ca_pem}
 
 
 # ---------- Rotas do detector, vindas pelo Edge ----------
@@ -208,6 +237,7 @@ class EdgeClipIn(BaseModel):
     folder: str = Field(max_length=255)
     frames: int = Field(ge=1, le=300)
     duration: float = Field(gt=0, le=600)
+    format: Literal["jpg", "webm"] = "jpg"
 
 
 @router.post("/clips/{clip_id}", status_code=204)
@@ -218,6 +248,7 @@ async def edge_clip(clip_id: str, data: EdgeClipIn, edge: Edge = Depends(require
     if data.folder.startswith(("/", "\\")) or ".." in data.folder:
         raise HTTPException(400, "pasta inválida")
     event.clip_dir, event.clip_frames, event.clip_duration = data.folder, data.frames, data.duration
+    event.clip_format = data.format
     db.commit()
     await hub.broadcast({"kind": "event_updated", "id": event.id})
 
@@ -252,7 +283,8 @@ def edge_stats(data: EdgeStatsIn, edge: Edge = Depends(require_edge), db: Sessio
 @router.websocket("/tunnel")
 async def tunnel(ws: WebSocket):
     with SessionLocal() as db:
-        edge = _edge_from_headers(db, ws.headers.get("x-edge-id"), ws.headers.get("x-edge-key"))
+        edge = _edge_from_headers(db, ws.headers.get("x-edge-id"), ws.headers.get("x-edge-key"),
+                                  ws.headers.get("x-client-cert-sha256"))
         if edge is None:
             await ws.close(code=4001)
             return
@@ -286,7 +318,7 @@ async def tunnel(ws: WebSocket):
 
 
 def _save_status(edge_id: int, data: dict) -> None:
-    allowed = {"disk_free_gb", "disk_total_gb", "media_ok", "media_dir", "queue", "cameras", "retention_days",
+    allowed = {"disk_free_gb", "disk_total_gb", "media_ok", "media_dir", "queue", "cameras", "retention_days", "encrypted",
                "detector_seen_at", "uptime_s", "media_files"}
     with SessionLocal() as db:
         edge = db.get(Edge, edge_id)

@@ -129,7 +129,8 @@ def test_event_image_stays_at_client_and_streams_on_demand(world):
     original = jpeg()
     media_ref = send_event(w, original, clip_id="clip-e2e-1")
     stored = w["tmp"] / "storage-cliente" / media_ref
-    assert stored.read_bytes() == original  # imagem completa no storage do cliente
+    on_disk = stored.read_bytes()  # imagem completa no storage do cliente, cifrada (AES-256-GCM)
+    assert on_disk.startswith(b"VGE1") and b"\xff\xd8" not in on_disk[:40] and original not in on_disk
     ev = wait_until(lambda: next((e for e in cloud_events(w) if e["message"] == "pessoa na zona restrita"), None))
     assert ev["media_at_edge"] and ev["thumb_url"]
     # nenhuma cópia da imagem completa na nuvem: só a miniatura
@@ -146,9 +147,11 @@ def test_event_image_stays_at_client_and_streams_on_demand(world):
     assert r.status_code == 202
     detail = wait_until(lambda: (d := httpx.get(f"{w['base']}/api/events/{ev['id']}", headers=w["h"]).json())
                         ["clip_frames"] == 3 and d)
-    assert detail["clip_frames"] == 3
-    f1 = httpx.get(f"{w['base']}/api/events/{ev['id']}/clip/1", headers=w["h"])
-    assert f1.status_code == 200 and f1.content == frames[1][1][1]
+    assert detail["clip_video_url"]  # o Edge juntou os quadros num vídeo WebM
+    video = httpx.get(f"{w['base']}{detail['clip_video_url']}", headers=w["h"])
+    assert video.status_code == 200 and video.headers["content-type"] == "video/webm"
+    assert video.content[:4] == b"\x1a\x45\xdf\xa3"  # assinatura WebM/Matroska
+    assert list((w["tmp"] / "storage-cliente" / "clipes").rglob("clip-e2e-1.webm"))
 
 
 def test_live_frame_and_health_through_tunnel(world):
