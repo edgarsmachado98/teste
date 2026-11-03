@@ -161,4 +161,19 @@ def health():
     return {"status": "ok"}
 
 
+
+
+@app.middleware("http")
+async def revalidate_static(request: Request, call_next):
+    """Telas (HTML/JS/CSS): o navegador sempre confere se há versão nova (resposta 304 quando não há).
+    Sem isto, depois de uma atualização o navegador podia continuar com o JavaScript antigo.
+    Fontes não mudam: podem ficar em cache."""
+    response = await call_next(request)
+    path = request.url.path
+    if not path.startswith(("/api/", "/ws")) and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = ("public, max-age=604800" if path.startswith("/fonts/")
+                                             else "no-cache")
+    return response
+
+
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

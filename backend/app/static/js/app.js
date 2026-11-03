@@ -116,12 +116,18 @@ $("#header-unit").addEventListener("change", (e) => {
     toast("Cadastre a nova unidade em <b>Setores e padrões → + Unidade</b>.", "info", 6000);
     return;
   }
-  setUnit(value && (meta.units || []).length > 1 ? Number(value) : null);
+  chooseUnit(value ? Number(value) : null);
+});
+
+/** Troca a unidade exibida (cabeçalho ou botões do Painel) e recarrega a tela atual. */
+function chooseUnit(id) {
+  setUnit(id && (meta?.units || []).length > 1 ? id : null);
   renderMeta();
-  const name = (meta.units || []).find((u) => u.id === session.unitId)?.name;
+  const name = (meta?.units || []).find((u) => u.id === session.unitId)?.name;
   toast(name ? `Mostrando a unidade <b>${esc(name)}</b>.` : "Mostrando todas as unidades.", "ok", 2500);
   rerender();
-});
+}
+window.addEventListener("choose-unit", (e) => chooseUnit(e.detail));
 
 window.addEventListener("units-changed", () => loadMeta());
 

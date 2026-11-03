@@ -705,3 +705,10 @@ def test_action_attachments(client, admin):
     path = next((EVIDENCE_DIR / "anexos").rglob(f"acao{action['id']}-*.pdf"))
     assert client.delete(f"/api/attachments/{att['id']}", headers=gestor).status_code == 204
     assert not path.exists()
+
+
+def test_static_files_are_revalidated(client):
+    # após uma atualização, o navegador não pode continuar com o JavaScript antigo
+    for path in ("/", "/js/app.js", "/style.css"):
+        assert client.get(path).headers["cache-control"] == "no-cache"
+    assert "max-age" in client.get("/fonts/fonts.css").headers["cache-control"]

@@ -3,6 +3,16 @@ import { HEALTH_LABELS, TYPE_LABELS, api, can, esc, fmtDateTime, fmtPct, healthB
 
 let el;
 
+/** Botões de unidade no topo do painel (mesma escolha do cabeçalho). */
+function unitBar(units) {
+  if (units.length < 2) return "";
+  const opt = (id, name) => `<button type="button" class="${(session.unitId || null) === id ? "" : "secondary"}"
+    data-unit="${id ?? ""}" aria-pressed="${(session.unitId || null) === id}">${esc(name)}</button>`;
+  return `<div class="unit-bar" role="group" aria-label="Unidade exibida">
+      <span class="hint">Unidade:</span>${opt(null, "Todas")}${units.map((u) => opt(u.id, u.name)).join("")}
+    </div>`;
+}
+
 function greeting(t, overdueCount, problems) {
   const h = new Date().getHours();
   const hello = h < 5 ? "Boa noite" : h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
@@ -43,7 +53,8 @@ async function load() {
   const failures = [];
   const safe = (label, promise, fallback) => promise.catch((err) => { failures.push(`${label}: ${err.message}`); return fallback; });
   const emptySummary = { totals: { pending: 0, deviations: 0 }, compliance: { rate: null }, actions: { overdue: 0, open: 0 } };
-  const [summary, pending, cameras, overdue, approvals] = await Promise.all([
+  const [meta, summary, pending, cameras, overdue, approvals] = await Promise.all([
+    api("/api/meta").catch(() => ({ units: [] })),
     safe("Indicadores", api("/api/reports/summary"), emptySummary),
     safe("Alertas", api("/api/events?status=nova&limit=24"), []),
     safe("Câmeras", api("/api/cameras"), []),
@@ -55,6 +66,7 @@ async function load() {
   const problems = cameras.filter((cam) => cam.enabled && cam.health && cam.health !== "ok");
 
   el.innerHTML = `
+    ${unitBar(meta.units || [])}
     ${greeting(t, summary.actions.overdue, problems.length)}
     ${failures.length ? `
       <div class="card alert-strip"><b>▲ Parte do painel não carregou:</b>
@@ -111,6 +123,9 @@ async function load() {
       await api(`/api/events/${btn.dataset.id}`, { method: "PATCH", body: { status: btn.dataset.status } });
       load();
     } catch (err) { toast(esc(err.message), "danger"); }
+  }));
+  el.querySelectorAll("button[data-unit]").forEach((btn) => btn.addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("choose-unit", { detail: btn.dataset.unit ? Number(btn.dataset.unit) : null }));
   }));
 }
 
