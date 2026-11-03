@@ -422,3 +422,63 @@ def test_unit_filter(client, admin):
     assert cam_b["id"] in ids(client.get("/api/cameras", headers=admin, params={"unit_id": plant_a}))
     meta = client.get("/api/meta", headers=admin).json()
     assert {"Planta Joinville", "Planta Curitiba"} <= {u["name"] for u in meta["units"]}
+
+
+def test_dds(client, admin):
+    from datetime import date, timedelta
+    from tests.test_api import DET
+    themes = client.get("/api/dds/themes", headers=admin).json()
+    assert len(themes["themes"]) >= 30 and "EPI" in themes["categories"]
+    unit = client.post("/api/units", headers=admin, json={"name": "Planta DDS"}).json()["id"]
+    sector = client.post("/api/sectors", headers=admin, json=sector_payload(unit, name="Pintura")).json()["sector"]
+    cam = client.post("/api/cameras", headers=admin, json={"name": "Cabine", "source": "0", "sector_id": sector["id"]}).json()
+    rule = client.get("/api/rules", headers=admin, params={"camera_id": cam["id"]}).json()[0]
+    for _ in range(3):
+        client.post("/api/detector/events", headers=DET, data={"camera_id": cam["id"], "rule_id": rule["id"],
+                                                              "message": "1 pessoa(s) sem máscara"})
+    sug = client.get("/api/dds/suggestions", headers=admin, params={"sector_id": sector["id"]}).json()
+    assert sug[0]["title"].startswith("Proteção respiratória") and "falta de máscara" in sug[0]["reason"]
+    # plano: prévia, gravação e não duplica ao gerar de novo
+    monday = date.today() - timedelta(days=date.today().weekday())
+    body = {"unit_id": unit, "sector_id": sector["id"], "shift": "Turno A", "start": str(monday),
+            "end": str(monday + timedelta(days=13)), "weekdays": [0, 2, 4], "facilitator": "Líder Paulo"}
+    preview = client.post("/api/dds/plan", headers=admin, json=body).json()
+    assert preview["created"] == 0 and len(preview["items"]) == 6
+    assert preview["items"][0]["title"].startswith("Proteção respiratória")
+    assert len({i["theme_id"] for i in preview["items"]}) == 6  # não repete tema no plano
+    created = client.post("/api/dds/plan", headers=admin, json={**body, "dry_run": False}).json()
+    assert created["created"] == 6
+    assert client.post("/api/dds/plan", headers=admin, json={**body, "dry_run": False}).json()["created"] == 0
+    listed = client.get("/api/dds/sessions", headers=admin, params={
+        "start": body["start"], "end": body["end"], "unit_id": unit}).json()
+    first = listed["sessions"][0]
+    assert first["points"] and first["question"] and first["reason"].startswith("3 ocorrência")
+    # registro de realização com presença
+    person = client.post("/api/people", headers=admin, json=person_payload(
+        unit, name="Rita Pintora", cpf="935.411.347-80", registration="DDS-1", badge_code="DDS1",
+        sector_id=sector["id"])).json()
+    assert client.post(f"/api/dds/sessions/{first['id']}/record", headers=admin,
+                       json={"facilitator": "Líder Paulo"}).status_code == 422  # sem participantes
+    done = client.post(f"/api/dds/sessions/{first['id']}/record", headers=admin, json={
+        "person_ids": [person["id"]], "extra_participants": 2, "facilitator": "Líder Paulo"}).json()
+    assert done["status"] == "realizado" and done["participants"] == 3
+    assert client.delete(f"/api/dds/sessions/{first['id']}", headers=admin).status_code == 400
+    future = next(s for s in listed["sessions"] if date.fromisoformat(s["day"]) > date.today()) \
+        if any(date.fromisoformat(s["day"]) > date.today() for s in listed["sessions"]) else None
+    if future:
+        assert client.post(f"/api/dds/sessions/{future['id']}/record", headers=admin, json={
+            "person_ids": [person["id"]], "facilitator": "X Y"}).status_code == 400
+    summary = client.get("/api/dds/sessions", headers=admin, params={
+        "start": body["start"], "end": body["end"], "unit_id": unit}).json()["summary"]
+    assert summary["done"] == 1 and summary["participants"] == 3
+    assert client.get(f"/api/dds/people/{person['id']}", headers=admin).json()[0]["title"] == done["title"]
+    # tema próprio
+    mine = client.post("/api/dds/themes", headers=admin, json={
+        "category": "Comportamento seguro", "title": "Uso do crachá na portaria", "points": ["Sempre visível", " "]}).json()
+    assert mine["points"] == ["Sempre visível"] and not mine["builtin"]
+    builtin = next(t for t in themes["themes"] if t["builtin"])
+    assert client.put(f"/api/dds/themes/{builtin['id']}", headers=admin, json={
+        "category": "EPI", "title": "Mudado"}).status_code == 400
+    assert client.delete(f"/api/dds/themes/{mine['id']}", headers=admin).status_code == 204
+    actions = {a["action"] for a in client.get("/api/audit", headers=admin).json()}
+    assert {"dds_plano_gerado", "dds_realizado", "dds_tema_criado"} <= actions

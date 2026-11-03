@@ -17,7 +17,7 @@ from .database import SessionLocal
 from .health import health_loop
 from .migrate import migrate
 from .models import AuditLog, Camera, Event, RuleStat, Session
-from .routers import access, attachments, cameras, config, detector, events, measures, people, reports, sectors, system
+from .routers import access, attachments, cameras, config, dds, detector, events, measures, people, reports, sectors, system
 from .sectors import ensure_default_unit
 from .settings_store import apply_overrides
 from .scheduler import scheduler_loop
@@ -105,6 +105,8 @@ async def lifespan(app: FastAPI):
     apply_overrides()  # configurações salvas pelo painel (guia Configurações)
     with SessionLocal() as db:
         ensure_default_unit(db)
+        from .dds import ensure_themes
+        ensure_themes(db)  # temas de DDS de referência
     repair_orphan_cameras()
     assign_camera_units()
     tasks = [asyncio.create_task(retention_loop()), asyncio.create_task(health_loop()),
@@ -137,7 +139,7 @@ async def unexpected_error(request: Request, exc: Exception):
         pass  # disco cheio ou sem permissão: o rastro já foi para o console
     return JSONResponse(status_code=500, content={
         "detail": f"Erro interno em {request.url.path}: {type(exc).__name__}: {str(exc)[:300]}"})
-for module in (access, cameras, events, reports, detector, system, config, sectors, people, measures, attachments):
+for module in (access, cameras, events, reports, detector, system, config, sectors, people, measures, attachments, dds):
     app.include_router(module.router)
 
 

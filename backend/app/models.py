@@ -364,6 +364,62 @@ class Measure(Base):
     approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
 
 
+class DDSTheme(Base):
+    """Tema de DDS (Diálogo Diário de Segurança): de referência (code) ou criado pela empresa."""
+
+    __tablename__ = "dds_themes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)  # temas de referência
+    category: Mapped[str] = mapped_column(String(60))
+    title: Mapped[str] = mapped_column(String(200))
+    reference: Mapped[str] = mapped_column(String(120), default="")  # NR
+    points: Mapped[list] = mapped_column(JSON, default=list)  # roteiro para quem conduz
+    question: Mapped[str] = mapped_column(String(300), default="")  # pergunta para a equipe
+    minutes: Mapped[int] = mapped_column(Integer, default=10)
+    triggers: Mapped[list] = mapped_column(JSON, default=list)  # ocorrências que tornam o tema prioritário
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class DDSSession(Base):
+    """DDS programado ou realizado num setor/turno."""
+
+    __tablename__ = "dds_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"), index=True)
+    sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectors.id", ondelete="SET NULL"), nullable=True)
+    shift: Mapped[str] = mapped_column(String(60), default="")
+    day: Mapped[date] = mapped_column(Date, index=True)
+    theme_id: Mapped[int | None] = mapped_column(ForeignKey("dds_themes.id", ondelete="SET NULL"), nullable=True)
+    title: Mapped[str] = mapped_column(String(200))  # cópia do tema (o histórico não muda se o tema mudar)
+    facilitator: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(20), default="planejado")  # planejado | realizado | cancelado
+    reason: Mapped[str] = mapped_column(String(200), default="")  # por que o tema foi escolhido
+    notes: Mapped[str] = mapped_column(Text, default="")
+    extra_participants: Mapped[int] = mapped_column(Integer, default=0)  # terceiros/visitantes sem cadastro
+    held_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    recorded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    theme: Mapped[DDSTheme | None] = relationship(lazy="selectin")
+    unit: Mapped[Unit] = relationship(lazy="selectin")
+    sector: Mapped[Sector | None] = relationship(lazy="selectin")
+    attendance: Mapped[list["DDSAttendance"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
+
+
+class DDSAttendance(Base):
+    __tablename__ = "dds_attendance"
+    __table_args__ = (UniqueConstraint("session_id", "person_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("dds_sessions.id", ondelete="CASCADE"), index=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), index=True)
+
+
 class StorageDeletion(Base):
     """Exclusão pendente no NAS (retenção/LGPD) para quando ele estiver acessível."""
 
