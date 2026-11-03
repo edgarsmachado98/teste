@@ -243,13 +243,24 @@ async function reload() {
 
 // ---------- VigIA Edge (planta ligada à nuvem) ----------
 
+const newer = (a, b) => {
+  const pa = String(a).split(".").map(Number);
+  const pb = String(b || "0").split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
+
 async function renderEdges() {
   const box = $("#cfg-edge", el);
   if (!box) return;
   let edges = [];
   let units = [];
   let conf = { values: {} };
-  try { [edges, units, conf] = await Promise.all([api("/api/edge/edges"), api("/api/units"), api("/api/config")]); }
+  let pkgs = { latest: null, versions: [] };
+  try {
+    [edges, units, conf, pkgs] = await Promise.all([api("/api/edge/edges"), api("/api/units"), api("/api/config"),
+      api("/api/edge/packages")]);
+  }
   catch (err) { box.innerHTML = `<p class="bad-text">${esc(err.message)}</p>`; return; }
   const active = edges.filter((e) => !e.revoked);
   const state = (e) => {
@@ -273,14 +284,21 @@ async function renderEdges() {
         <td>${esc(e.unit || "–")}</td><td>${state(e)}
           <div>${e.mtls ? badge("🔐 certificado (mTLS)", "good") : e.mtls_required ? badge("sem certificado – recadastrar", "bad") : ""}</div></td><td>${e.revoked ? "–" : storage(e.status)}</td>
         <td>${e.status.queue ? badge(`${e.status.queue} na fila`, "warn") : e.revoked ? "–" : "0"}</td>
-        <td>${e.status.cameras ?? "–"}</td><td class="mono">${esc(e.version || "–")}</td>
-        <td>${e.revoked ? "" : `<button class="small danger" data-revoke="${e.id}">Revogar</button>`}</td></tr>`).join("")}
+        <td>${e.status.cameras ?? "–"}</td>
+        <td><span class="mono">${esc(e.version || "–")}</span>
+          ${!e.revoked && pkgs.latest && newer(pkgs.latest, e.version) ? `<div>${badge(`${pkgs.latest} disponível`, "warn")}</div>` : ""}
+          ${e.status.update && e.status.update.state !== "ok" ? `<div class="hint ${e.status.update.state === "erro" ? "bad-text" : ""}">${esc(e.status.update.message)}</div>` : ""}</td>
+        <td><div class="actions">${!e.revoked && e.online && pkgs.latest && newer(pkgs.latest, e.version)
+          ? `<button class="small" data-update="${e.id}">Atualizar</button>` : ""}
+          ${e.revoked ? "" : `<button class="small danger" data-revoke="${e.id}">Revogar</button>`}</div></td></tr>`).join("")}
     </table></div>` : `<p class="hint">Nenhum Edge cadastrado: as câmeras são atendidas pelo detector desta instalação.</p>`}
     <div class="actions" style="margin-top:12px"><button id="edge-new">+ Gerar código de instalação</button>
       ${active.length ? `<span class="hint">${active.filter((e) => e.online).length} de ${active.length} conectado(s)</span>` : ""}</div>
     <form id="edge-alert-form" class="form" style="margin-top:12px">
       ${field(conf.values, "edge_offline_alert_minutes", "Alertar se um Edge ficar sem conexão por", { type: "number", min: 1, max: 1440, suffix: "min",
         hint: "Aviso na tela, e-mail e WhatsApp (se configurados) – uma vez ao cair e outra ao voltar" })}
+      <label class="check wide"><input type="checkbox" name="edge_auto_update" ${conf.values.edge_auto_update?.value ? "checked" : ""}>
+        Atualizar os Edges automaticamente quando houver versão nova${pkgs.latest ? ` (publicada: ${esc(pkgs.latest)})` : " (nenhuma versão publicada nesta instância)"}</label>
       <label class="check wide"><input type="checkbox" name="edge_lan_direct" ${conf.values.edge_lan_direct?.value ? "checked" : ""}>
         Acesso direto pela rede da fábrica – quem está na planta abre imagem e clipe direto do Edge, sem passar pela internet</label>
       <p class="hint wide">Requer que a TI instale a <a href="${esc(withToken("/api/edge/ca.crt"))}">CA do cliente (vigia-ca-cliente.crt)</a>
@@ -290,9 +308,16 @@ async function renderEdges() {
     </form>`;
   $("#edge-alert-form", box).addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    await saveConfig(collect(ev.target, ["edge_offline_alert_minutes", "edge_lan_direct"]));
+    await saveConfig(collect(ev.target, ["edge_offline_alert_minutes", "edge_lan_direct", "edge_auto_update"]));
   });
 
+  box.querySelectorAll("[data-update]").forEach((b) => b.addEventListener("click", async () => {
+    const e = edges.find((x) => x.id === Number(b.dataset.update));
+    if (!confirm(`Atualizar "${e.name}" de ${e.version} para ${pkgs.latest}? O Edge confere a assinatura do fornecedor, instala,
+reinicia (cerca de 1 minuto sem detecção) e volta sozinho para a versão anterior se a nova não conectar.`)) return;
+    try { await api(`/api/edge/edges/${e.id}/update`, { method: "POST" }); toast("Atualização enviada ao Edge.", "ok", 3000); }
+    catch (err) { toast(esc(err.message), "danger"); }
+  }));
   box.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
     const e = edges.find((x) => x.id === Number(b.dataset.revoke));
     if (!confirm(`Revogar o Edge "${e.name}"? A conexão cai na hora e ele precisará de um novo código para voltar.`)) return;

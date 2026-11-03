@@ -17,8 +17,8 @@ log = logging.getLogger("vigia.edge.tunnel")
 
 
 class Tunnel:
-    def __init__(self, cfg, store, status_fn):
-        self.cfg, self.store, self.status_fn = cfg, store, status_fn
+    def __init__(self, cfg, store, status_fn, on_update=None):
+        self.cfg, self.store, self.status_fn, self.on_update = cfg, store, status_fn, on_update
         self.connected = False
         self.started = time.monotonic()
 
@@ -66,6 +66,8 @@ class Tunnel:
                 await ws.send(json.dumps({"id": rid.strip(), "ok": False, "error": "arquivo não encontrado"}))
             else:
                 await ws.send(rid.encode("ascii") + data)
+        elif op == "update" and self.on_update:
+            await self.on_update()
         elif op == "delete":
             for rel in msg.get("paths", [])[:1000]:
                 await asyncio.to_thread(self.store.delete, str(rel))

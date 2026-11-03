@@ -68,7 +68,16 @@ def world(tmp_path_factory):
     cloud_port = free_port()
     cloud_env = {**os.environ, "DATABASE_URL": f"sqlite:///{tmp}/nuvem.db", "EVIDENCE_DIR": str(tmp / "nuvem-ev"),
                  "BACKUP_DIR": str(tmp / "bk"), "PEOPLE_DIR": str(tmp / "pessoas"), "SECRET_KEY_FILE": str(tmp / "k"),
-                 "DETECTOR_API_KEY": "nao-usada"}
+                 "DETECTOR_API_KEY": "nao-usada", "EDGE_PACKAGES_DIR": str(tmp / "pacotes")}
+    # chave de teste do fornecedor (a de verdade fica só com o fornecedor)
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    import base64
+    vkey = Ed25519PrivateKey.generate()
+    (tmp / "fornecedor.key").write_bytes(vkey.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                                            serialization.NoEncryption()))
+    (tmp / "fornecedor.pub").write_text(base64.b64encode(vkey.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode())
     cloud = Proc([PY, "-m", "uvicorn", "app.main:app", "--port", str(cloud_port)], cloud_env, ROOT / "backend",
                  tmp / "nuvem.log")
     base = f"http://127.0.0.1:{cloud_port}"
@@ -83,7 +92,8 @@ def world(tmp_path_factory):
     edge_home = tmp / "edge"
     edge_port = free_port()
     edge_env = {**os.environ, "EDGE_HOME": str(edge_home), "EDGE_MEDIA_DIR": str(tmp / "storage-cliente"),
-                "EDGE_PORT": str(edge_port), "EDGE_LAN_PORT": str(free_port())}
+                "EDGE_PORT": str(edge_port), "EDGE_LAN_PORT": str(free_port()),
+                "EDGE_FORNECEDOR_PUB": str(tmp / "fornecedor.pub")}
     out = subprocess.run([PY, "-m", "vigia_edge", "enroll", "--cloud", base, "--code", code],
                          env=edge_env, cwd=ROOT / "edge", capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stdout + out.stderr
@@ -201,6 +211,32 @@ def test_lan_direct_access(world, tmp_path):
     # computador sem a CA do cliente não confia no Edge → a tela usa a nuvem
     with pytest.raises(httpx.ConnectError):
         httpx.Client(trust_env=False).get(f"{base}/ping")
+
+
+def test_remote_update_signed_package(world):
+    """Fornecedor publica a versão; o administrador clica em Atualizar; o Edge confere a assinatura,
+    instala numa pasta separada e encerra com o código 75 para o inicializador subir a versão nova."""
+    import importlib.util
+    import json
+    w = world
+    spec = importlib.util.spec_from_file_location("fornecedor", ROOT / "deploy" / "assinatura" / "fornecedor.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    tool.build_package("1.1.0", w["tmp"] / "fornecedor.key", w["tmp"] / "pacotes")
+    assert httpx.get(f"{w['base']}/api/edge/packages", headers=w["h"]).json()["latest"] == "1.1.0"
+    edge_id = httpx.get(f"{w['base']}/api/edge/edges", headers=w["h"]).json()[0]["id"]
+    r = httpx.post(f"{w['base']}/api/edge/edges/{edge_id}/update", headers=w["h"])
+    assert r.status_code == 202, r.text
+    code = w["edge"].p.wait(60)
+    assert code == 75  # instalou e pediu reinício
+    state = json.loads((w["tmp"] / "edge" / "versao.json").read_text())
+    assert state["pending"] == "1.1.0"
+    installed = w["tmp"] / "edge" / "versoes" / "1.1.0"
+    assert '__version__ = "1.1.0"' in (installed / "vigia_edge" / "__init__.py").read_text()
+    assert (installed / "vigia_detector" / "main.py").exists()
+    w["edge"].log.close()
+    w["edge"] = Proc([PY, "-m", "vigia_edge", "run"], w["edge_env"], ROOT / "edge", w["tmp"] / "edge-pos-update.log")
+    wait_until(lambda: httpx.get(f"{w['edge_url']}/status").json()["tunnel"], timeout=30)
 
 
 def test_offline_queue_then_resend_without_duplicates(world):

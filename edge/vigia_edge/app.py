@@ -5,6 +5,7 @@ os dados da ocorrência e a miniatura."""
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -57,10 +58,21 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
     from .lan import LanAccess
     lan = LanAccess(cfg, store, client)
 
-    def full_status() -> dict:
-        return {**status(), **lan.status()}
+    from .updater import EXIT_UPDATED, Updater
+    updater = Updater(cfg, client, HOME)
 
-    tunnel = Tunnel(cfg, store, full_status)
+    def full_status() -> dict:
+        return {**status(), **lan.status(), **updater.status()}
+
+    async def update_now() -> None:
+        """Instala a versão nova e encerra; o inicializador (planta.py) sobe a versão nova."""
+        if await updater.check_and_install():
+            await asyncio.sleep(2)  # deixa o status sair pelo túnel
+            os._exit(EXIT_UPDATED)
+
+    tunnel = Tunnel(cfg, store, full_status, on_update=update_now)
+
+    auto_update = {"on": False}
 
     async def maintenance() -> None:
         """Prazo de retenção vem da nuvem; a mídia vencida é apagada aqui mesmo (LGPD)."""
@@ -69,9 +81,12 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
                 resp = await client.get("/api/edge/settings")
                 resp.raise_for_status()
                 cfg.retention_days = int(resp.json().get("retention_days", cfg.retention_days))
+                auto_update["on"] = bool(resp.json().get("auto_update"))
             except (httpx.HTTPError, ValueError) as exc:
                 log.debug("sem configurações da nuvem: %s", exc)
             await asyncio.to_thread(store.purge, cfg.retention_days)
+            if auto_update.get("on"):
+                await update_now()
             await asyncio.sleep(6 * 3600)
 
     @asynccontextmanager

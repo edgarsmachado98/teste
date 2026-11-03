@@ -13,6 +13,7 @@ services:
       BACKUP_DIR: /data/backups
       PEOPLE_DIR: /data/pessoas
       SECRET_KEY_FILE: /data/secret.key
+      EDGE_PACKAGES_DIR: /data/pacotes-edge   # versões do Edge publicadas com clientes.sh publicar-edge
     # Um único processo: o túnel com os Edges fica em memória (ver app/edge_tunnel.py)
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000",
               "--proxy-headers", "--forwarded-allow-ips", "*"]

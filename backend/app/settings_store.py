@@ -74,6 +74,7 @@ FIELDS: dict[str, Field] = {
     "storage_backup_keep": Field("int", 1, 1000),
     "edge_offline_alert_minutes": Field("int", 1, 1440),
     "edge_lan_direct": Field("bool"),
+    "edge_auto_update": Field("bool"),
     # Backup
     "backup_hour": Field("int", 0, 23),
     "backup_keep": Field("int", 1, 365),

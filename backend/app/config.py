@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     edge_require_mtls: bool = False
     # Acesso direto pela rede da fábrica: exige a CA do cliente instalada nos computadores da empresa
     edge_lan_direct: bool = False
+    # Pacotes de atualização do Edge (assinados pelo fornecedor) e atualização automática
+    edge_packages_dir: str = "./data/pacotes-edge"
+    edge_auto_update: bool = False
 
     # Relatório automático por e-mail: mensal | semanal | desligado
     report_frequency: str = "mensal"

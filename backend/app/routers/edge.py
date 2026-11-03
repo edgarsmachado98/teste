@@ -180,7 +180,8 @@ def edge_config(edge: Edge = Depends(require_edge), db: Session = Depends(get_db
 @router.get("/settings")
 def edge_settings(edge: Edge = Depends(require_edge), db: Session = Depends(get_db)):
     db.commit()
-    return {"retention_days": settings.retention_days, "edge_id": edge.id, "name": edge.name}
+    return {"retention_days": settings.retention_days, "edge_id": edge.id, "name": edge.name,
+            "auto_update": settings.edge_auto_update}
 
 
 def _parse_when(value: str | None) -> datetime | None:
@@ -276,6 +277,63 @@ class EdgeStatsIn(StatsIn):
 def edge_stats(data: EdgeStatsIn, edge: Edge = Depends(require_edge), db: Session = Depends(get_db)):
     _camera_of(db, edge, data.camera_id)
     record_stats(db, data, _parse_when(data.observed_at))
+
+
+# ---------- Atualização remota ----------
+
+def _packages() -> list[tuple[tuple, str]]:
+    """Versões publicadas (zip + assinatura), da mais nova para a mais antiga."""
+    import re
+    from pathlib import Path
+    folder = Path(settings.edge_packages_dir)
+    found = []
+    for z in folder.glob("vigia-edge-*.zip") if folder.exists() else []:
+        m = re.fullmatch(r"vigia-edge-(\d+\.\d+\.\d+)\.zip", z.name)
+        if m and z.with_suffix(".sig").exists():
+            found.append((tuple(int(x) for x in m.group(1).split(".")), m.group(1)))
+    return sorted(found, reverse=True)
+
+
+@router.get("/update/latest")
+def update_latest(edge: Edge = Depends(require_edge), db: Session = Depends(get_db)):
+    db.commit()
+    pkgs = _packages()
+    return {"version": pkgs[0][1] if pkgs else None}
+
+
+@router.get("/update/{version}.{ext}")
+def update_file(version: str, ext: str, edge: Edge = Depends(require_edge)):
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    if ext not in ("zip", "sig") or version not in {v for _, v in _packages()}:
+        raise HTTPException(404, "pacote não encontrado")
+    path = Path(settings.edge_packages_dir) / f"vigia-edge-{version}.{ext}"
+    return FileResponse(path, media_type="application/zip" if ext == "zip" else "text/plain")
+
+
+@router.get("/packages")
+def list_packages(_: User = Depends(admin)):
+    pkgs = _packages()
+    return {"latest": pkgs[0][1] if pkgs else None, "versions": [v for _, v in pkgs],
+            "auto_update": settings.edge_auto_update}
+
+
+@router.post("/edges/{edge_id}/update", status_code=202)
+async def request_update(edge_id: int, request: Request, user: User = Depends(admin), db: Session = Depends(get_db)):
+    """Pede ao Edge que baixe e instale a versão mais nova agora (ele confere a assinatura do fornecedor)."""
+    edge = get_or_404(db, Edge, edge_id)
+    if edge.revoked_at is not None:
+        raise HTTPException(400, "Edge revogado")
+    if not _packages():
+        raise HTTPException(400, "nenhuma versão publicada nesta instância (deploy/nuvem/clientes.sh publicar-edge)")
+    ws = edge_hub.sockets.get(edge.id)
+    if ws is None:
+        raise HTTPException(409, "Edge desconectado – ele atualiza ao reconectar, se a atualização automática estiver ligada")
+    await ws.send_json({"op": "update"})
+    audit.record(db, user, "edge_atualizacao_pedida", "edge", edge.id, f"{edge.name}: {edge.version} → {_packages()[0][1]}",
+                 request)
+    db.commit()
 
 
 # ---------- Acesso direto pela rede da fábrica ----------
@@ -379,6 +437,7 @@ async def tunnel(ws: WebSocket):
 
 def _save_status(edge_id: int, data: dict) -> None:
     allowed = {"disk_free_gb", "disk_total_gb", "media_ok", "media_dir", "queue", "cameras", "retention_days", "encrypted", "lan",
+               "update",
                "detector_seen_at", "uptime_s", "media_files"}
     with SessionLocal() as db:
         edge = db.get(Edge, edge_id)

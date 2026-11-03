@@ -36,6 +36,52 @@ Abra `https://metalurgica-abc.vigia.suaempresa.com.br`, crie o administrador do 
 Atualizar a versão de todos os clientes: `docker build -t vigia-backend:latest ../../backend` e, em cada
 `clientes/<cliente>`, `docker compose -p vigia-<cliente> up -d`.
 
+## Operação do dia a dia
+
+```bash
+./clientes.sh listar                 # situação de todos: container, HTTPS, tamanho dos dados
+./clientes.sh atualizar-todos        # nova versão do servidor, um cliente por vez
+./clientes.sh backup todos           # backup de banco e anexos de cada cliente
+./clientes.sh parar|iniciar <cliente>
+./clientes.sh remover <cliente>      # desativa e arquiva os dados (não apaga)
+```
+
+## Atualizar os Edges dos clientes (pacote assinado)
+
+Uma vez, no **seu** computador (não no servidor):
+
+```bash
+cd deploy/assinatura
+python fornecedor.py gerar-chaves    # cria fornecedor.key (FAÇA BACKUP, nunca no git/servidor)
+                                     # e edge/vigia_edge/fornecedor.pub (faça commit: vai em todo Edge)
+```
+
+A cada versão nova:
+
+```bash
+python fornecedor.py empacotar --versao 1.1.0
+../nuvem/clientes.sh publicar-edge pacotes/vigia-edge-1.1.0.zip
+```
+
+Em cada cliente, **Configurações → VigIA Edge** mostra “1.1.0 disponível” e o botão **Atualizar** (ou ligue
+a atualização automática). O Edge confere a assinatura e cada arquivo, instala numa pasta separada,
+reinicia e volta sozinho para a versão anterior se a nova não conectar em 3 minutos. Pacote sem a sua
+assinatura é recusado – nem quem invadisse a nuvem conseguiria instalar código nas plantas.
+
+> Edges instalados antes de existir `fornecedor.pub` não atualizam remotamente: atualize-os uma vez à mão
+> (copiar a pasta do VigIA com o `fornecedor.pub`) e daí em diante a atualização é pelo painel.
+
+## Acesso direto pela rede da fábrica (opcional)
+
+Quem está dentro da planta abre imagem e clipe direto do Edge, sem passar pela internet. Para ligar:
+**Configurações → VigIA Edge → Acesso direto**, e peça à TI do cliente:
+
+1. Instalar a **CA do cliente** (link “CA do cliente” na mesma tela) nos computadores da empresa
+   (Windows: política de grupo → Autoridades de Certificação Raiz Confiáveis).
+2. Liberar a porta **8443** do computador do Edge na rede local (Firewall do Windows: regra de entrada).
+
+Computadores sem a CA, fora da fábrica ou com o Edge inacessível abrem pela nuvem automaticamente.
+
 ## Na planta (VigIA Edge)
 
 Máquina na rede das câmeras (mini PC i5/16 GB atende ~8–12 câmeras; mais que isso, GPU/Jetson).
@@ -50,6 +96,8 @@ detector rodando.
 | Saída HTTPS (TCP 443) para `<cliente>.seudominio` | Sim – é a única conexão com a internet |
 | Portas de entrada, VPN, redirecionamento no roteador | **Não** |
 | Acesso RTSP às câmeras a partir da máquina do Edge | Sim (rede local) |
+| Porta 8443 de entrada no computador do Edge, só na rede local | Opcional (acesso direto) |
+| CA do cliente instalada nos computadores da empresa | Opcional (acesso direto) |
 | Pasta no storage com usuário exclusivo do VigIA (leitura e escrita) | Sim |
 
 ### Segurança

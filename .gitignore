@@ -13,3 +13,5 @@ vigia.service
 edge/edge-data/
 deploy/nuvem/clientes/
 deploy/nuvem/proxy/sites/*.caddy
+deploy/assinatura/fornecedor.key
+deploy/assinatura/pacotes/
