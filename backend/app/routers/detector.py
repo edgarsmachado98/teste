@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -120,9 +121,29 @@ async def receive_frame(camera_id: int, background: BackgroundTasks, frame: Uplo
     tmp.write_bytes(await frame.read())
     tmp.replace(path)
     camera.last_frame_at = datetime.now(timezone.utc)
+    camera.connect_error = None
     await set_camera_health(db, camera, health if health in ("ok", "escura", "obstruida", "congelada") else "ok",
                             background)
     db.commit()
+
+
+class CameraStatusIn(BaseModel):
+    error: str | None = Field(None, max_length=300)
+
+
+@router.post("/cameras/{camera_id}/status", status_code=204)
+async def receive_camera_status(camera_id: int, data: CameraStatusIn, db: Session = Depends(get_db)):
+    """Por que o detector não consegue abrir a câmera (None = conectou)."""
+    await apply_camera_status(db, get_or_404(db, Camera, camera_id), data.error)
+
+
+async def apply_camera_status(db: Session, camera: Camera, error: str | None) -> None:
+    changed = (camera.connect_error or None) != (error or None)
+    camera.connect_error = error or None
+    camera.connect_error_at = datetime.now(timezone.utc) if error else None
+    db.commit()
+    if changed:
+        await hub.broadcast({"kind": "camera_status", "camera_id": camera.id, "error": camera.connect_error})
 
 
 @router.post("/stats", status_code=204)

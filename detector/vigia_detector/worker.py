@@ -8,10 +8,16 @@ import time
 import unicodedata
 from datetime import datetime
 
-import cv2
-import numpy as np
+import os
+
+# RTSP por TCP: mais estável que UDP em Wi-Fi, switches gerenciados e firewalls (evita imagem cinza/travada)
+os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
 
 from .clips import ClipRecorder
+from .diagnose import diagnose, mask
 from .imagehealth import ImageHealth
 from .rules import Detection, RuleTracker, Violation, in_schedule, observe
 
@@ -92,14 +98,24 @@ class CameraWorker(threading.Thread):
         source = self.camera["source"]
         stream = is_stream(source)
         backoff = 2
+        last_reason, reported_at = None, 0.0
         while not self.stop_event.is_set():
             cap = cv2.VideoCapture(int(source) if source.isdigit() else source)
             if not cap.isOpened():
-                log.warning("[%s] não foi possível abrir %s – nova tentativa em %ss", self.camera["name"], source, backoff)
+                reason = diagnose(source) if not source.isdigit() else "webcam não encontrada ou em uso por outro programa"
+                log.warning("[%s] não foi possível abrir %s: %s – nova tentativa em %ss",
+                            self.camera["name"], mask(source), reason, backoff)
+                # o motivo aparece no painel (Cadastros → Câmeras e Ao vivo)
+                if reason != last_reason or time.monotonic() - reported_at > 300:
+                    self.client.send_camera_status(self.camera["id"], reason)
+                    last_reason, reported_at = reason, time.monotonic()
                 self.stop_event.wait(backoff)
                 backoff = min(backoff * 2, 60)
                 continue
             log.info("[%s] conectado", self.camera["name"])
+            if last_reason:
+                self.client.send_camera_status(self.camera["id"], None)
+                last_reason = None
             backoff = 2
             self._loop(cap, stream)
             cap.release()

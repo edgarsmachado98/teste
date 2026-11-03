@@ -119,6 +119,18 @@ export function statusBadge(status) {
   return badge(STATUS_LABELS[status] || status, `st-${status}`);
 }
 
+/** Situação da câmera: motivo de não conectar (informado pelo detector) ou saúde da imagem. */
+export function cameraBadge(c) {
+  if (c.connect_error) return badge("▲ Sem conexão", "bad");
+  return healthBadge(c.health);
+}
+
+export function cameraHint(c) {
+  if (c.connect_error) return c.connect_error;
+  if (!c.health && c.enabled) return "O detector ainda não abriu esta câmera. Confira se o iniciar.bat (ou o VigIA Edge da unidade) está rodando.";
+  return "";
+}
+
 export function healthBadge(health) {
   if (!health) return badge("Aguardando imagem", "muted");
   const icon = health === "ok" ? "●" : "▲";

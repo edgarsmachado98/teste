@@ -264,9 +264,21 @@ async def edge_health(camera_id: int, data: HealthIn, background: BackgroundTask
     """O quadro ao vivo fica no Edge; aqui só a saúde da imagem e o horário do último quadro."""
     camera = _camera_of(db, edge, camera_id)
     camera.last_frame_at = datetime.now(timezone.utc)
+    camera.connect_error = None
     await set_camera_health(db, camera, data.health if data.health in ("ok", "escura", "obstruida", "congelada")
                             else "ok", background)
     db.commit()
+
+
+class EdgeCameraStatusIn(BaseModel):
+    error: str | None = Field(None, max_length=300)
+
+
+@router.post("/cameras/{camera_id}/status", status_code=204)
+async def edge_camera_status(camera_id: int, data: EdgeCameraStatusIn, edge: Edge = Depends(require_edge),
+                             db: Session = Depends(get_db)):
+    from .detector import apply_camera_status
+    await apply_camera_status(db, _camera_of(db, edge, camera_id), data.error)
 
 
 class EdgeStatsIn(StatsIn):

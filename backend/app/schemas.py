@@ -70,6 +70,8 @@ class CameraOut(CameraIn):
     created_at: datetime
     health: str | None = None
     last_frame_at: datetime | None = None
+    connect_error: str | None = None
+    connect_error_at: datetime | None = None
 
 
 class RuleIn(BaseModel):

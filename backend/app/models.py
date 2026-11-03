@@ -193,6 +193,9 @@ class Camera(Base):
     # Saúde: ok | offline | escura | obstruida | congelada (None = ainda sem imagem)
     health: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_frame_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    # Motivo de o detector não conseguir abrir a câmera (rede, senha, caminho, codec); vazio quando conecta
+    connect_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    connect_error_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectors.id", ondelete="SET NULL"), nullable=True)
     # Unidade (planta) da câmera: a do setor, ou escolhida quando a câmera não tem setor
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id", ondelete="SET NULL"), nullable=True, index=True)

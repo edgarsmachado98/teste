@@ -1,4 +1,4 @@
-import { $, api, can, esc, fmtDateTime, healthBadge, session, toast } from "../core.js";
+import { $, api, cameraBadge, cameraHint, can, esc, fmtDateTime, session, toast } from "../core.js";
 
 let el;
 let cameras = [];
@@ -31,7 +31,8 @@ async function load() {
         ${units.length > 1 ? `<td>${esc(units.find((u) => u.id === c.unit_id)?.name || "–")}</td>` : ""}
         <td>${esc(sectors.find((s) => s.id === c.sector_id)?.name || "–")}</td>
         <td class="mono">${esc(c.source.replace(/\/\/[^@/]*@/, "//***@"))}</td>
-        <td>${c.enabled ? healthBadge(c.health) : "–"}</td>
+        <td>${c.enabled ? cameraBadge(c) : "–"}
+          ${c.enabled && cameraHint(c) ? `<div class="hint cam-reason">${esc(cameraHint(c))}</div>` : ""}</td>
         <td>${c.last_frame_at ? fmtDateTime(c.last_frame_at) : "–"}</td>
         <td>${c.enabled ? "sim" : "não"}</td>
         <td class="actions">
@@ -58,8 +59,29 @@ export async function show(element) {
       <label>Local / área <input name="location" placeholder="ex.: Galpão A – Prensas">
         <small class="hint">Use nomes padronizados: os indicadores agrupam por área</small></label>
       <label class="wide">Fonte (RTSP ou arquivo)
-        <input name="source" required placeholder="rtsp://usuario:senha@192.168.0.10:554/stream1">
+        <input name="source" required placeholder="rtsp://usuario:senha@192.168.0.10:554/...">
       </label>
+      <details class="wide src-builder">
+        <summary>Montar o endereço pelo fabricante da câmera</summary>
+        <div class="form">
+          <label>Fabricante <select id="sb-brand">
+            <option value="intelbras">Intelbras / Dahua</option>
+            <option value="hikvision">Hikvision / Hilook</option>
+            <option value="tplink">TP-Link / Tapo / VIGI</option>
+            <option value="generic">Outro (caminho padrão "/")</option></select></label>
+          <label>IP da câmera <input id="sb-ip" placeholder="192.168.0.10" inputmode="decimal"></label>
+          <label>Porta RTSP <input id="sb-port" type="number" value="554" min="1" max="65535"></label>
+          <label>Usuário <input id="sb-user" value="admin" autocomplete="off"></label>
+          <label>Senha <input id="sb-pass" type="password" autocomplete="new-password"></label>
+          <label>Canal <input id="sb-ch" type="number" value="1" min="1" max="64">
+            <small class="hint">1 em câmeras; o nº da câmera em gravadores (NVR/DVR)</small></label>
+          <label>Qualidade <select id="sb-sub">
+            <option value="sub">Secundária – recomendada (menos processamento)</option>
+            <option value="main">Principal – resolução máxima</option></select></label>
+          <div class="actions wide"><button type="button" class="secondary" id="sb-use">Usar este endereço</button>
+            <span class="hint">No stream escolhido, deixe a codificação da câmera em H.264.</span></div>
+        </div>
+      </details>
       <label class="check"><input type="checkbox" name="enabled" checked> Ativa</label>
       <div class="actions">
         <button type="submit">Salvar câmera</button>
@@ -94,6 +116,25 @@ export async function show(element) {
       f.id.value = ""; $("#camera-form-title", el).textContent = "Nova câmera";
       setTimeout(() => { f.unit_id.value = defaultUnit(); syncUnit(); });
     });
+    $("#sb-use", el).addEventListener("click", () => {
+      const ip = $("#sb-ip", el).value.trim();
+      if (!/^[\w.-]+$/.test(ip)) return toast("Informe o IP da câmera.", "warn");
+      const port = Number($("#sb-port", el).value) || 554;
+      const ch = Number($("#sb-ch", el).value) || 1;
+      const sub = $("#sb-sub", el).value === "sub";
+      const user = encodeURIComponent($("#sb-user", el).value.trim());
+      const pass = encodeURIComponent($("#sb-pass", el).value);
+      const path = {
+        intelbras: `/cam/realmonitor?channel=${ch}&subtype=${sub ? 1 : 0}`,
+        hikvision: `/Streaming/Channels/${ch * 100 + (sub ? 2 : 1)}`,
+        tplink: sub ? "/stream2" : "/stream1",
+        generic: "/",
+      }[$("#sb-brand", el).value];
+      const auth = user ? `${user}${pass ? `:${pass}` : ""}@` : "";
+      f.source.value = `rtsp://${auth}${ip}:${port}${path}`;
+      $(".src-builder", el).open = false;
+      toast("Endereço preenchido. Salve a câmera: em até 15 s a situação aparece na lista.", "ok", 4000);
+    });
     $("#use-webcam", el).addEventListener("click", () => {
       if (!f.name.value) f.name.value = "Webcam";
       f.source.value = "0";
@@ -123,7 +164,7 @@ export async function show(element) {
 }
 
 export function onRealtime(data) {
-  if (data.kind === "camera_health") load();
+  if (data.kind === "camera_health" || data.kind === "camera_status") load();
 }
 
 // Usado como subguia de Cadastros

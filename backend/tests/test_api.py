@@ -835,3 +835,17 @@ def test_edge_lan_certificate_rules(client, admin):
     _, op = make_user(client, admin, "op-lan@vigia.local", "operador")
     assert client.get("/api/edge/ca.crt", headers=op).status_code == 403
     client.delete(f"/api/edge/edges/{cred['edge_id']}", headers=admin)
+
+
+def test_camera_connect_error_shown_and_cleared(client, admin):
+    cam = client.post("/api/cameras", headers=admin, json={"name": "Cam diag", "source": "rtsp://10.0.0.9/x"}).json()
+    r = client.post(f"/api/detector/cameras/{cam['id']}/status", headers=DET,
+                    json={"error": "usuário ou senha recusados pela câmera"})
+    assert r.status_code == 204
+    got = next(c for c in client.get("/api/cameras", headers=admin).json() if c["id"] == cam["id"])
+    assert got["connect_error"] == "usuário ou senha recusados pela câmera" and got["connect_error_at"]
+    # primeiro quadro chegou: o erro some
+    client.post(f"/api/detector/cameras/{cam['id']}/frame", headers=DET, data={"health": "ok"},
+                files={"frame": ("f.jpg", b"\xff\xd8x", "image/jpeg")})
+    got = next(c for c in client.get("/api/cameras", headers=admin).json() if c["id"] == cam["id"])
+    assert got["connect_error"] is None

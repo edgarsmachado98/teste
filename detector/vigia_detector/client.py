@@ -55,6 +55,13 @@ class BackendClient:
         except httpx.HTTPError as exc:
             log.debug("falha ao enviar quadro ao vivo: %s", exc)
 
+    def send_camera_status(self, camera_id: int, error: str | None) -> None:
+        """Motivo de a câmera não abrir (None = conectou), para aparecer no painel."""
+        try:
+            self.http.post(f"/api/detector/cameras/{camera_id}/status", json={"error": error}).raise_for_status()
+        except httpx.HTTPError as exc:
+            log.debug("falha ao enviar situação da câmera: %s", exc)
+
     def send_stats(self, camera_id: int, items: list[dict]) -> None:
         try:
             self.http.post("/api/detector/stats", json={"camera_id": camera_id, "items": items}).raise_for_status()

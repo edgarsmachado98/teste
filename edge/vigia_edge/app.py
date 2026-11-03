@@ -178,6 +178,18 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
             except httpx.HTTPError:
                 state["health"].pop(camera_id, None)  # tenta de novo no próximo quadro
 
+    class CameraStatusIn(BaseModel):
+        error: str | None = None
+
+    @app.post("/api/detector/cameras/{camera_id}/status", status_code=204, dependencies=guard)
+    async def detector_camera_status(camera_id: int, data: CameraStatusIn):
+        """Motivo de a câmera não abrir: vai direto para a nuvem (sem fila: é informação do momento)."""
+        try:
+            (await client.post(f"/api/edge/cameras/{camera_id}/status",
+                               json={"error": (data.error or None) and data.error[:300]})).raise_for_status()
+        except httpx.HTTPError:
+            pass
+
     @app.post("/api/detector/stats", status_code=202, dependencies=guard)
     async def detector_stats(data: StatsIn):
         outbox.put("stats", {**data.model_dump(), "observed_at": datetime.now(timezone.utc).isoformat()})
