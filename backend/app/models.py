@@ -381,6 +381,7 @@ class Edge(Base):
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"))
     key_hash: Mapped[str] = mapped_column(String(64), unique=True)  # credencial do Edge (só o hash)
     cert_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)  # mTLS (SHA-256 do certificado)
+    lan_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # assina os links de acesso direto (cifrada)
     enrolled_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

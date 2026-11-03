@@ -269,6 +269,7 @@ class AuditOut(BaseModel):
 
 
 class EventDetail(EventOut):
+    direct: dict | None = None  # links assinados para buscar a mídia direto no Edge (rede da fábrica)
     actions: list[ActionOut]
     history: list[AuditOut]
     measures: list[dict] = []

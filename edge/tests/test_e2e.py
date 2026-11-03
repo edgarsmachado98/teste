@@ -83,7 +83,7 @@ def world(tmp_path_factory):
     edge_home = tmp / "edge"
     edge_port = free_port()
     edge_env = {**os.environ, "EDGE_HOME": str(edge_home), "EDGE_MEDIA_DIR": str(tmp / "storage-cliente"),
-                "EDGE_PORT": str(edge_port)}
+                "EDGE_PORT": str(edge_port), "EDGE_LAN_PORT": str(free_port())}
     out = subprocess.run([PY, "-m", "vigia_edge", "enroll", "--cloud", base, "--code", code],
                          env=edge_env, cwd=ROOT / "edge", capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stdout + out.stderr
@@ -172,6 +172,35 @@ def test_edge_status_reaches_cloud(world):
                        and e[0]["status"].get("media_ok") is not None and e)
     e = edges[0]
     assert e["online"] and e["status"]["media_ok"] and "disk_free_gb" in e["status"] and e["version"]
+
+
+def test_lan_direct_access(world, tmp_path):
+    """Na rede da fábrica a mídia vem direto do Edge, por HTTPS com a CA do cliente e link assinado."""
+    w = world
+    r = httpx.put(f"{w['base']}/api/config", headers=w["h"], json={"values": {"edge_lan_direct": True}, "reset": []})
+    assert r.status_code == 200, r.text
+    wait_until(lambda: httpx.get(f"{w['base']}/api/edge/edges", headers=w["h"]).json()[0]["status"].get("lan", {}).get("ready"),
+               timeout=75)
+    ev = next(e for e in cloud_events(w) if e["message"] == "pessoa na zona restrita")
+    detail = httpx.get(f"{w['base']}/api/events/{ev['id']}", headers=w["h"]).json()
+    direct = detail["direct"]
+    assert direct and direct["image"] and direct["clip"] and direct["bases"][0].startswith("https://")
+    ca = tmp_path / "ca.crt"
+    ca.write_bytes(httpx.get(f"{w['base']}/api/edge/ca.crt", headers=w["h"]).content)  # a TI instala nos PCs
+    base = direct["bases"][0]
+    lan = httpx.Client(verify=str(ca), trust_env=False)  # computador da fábrica, com a CA instalada
+    assert lan.get(f"{base}/ping").json()["ok"]
+    img = lan.get(base + direct["image"])
+    full = httpx.get(f"{w['base']}{ev['image_url']}", headers=w["h"]).content
+    assert img.status_code == 200 and img.content == full  # mesma imagem, sem passar pela nuvem
+    video = lan.get(base + direct["clip"])
+    assert video.status_code == 200 and video.headers["content-type"] == "video/webm"
+    # sem assinatura válida não sai nada
+    assert lan.get(base + direct["image"].replace("&s=", "&s=0")).status_code == 403
+    assert lan.get(base + direct["image"].split("?")[0] + "?e=9999999999&s=00").status_code == 403
+    # computador sem a CA do cliente não confia no Edge → a tela usa a nuvem
+    with pytest.raises(httpx.ConnectError):
+        httpx.Client(trust_env=False).get(f"{base}/ping")
 
 
 def test_offline_queue_then_resend_without_duplicates(world):

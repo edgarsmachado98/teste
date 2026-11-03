@@ -17,7 +17,7 @@ from ..auth import require_role
 from ..common import EVIDENCE_DIR, get_or_404
 from ..config import settings
 from ..database import SessionLocal, get_db
-from ..edge_ca import normalize, sign_csr
+from ..edge_ca import ca_paths, normalize, sign_csr, sign_server_csr
 from ..edge_tunnel import hub as edge_hub
 from ..health import set_camera_health
 from ..models import Camera, Edge, EdgeEnrollment, EdgeMediaKey, Event, Rule, Unit, User
@@ -278,6 +278,66 @@ def edge_stats(data: EdgeStatsIn, edge: Edge = Depends(require_edge), db: Sessio
     record_stats(db, data, _parse_when(data.observed_at))
 
 
+# ---------- Acesso direto pela rede da fábrica ----------
+
+class LanIn(BaseModel):
+    csr: str = Field(max_length=4000)
+    ips: list[str] = Field(max_length=8)
+    hostname: str = Field("", max_length=63)
+
+
+@router.post("/lan")
+def edge_lan(data: LanIn, request: Request, edge: Edge = Depends(require_edge), db: Session = Depends(get_db)):
+    """Certificado de servidor do Edge para os IPs da rede local + chave que assina os links diretos."""
+    from ..settings_store import decrypt, encrypt
+    try:
+        cert = sign_server_csr(data.csr, data.ips, data.hostname)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    key = decrypt(edge.lan_key_enc) if edge.lan_key_enc else None
+    if not key:
+        key = secrets.token_hex(32)
+        edge.lan_key_enc = encrypt(key)
+    audit.record(db, None, "edge_certificado_lan", "edge", edge.id, f"{edge.name}: {', '.join(data.ips)}", request)
+    db.commit()
+    return {"cert": cert, "lan_key": key}
+
+
+@router.get("/ca.crt")
+def download_ca(_: User = Depends(admin)):
+    """CA do cliente, para a TI instalar nos computadores da empresa (acesso direto pela rede da fábrica)."""
+    from fastapi.responses import Response as RawResponse
+    crt, _key = ca_paths()
+    return RawResponse(crt.read_bytes(), media_type="application/x-x509-ca-cert",
+                       headers={"Content-Disposition": 'attachment; filename="vigia-ca-cliente.crt"'})
+
+
+def direct_links(db: Session, event: Event) -> dict | None:
+    """Links assinados (10 min) para o navegador buscar a mídia direto no Edge, na rede da fábrica."""
+    import hashlib
+    import hmac
+    import time
+    if not settings.edge_lan_direct or not event.media_edge_id:
+        return None
+    edge = db.get(Edge, event.media_edge_id)
+    lan = (edge.status or {}).get("lan") if edge else None
+    if not edge or edge.revoked_at or not edge.lan_key_enc or not lan or not lan.get("ready") or not lan.get("ips"):
+        return None
+    from ..settings_store import decrypt
+    key = bytes.fromhex(decrypt(edge.lan_key_enc) or "")
+    if not key:
+        return None
+    exp = int(time.time()) + 600
+    bases = [f"https://{ip}:{lan.get('port', 8443)}" for ip in lan["ips"][:3]]
+
+    def link(rel):
+        sig = hmac.new(key, f"{edge.id}|{rel}|{exp}".encode(), hashlib.sha256).hexdigest()
+        return f"/m/{rel}?e={exp}&s={sig}"
+    return {"edge_id": edge.id, "bases": bases,
+            "image": link(event.image_file) if event.image_file else None,
+            "clip": link(event.clip_dir) if event.clip_dir and event.clip_format == "webm" else None}
+
+
 # ---------- Túnel ----------
 
 @router.websocket("/tunnel")
@@ -318,7 +378,7 @@ async def tunnel(ws: WebSocket):
 
 
 def _save_status(edge_id: int, data: dict) -> None:
-    allowed = {"disk_free_gb", "disk_total_gb", "media_ok", "media_dir", "queue", "cameras", "retention_days", "encrypted",
+    allowed = {"disk_free_gb", "disk_total_gb", "media_ok", "media_dir", "queue", "cameras", "retention_days", "encrypted", "lan",
                "detector_seen_at", "uptime_s", "media_files"}
     with SessionLocal() as db:
         edge = db.get(Edge, edge_id)

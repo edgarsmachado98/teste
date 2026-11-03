@@ -807,3 +807,31 @@ def test_edge_mtls(client, admin, monkeypatch):
     edges = {e["name"]: e for e in client.get("/api/edge/edges", headers=admin).json()}
     assert edges["Edge mTLS"]["mtls"] and edges["Edge mTLS"]["mtls_required"]
     client.delete(f"/api/edge/edges/{cred['edge_id']}", headers=admin)
+
+
+def test_edge_lan_certificate_rules(client, admin):
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    unit = client.get("/api/units", headers=admin).json()[0]["id"]
+    code = client.post("/api/edge/enrollments", headers=admin, json={"name": "Edge LAN", "unit_id": unit}).json()["code"]
+    cred = client.post("/api/edge/enroll", json={"code": code}).json()
+    eh = {"X-Edge-Id": str(cred["edge_id"]), "X-Edge-Key": cred["key"]}
+    key = ec.generate_private_key(ec.SECP256R1())
+    csr = x509.CertificateSigningRequestBuilder().subject_name(
+        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "x")])).sign(key, hashes.SHA256())
+    pem = csr.public_bytes(serialization.Encoding.PEM).decode()
+    assert client.post("/api/edge/lan", headers=eh, json={"csr": pem, "ips": ["8.8.8.8"]}).status_code == 400  # IP público
+    r = client.post("/api/edge/lan", headers=eh, json={"csr": pem, "ips": ["192.168.0.50", "10.1.2.3"], "hostname": "edge-pc"})
+    assert r.status_code == 200 and len(r.json()["lan_key"]) == 64
+    cert = x509.load_pem_x509_certificate(r.json()["cert"].encode())
+    san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    assert {str(i) for i in san.get_values_for_type(x509.IPAddress)} == {"192.168.0.50", "10.1.2.3"}
+    assert san.get_values_for_type(x509.DNSName) == ["edge-pc"]
+    again = client.post("/api/edge/lan", headers=eh, json={"csr": pem, "ips": ["192.168.0.50"]}).json()
+    assert again["lan_key"] == r.json()["lan_key"]  # a chave dos links não muda ao renovar o certificado
+    assert client.get("/api/edge/ca.crt", headers=admin).content.startswith(b"-----BEGIN CERTIFICATE")
+    _, op = make_user(client, admin, "op-lan@vigia.local", "operador")
+    assert client.get("/api/edge/ca.crt", headers=op).status_code == 403
+    client.delete(f"/api/edge/edges/{cred['edge_id']}", headers=admin)

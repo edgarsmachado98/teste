@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     # mTLS: só aceitar o Edge com o certificado dele (impressão digital repassada pelo proxy HTTPS).
     # Ativo nas instâncias da nuvem (deploy/nuvem); desligado no servidor local, que não tem proxy.
     edge_require_mtls: bool = False
+    # Acesso direto pela rede da fábrica: exige a CA do cliente instalada nos computadores da empresa
+    edge_lan_direct: bool = False
 
     # Relatório automático por e-mail: mensal | semanal | desligado
     report_frequency: str = "mensal"

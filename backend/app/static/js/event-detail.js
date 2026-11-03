@@ -2,6 +2,7 @@
 
 import { attachmentsHtml, openActionForm, runActionButton } from "./actions-ui.js";
 import { mountClipPlayer } from "./clip-player.js";
+import { directBase, forgetDirect } from "./lan-direct.js";
 import { decideMeasure, openAck, openIdentify, openMeasure } from "./measures-ui.js";
 import {
   $, ACTION_STATUS, CLASS_LABELS, TYPE_LABELS, api, badge, can, esc, fmtDate, fmtDateTime, session,
@@ -24,7 +25,7 @@ export async function openEvent(id) {
     toast(esc(err.message), "danger");
     return;
   }
-  render(ev);
+  await render(ev);
   if (!dialog().open) dialog().showModal();
 }
 
@@ -96,7 +97,7 @@ function personSection(ev) {
     ${measures ? `<ul class="action-list">${measures}</ul>` : ""}`;
 }
 
-function render(ev) {
+async function render(ev) {
   const open = ev.status === "nova" || ev.status === "confirmada";
   const statusButtons = [];
   if (ev.status === "nova") {
@@ -167,16 +168,26 @@ function render(ev) {
 
   const d = dialog();
   const media = d.querySelector("#media");
+  // Na rede da fábrica, imagem e clipe vêm direto do Edge (links assinados de 10 min)
+  const lanBase = ev.direct ? await directBase(ev.direct) : null;
+  const via = (cloudUrl, directPath) => (lanBase && directPath ? lanBase + directPath : withToken(cloudUrl));
+  const viaNote = lanBase ? "⚡ direto da planta pela rede da fábrica" : "pelo túnel da nuvem";
   const showPhoto = () => {
     stopClip();
     media.innerHTML = ev.image_url
-      ? `<img class="evidence-img" src="${esc(withToken(ev.image_url))}" data-full="${esc(withToken(ev.image_url))}" alt="Evidência">
-         ${ev.media_at_edge ? `<p class="hint edge-note">📍 Imagem guardada no storage da planta (VigIA Edge)</p>` : ""}`
+      ? `<img class="evidence-img" src="${esc(via(ev.image_url, ev.direct?.image))}" data-full="${esc(via(ev.image_url, ev.direct?.image))}" alt="Evidência">
+         ${ev.media_at_edge ? `<p class="hint edge-note">📍 Imagem guardada no storage da planta (VigIA Edge) · ${viaNote}</p>` : ""}`
       : `<div class="noimg">${ev.clip_frames ? "sem foto" : "sem imagem (apagada pela política de retenção ou não enviada)"}</div>`;
     const img = media.querySelector(".evidence-img");
-    // Edge desconectado: mostra a miniatura que fica na nuvem
+    // Link direto falhou: tenta pela nuvem; Edge desconectado: mostra a miniatura que fica na nuvem
     if (img && ev.thumb_url) {
       img.addEventListener("error", () => {
+        if (lanBase && !img.dataset.cloud) {
+          img.dataset.cloud = "1";
+          forgetDirect(ev.direct);
+          img.src = withToken(ev.image_url);
+          return;
+        }
         if (img.dataset.fallback) return;
         img.dataset.fallback = "1";
         img.src = withToken(ev.thumb_url);
@@ -190,9 +201,16 @@ function render(ev) {
     stopClip();
     if (ev.clip_video_url) {  // clipe em vídeo, gravado no storage da planta
       media.innerHTML = `<video class="evidence-img clip-video" controls autoplay muted playsinline loop
-        src="${esc(withToken(ev.clip_video_url))}"></video>
-        <p class="hint edge-note">📍 Clipe guardado no storage da planta (VigIA Edge) · ${Number(ev.clip_duration || 0).toFixed(0)} s</p>`;
-      media.querySelector("video").addEventListener("error", () => {
+        src="${esc(via(ev.clip_video_url, ev.direct?.clip))}"></video>
+        <p class="hint edge-note">📍 Clipe guardado no storage da planta (VigIA Edge) · ${Number(ev.clip_duration || 0).toFixed(0)} s · ${viaNote}</p>`;
+      const video = media.querySelector("video");
+      video.addEventListener("error", () => {
+        if (lanBase && !video.dataset.cloud) {
+          video.dataset.cloud = "1";
+          forgetDirect(ev.direct);
+          video.src = withToken(ev.clip_video_url);
+          return;
+        }
         media.querySelector(".edge-note").outerHTML = `<p class="hint warn-text">Não foi possível carregar o clipe: o VigIA Edge
           da planta está desconectado agora.</p>`;
       });

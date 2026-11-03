@@ -29,6 +29,8 @@ class EdgeConfig:
     live_dir: Path = field(default_factory=lambda: HOME / "ao-vivo")
     listen_host: str = os.getenv("EDGE_HOST", "127.0.0.1")
     listen_port: int = int(os.getenv("EDGE_PORT", "8100"))
+    # Acesso direto pela rede da fábrica (HTTPS); 0 desliga
+    lan_port: int = field(default_factory=lambda: int(os.getenv("EDGE_LAN_PORT", "8443")))
     # certificado próprio da nuvem (ex.: teste com o servidor local em HTTPS), se houver
     verify: str | bool = field(default_factory=lambda: os.getenv("EDGE_CLOUD_CA") or True)
 

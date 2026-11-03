@@ -268,7 +268,8 @@ async function renderEdges() {
     ${edges.length ? `<div class="table-wrap"><table class="compact">
       <tr><th>Edge</th><th>Unidade</th><th>Situação</th><th>Storage do cliente</th><th>Fila</th><th>Câmeras</th><th>Versão</th><th></th></tr>
       ${edges.map((e) => `<tr class="${e.revoked ? "muted-row" : ""}">
-        <td><b>${esc(e.name)}</b><div class="hint mono">${esc(e.status.media_dir || "")}</div></td>
+        <td><b>${esc(e.name)}</b><div class="hint mono">${esc(e.status.media_dir || "")}</div>
+          ${e.status.lan?.ready ? `<div class="hint">rede local: ${esc((e.status.lan.ips || []).join(", "))} · porta ${e.status.lan.port}</div>` : ""}</td>
         <td>${esc(e.unit || "–")}</td><td>${state(e)}
           <div>${e.mtls ? badge("🔐 certificado (mTLS)", "good") : e.mtls_required ? badge("sem certificado – recadastrar", "bad") : ""}</div></td><td>${e.revoked ? "–" : storage(e.status)}</td>
         <td>${e.status.queue ? badge(`${e.status.queue} na fila`, "warn") : e.revoked ? "–" : "0"}</td>
@@ -280,11 +281,16 @@ async function renderEdges() {
     <form id="edge-alert-form" class="form" style="margin-top:12px">
       ${field(conf.values, "edge_offline_alert_minutes", "Alertar se um Edge ficar sem conexão por", { type: "number", min: 1, max: 1440, suffix: "min",
         hint: "Aviso na tela, e-mail e WhatsApp (se configurados) – uma vez ao cair e outra ao voltar" })}
-      <div class="actions"><button type="submit" class="secondary">Salvar</button></div>
+      <label class="check wide"><input type="checkbox" name="edge_lan_direct" ${conf.values.edge_lan_direct?.value ? "checked" : ""}>
+        Acesso direto pela rede da fábrica – quem está na planta abre imagem e clipe direto do Edge, sem passar pela internet</label>
+      <p class="hint wide">Requer que a TI instale a <a href="${esc(withToken("/api/edge/ca.crt"))}">CA do cliente (vigia-ca-cliente.crt)</a>
+        nos computadores da empresa (Windows: política de grupo → Autoridades de Certificação Raiz Confiáveis) e libere a porta
+        8443 do computador do Edge na rede local. Computadores sem a CA ou fora da fábrica continuam abrindo pela nuvem.</p>
+      <div class="actions wide"><button type="submit" class="secondary">Salvar</button></div>
     </form>`;
   $("#edge-alert-form", box).addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    await saveConfig(collect(ev.target, ["edge_offline_alert_minutes"]));
+    await saveConfig(collect(ev.target, ["edge_offline_alert_minutes", "edge_lan_direct"]));
   });
 
   box.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {

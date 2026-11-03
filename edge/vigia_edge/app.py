@@ -54,7 +54,13 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
                 "cameras": state["cameras"], "retention_days": cfg.retention_days,
                 "detector_seen_at": state["detector_seen_at"], **store.usage()}
 
-    tunnel = Tunnel(cfg, store, status)
+    from .lan import LanAccess
+    lan = LanAccess(cfg, store, client)
+
+    def full_status() -> dict:
+        return {**status(), **lan.status()}
+
+    tunnel = Tunnel(cfg, store, full_status)
 
     async def maintenance() -> None:
         """Prazo de retenção vem da nuvem; a mídia vencida é apagada aqui mesmo (LGPD)."""
@@ -72,11 +78,15 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
     async def lifespan(app: FastAPI):
         tasks = [asyncio.create_task(outbox.run(client)), asyncio.create_task(tunnel.run()),
                  asyncio.create_task(maintenance())]
+        if cfg.lan_port:
+            tasks.append(asyncio.create_task(lan.run()))
         log.info("VigIA Edge %s – storage: %s (%s)", __version__, cfg.media_dir,
                  "ok" if store.ok() else "INACESSÍVEL")
         yield
         for t in tasks:
             t.cancel()
+        if lan.server:
+            await lan.server.stop()
         await client.aclose()
 
     app = FastAPI(title="VigIA Edge", lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -162,6 +172,6 @@ def create_app(cfg: EdgeConfig) -> FastAPI:
     def edge_status():
         """Diagnóstico local (só na própria máquina): http://127.0.0.1:8100/status"""
         return {"version": __version__, "name": cfg.name, "cloud": cfg.cloud_url, "tunnel": tunnel.connected,
-                "last_error": outbox.last_error, **status()}
+                "last_error": outbox.last_error, **full_status()}
 
     return app

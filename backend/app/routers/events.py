@@ -87,8 +87,10 @@ def event_detail(event_id: int, db: Session = Depends(get_db)):
     from .measures import measure_out, measure_query
 
     measures = db.scalars(measure_query().where(Measure.event_id == event_id).order_by(Measure.id)).all()
+    from .edge import direct_links
     return {
         **event_out(event),
+        "direct": direct_links(db, event),
         "actions": [action_out(a) for a in sorted(event.actions, key=lambda a: a.id)],
         "history": [AuditOut.model_validate(h) for h in history],
         "measures": [measure_out(m) for m in measures],

@@ -84,3 +84,34 @@ def sign_csr(csr_pem: str, edge_id: int, edge_name: str) -> tuple[str, str, str]
 
 def normalize(value: str | None) -> str:
     return (value or "").replace(":", "").replace(" ", "").strip().lower()
+
+
+def sign_server_csr(csr_pem: str, ips: list[str], hostname: str) -> str:
+    """Certificado de servidor do Edge para a rede da fábrica (SAN = IPs privados + nome da máquina)."""
+    import ipaddress
+    csr = x509.load_pem_x509_csr(csr_pem.encode())
+    if not csr.is_signature_valid or not isinstance(csr.public_key(), ec.EllipticCurvePublicKey):
+        raise ValueError("pedido de certificado inválido")
+    addrs = []
+    for ip in ips[:8]:
+        addr = ipaddress.ip_address(ip)
+        if not addr.is_private or addr.is_loopback:
+            raise ValueError(f"{ip} não é um IP da rede local")
+        addrs.append(x509.IPAddress(addr))
+    if not addrs:
+        raise ValueError("nenhum IP da rede local informado")
+    names = addrs + ([x509.DNSName(hostname.lower()[:63])] if hostname and hostname.replace("-", "").isalnum() else [])
+    ca_cert, ca_key = ensure_ca()
+    now = datetime.now(timezone.utc)
+    cert = (x509.CertificateBuilder()
+            .subject_name(x509.Name([x509.NameAttribute(NameOID.ORGANIZATION_NAME, "VigIA Edge"),
+                                     x509.NameAttribute(NameOID.COMMON_NAME, str(ips[0]))]))
+            .issuer_name(ca_cert.subject).public_key(csr.public_key()).serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=397))
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .add_extension(x509.SubjectAlternativeName(names), critical=False)
+            .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+            .add_extension(x509.SubjectKeyIdentifier.from_public_key(csr.public_key()), critical=False)
+            .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()), critical=False)
+            .sign(ca_key, hashes.SHA256()))
+    return cert.public_bytes(serialization.Encoding.PEM).decode()
