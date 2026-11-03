@@ -31,7 +31,9 @@ function actionsTable(actions, done) {
   const cameras = await api("/api/cameras");
   const camName = camParam ? cameras.find((c) => c.id === Number(camParam))?.name : null;
 
-  $("#period").textContent = `Período: ${fmtDate(start)} a ${fmtDate(end)}${camName ? ` · Câmera: ${camName}` : ""}`;
+  const unitName = session.unitId
+    ? (await api("/api/meta").catch(() => ({ units: [] }))).units.find((u) => u.id === session.unitId)?.name : "";
+  $("#period").textContent = `${unitName ? `Unidade: ${unitName} · ` : ""}Período: ${fmtDate(start)} a ${fmtDate(end)}${camName ? ` · Câmera: ${camName}` : ""}`;
   $("#meta").innerHTML = `
     <dt>Emitido em</dt><dd>${fmtDateTime(new Date().toISOString())}</dd>
     <dt>Emitido por</dt><dd>${esc(session.user.name)}</dd>

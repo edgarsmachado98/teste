@@ -1,4 +1,4 @@
-import { $, api, can, esc, fmtDateTime, healthBadge, toast } from "../core.js";
+import { $, api, can, esc, fmtDateTime, healthBadge, session, toast } from "../core.js";
 
 let el;
 let cameras = [];
@@ -14,13 +14,21 @@ function sectorSelect() {
   return `<option value="">Sem setor – regras manuais</option>${groups}`;
 }
 
+const defaultUnit = () => String(units.some((u) => u.id === session.unitId) ? session.unitId : units[0]?.id ?? "");
+/** O campo Unidade só aparece para câmera sem setor (com setor, vale a unidade do setor). */
+function syncUnit() {
+  const f = $("#camera-form", el);
+  if (f) $("[data-unit]", el).hidden = !!f.sector_id.value || units.length < 2;
+}
+
 async function load() {
   cameras = await api("/api/cameras");
   $("#cameras-table", el).innerHTML = `
-    <tr><th>Nome</th><th>Local / área</th><th>Setor</th><th>Fonte</th><th>Saúde da imagem</th><th>Última imagem</th><th>Ativa</th><th></th></tr>
+    <tr><th>Nome</th><th>Local / área</th>${units.length > 1 ? "<th>Unidade</th>" : ""}<th>Setor</th><th>Fonte</th><th>Saúde da imagem</th><th>Última imagem</th><th>Ativa</th><th></th></tr>
     ${cameras.map((c) => `
       <tr>
         <td>${esc(c.name)}</td><td>${esc(c.location)}</td>
+        ${units.length > 1 ? `<td>${esc(units.find((u) => u.id === c.unit_id)?.name || "–")}</td>` : ""}
         <td>${esc(sectors.find((s) => s.id === c.sector_id)?.name || "–")}</td>
         <td class="mono">${esc(c.source.replace(/\/\/[^@/]*@/, "//***@"))}</td>
         <td>${c.enabled ? healthBadge(c.health) : "–"}</td>
@@ -45,6 +53,8 @@ export async function show(element) {
         <small class="hint">Como a câmera aparece nos alertas, ocorrências e relatórios</small></label>
       <label>Setor <select name="sector_id">${sectorSelect()}</select>
         <small class="hint">O padrão do setor gera as regras de detecção desta câmera</small></label>
+      <label data-unit>Unidade <select name="unit_id">${units.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join("")}</select>
+        <small class="hint">Câmera sem setor: escolha a unidade (com setor, vale a unidade do setor)</small></label>
       <label>Local / área <input name="location" placeholder="ex.: Galpão A – Prensas">
         <small class="hint">Use nomes padronizados: os indicadores agrupam por área</small></label>
       <label class="wide">Fonte (RTSP ou arquivo)
@@ -66,7 +76,8 @@ export async function show(element) {
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
       const body = { name: f.name.value, location: f.location.value, source: f.source.value, enabled: f.enabled.checked,
-        sector_id: f.sector_id.value ? Number(f.sector_id.value) : null };
+        sector_id: f.sector_id.value ? Number(f.sector_id.value) : null,
+        unit_id: f.sector_id.value ? null : Number(f.unit_id.value) || null };
       try {
         await api(f.id.value ? `/api/cameras/${f.id.value}` : "/api/cameras",
           { method: f.id.value ? "PUT" : "POST", body });
@@ -76,7 +87,13 @@ export async function show(element) {
         load();
       } catch (err) { toast(esc(err.message), "danger"); }
     });
-    f.addEventListener("reset", () => { f.id.value = ""; $("#camera-form-title", el).textContent = "Nova câmera"; });
+    f.unit_id.value = defaultUnit();
+    f.sector_id.addEventListener("change", syncUnit);
+    syncUnit();
+    f.addEventListener("reset", () => {
+      f.id.value = ""; $("#camera-form-title", el).textContent = "Nova câmera";
+      setTimeout(() => { f.unit_id.value = defaultUnit(); syncUnit(); });
+    });
     $("#use-webcam", el).addEventListener("click", () => {
       if (!f.name.value) f.name.value = "Webcam";
       f.source.value = "0";
@@ -91,6 +108,7 @@ export async function show(element) {
       const c = cameras.find((x) => x.id === Number(edit));
       f.id.value = c.id; f.name.value = c.name; f.location.value = c.location;
       f.source.value = c.source; f.enabled.checked = c.enabled; f.sector_id.value = c.sector_id ?? "";
+      f.unit_id.value = String(c.unit_id ?? units[0]?.id ?? ""); syncUnit();
       $("#camera-form-title", el).textContent = `Editar câmera: ${c.name}`;
       f.scrollIntoView({ behavior: "smooth" });
     }

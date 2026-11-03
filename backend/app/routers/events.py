@@ -4,12 +4,12 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import audit, notifier, storage
 from ..auth import current_user, has_role, require_role
-from ..common import EVIDENCE_DIR, action_out, event_out, get_or_404
+from ..common import EVIDENCE_DIR, action_out, event_out, get_or_404, unit_cameras
 from ..database import get_db
 from ..models import ActionItem, AuditLog, Event, Measure, User
 from ..schemas import ActionIn, ActionOut, ActionUpdate, AuditOut, EventDetail, EventOut, EventUpdate
@@ -50,11 +50,14 @@ def list_events(
     classification: str | None = None,
     start: date | None = None,
     end: date | None = None,
+    unit_id: int | None = None,
     limit: int = Query(100, le=500),
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
     query = event_query().order_by(Event.created_at.desc()).limit(limit).offset(offset)
+    if unit_id is not None:
+        query = query.where(Event.camera_id.in_(unit_cameras(unit_id)))
     if status:
         query = query.where(Event.status.in_(status.split(",")))
     if camera_id is not None:
@@ -177,6 +180,7 @@ def list_actions(
     mine: bool = False,
     overdue: bool = False,
     event_id: int | None = None,
+    unit_id: int | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
@@ -191,6 +195,9 @@ def list_actions(
         query = query.where(ActionItem.status == "aberta", ActionItem.due_date < date.today())
     if event_id is not None:
         query = query.where(ActionItem.event_id == event_id)
+    if unit_id is not None:  # ações da unidade + avulsas (sem ocorrência, não têm unidade)
+        query = query.where(or_(ActionItem.event_id.is_(None),
+                                ActionItem.event_id.in_(select(Event.id).where(Event.camera_id.in_(unit_cameras(unit_id))))))
     return [action_out(a) for a in db.scalars(query).all()]
 
 

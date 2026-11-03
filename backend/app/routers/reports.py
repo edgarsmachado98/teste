@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import audit
 from ..auth import current_user, require_role
-from ..common import TYPE_LABELS, camera_location, camera_name, is_overdue
+from ..common import TYPE_LABELS, camera_location, camera_name, is_overdue, unit_cameras
 from ..database import get_db
 from ..models import ActionItem, Camera, Event, RuleStat, User
 from ..timeutil import as_utc, shift_names, shift_of, to_local
@@ -28,19 +28,23 @@ def _period(start: date | None, end: date | None) -> tuple[date, date]:
     return start, end
 
 
-def _events(db: Session, start: date, end: date, camera_id: int | None) -> list[Event]:
+def _events(db: Session, start: date, end: date, camera_id: int | None, unit_id: int | None = None) -> list[Event]:
     lo, hi = local_range(start, end)
     query = select(Event).options(selectinload(Event.camera)).where(Event.created_at >= lo, Event.created_at < hi)
     if camera_id is not None:
         query = query.where(Event.camera_id == camera_id)
+    if unit_id is not None:
+        query = query.where(Event.camera_id.in_(unit_cameras(unit_id)))
     return list(db.scalars(query))
 
 
-def _stats(db: Session, start: date, end: date, camera_id: int | None) -> list[RuleStat]:
+def _stats(db: Session, start: date, end: date, camera_id: int | None, unit_id: int | None = None) -> list[RuleStat]:
     lo, hi = local_range(start, end)
     query = select(RuleStat).where(RuleStat.hour >= lo, RuleStat.hour < hi)
     if camera_id is not None:
         query = query.where(RuleStat.camera_id == camera_id)
+    if unit_id is not None:
+        query = query.where(RuleStat.camera_id.in_(unit_cameras(unit_id)))
     return list(db.scalars(query))
 
 
@@ -48,8 +52,8 @@ def _rate(observed: int, violations: int) -> float | None:
     return round(1 - violations / observed, 4) if observed else None
 
 
-def build_summary(db: Session, start: date, end: date, camera_id: int | None) -> dict:
-    events = _events(db, start, end, camera_id)
+def build_summary(db: Session, start: date, end: date, camera_id: int | None, unit_id: int | None = None) -> dict:
+    events = _events(db, start, end, camera_id, unit_id)
     deviations = [e for e in events if e.status != "descartada"]
     status = Counter(e.status for e in events)
     reviewed = [e for e in events if e.reviewed_at is not None]
@@ -70,7 +74,7 @@ def build_summary(db: Session, start: date, end: date, camera_id: int | None) ->
     locations = Counter(camera_location(e) or "Sem local" for e in deviations)
 
     # Conformidade de EPI (observações do detector)
-    stats = _stats(db, start, end, camera_id)
+    stats = _stats(db, start, end, camera_id, unit_id)
     cam_names = {c.id: (c.name, c.location) for c in db.scalars(select(Camera))}
     comp_cam: dict[int, list[int]] = defaultdict(lambda: [0, 0])
     comp_day: dict[date, list[int]] = defaultdict(lambda: [0, 0])
@@ -86,14 +90,16 @@ def build_summary(db: Session, start: date, end: date, camera_id: int | None) ->
     # Período anterior, de mesmo tamanho, para comparação
     length = (end - start).days + 1
     prev_start, prev_end = start - timedelta(days=length), start - timedelta(days=1)
-    prev_events = [e for e in _events(db, prev_start, prev_end, camera_id) if e.status != "descartada"]
-    prev_stats = _stats(db, prev_start, prev_end, camera_id)
+    prev_events = [e for e in _events(db, prev_start, prev_end, camera_id, unit_id) if e.status != "descartada"]
+    prev_stats = _stats(db, prev_start, prev_end, camera_id, unit_id)
 
     lo, hi = local_range(start, end)
-    actions_q = select(ActionItem).options(selectinload(ActionItem.event))
+    actions_q = select(ActionItem).options(selectinload(ActionItem.event).selectinload(Event.camera))
     all_actions = list(db.scalars(actions_q))
     if camera_id is not None:
         all_actions = [a for a in all_actions if a.event and a.event.camera_id == camera_id]
+    if unit_id is not None:  # ações avulsas não têm unidade: ficam só na visão "todas as unidades"
+        all_actions = [a for a in all_actions if a.event and a.event.camera and a.event.camera.unit_id == unit_id]
     in_period = [a for a in all_actions if lo <= as_utc(a.created_at) < hi]
     done_in_period = [a for a in all_actions if a.completed_at and lo <= as_utc(a.completed_at) < hi]
     on_time = [a for a in done_in_period if a.due_date is None or to_local(a.completed_at).date() <= a.due_date]
@@ -147,9 +153,9 @@ def build_summary(db: Session, start: date, end: date, camera_id: int | None) ->
 
 @router.get("/summary", dependencies=[Depends(current_user)])
 def summary(start: date | None = None, end: date | None = None, camera_id: int | None = None,
-            db: Session = Depends(get_db)):
+            unit_id: int | None = None, db: Session = Depends(get_db)):
     start, end = _period(start, end)
-    return build_summary(db, start, end, camera_id)
+    return build_summary(db, start, end, camera_id, unit_id)
 
 
 @router.get("/heatmap", dependencies=[Depends(current_user)])
@@ -176,7 +182,7 @@ def log_export(request: Request, start: date | None = None, end: date | None = N
 
 @router.get("/events.csv")
 def events_csv(request: Request, start: date | None = None, end: date | None = None, camera_id: int | None = None,
-               user: User = Depends(require_role("tecnico")), db: Session = Depends(get_db)):
+               unit_id: int | None = None, user: User = Depends(require_role("tecnico")), db: Session = Depends(get_db)):
     """Ocorrências do período em CSV (separador ';', compatível com o Excel em português)."""
     import csv
     import io
@@ -192,6 +198,8 @@ def events_csv(request: Request, start: date | None = None, end: date | None = N
              .where(Event.created_at >= lo, Event.created_at < hi).order_by(Event.created_at))
     if camera_id is not None:
         query = query.where(Event.camera_id == camera_id)
+    if unit_id is not None:
+        query = query.where(Event.camera_id.in_(unit_cameras(unit_id)))
     status = {"nova": "Nova", "confirmada": "Em tratamento", "descartada": "Falso alarme", "encerrada": "Encerrada"}
     out = io.StringIO()
     writer = csv.writer(out, delimiter=";")

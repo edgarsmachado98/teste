@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 
 from .. import audit
 from ..auth import current_user, require_role
-from ..common import EVIDENCE_DIR, get_or_404
+from ..common import EVIDENCE_DIR, get_or_404, unit_cameras
 from ..database import get_db
-from ..models import Camera, Event, Rule, Sector, User
+from ..models import Camera, Event, Rule, Sector, Unit, User
 from ..schemas import CameraIn, CameraOut, RuleIn, RuleOut
-from ..sectors import apply_sector
+from ..sectors import apply_sector, ensure_default_unit
 
 router = APIRouter(prefix="/api")
 viewer = [Depends(current_user)]
@@ -23,17 +23,27 @@ def _mask(source: str) -> str:
     return source
 
 
+def _resolve_unit(db: Session, data: CameraIn) -> int:
+    """A unidade da câmera é a do setor; sem setor, a escolhida (ou a primeira unidade)."""
+    if data.sector_id is not None:
+        return get_or_404(db, Sector, data.sector_id).unit_id
+    if data.unit_id is not None:
+        return get_or_404(db, Unit, data.unit_id).id
+    return ensure_default_unit(db).id
+
+
 @router.get("/cameras", response_model=list[CameraOut], dependencies=viewer)
-def list_cameras(db: Session = Depends(get_db)):
-    return db.scalars(select(Camera).order_by(Camera.name)).all()
+def list_cameras(unit_id: int | None = None, db: Session = Depends(get_db)):
+    query = select(Camera).order_by(Camera.name)
+    if unit_id is not None:
+        query = query.where(Camera.unit_id == unit_id)
+    return db.scalars(query).all()
 
 
 @router.post("/cameras", response_model=CameraOut, status_code=201)
 def create_camera(data: CameraIn, request: Request, user: User = Depends(require_role("tecnico")),
                   db: Session = Depends(get_db)):
-    if data.sector_id is not None:
-        get_or_404(db, Sector, data.sector_id)
-    camera = Camera(**data.model_dump())
+    camera = Camera(**{**data.model_dump(), "unit_id": _resolve_unit(db, data)})
     db.add(camera)
     db.flush()
     audit.record(db, user, "camera_criada", "camera", camera.id, f"{camera.name} – {_mask(camera.source)}", request)
@@ -48,10 +58,8 @@ def create_camera(data: CameraIn, request: Request, user: User = Depends(require
 def update_camera(camera_id: int, data: CameraIn, request: Request, user: User = Depends(require_role("tecnico")),
                   db: Session = Depends(get_db)):
     camera = get_or_404(db, Camera, camera_id)
-    if data.sector_id is not None:
-        get_or_404(db, Sector, data.sector_id)
     old_sector = camera.sector
-    for key, value in data.model_dump().items():
+    for key, value in {**data.model_dump(), "unit_id": _resolve_unit(db, data)}.items():
         setattr(camera, key, value)
     audit.record(db, user, "camera_alterada", "camera", camera.id, camera.name, request)
     if old_sector is None or old_sector.id != camera.sector_id:
@@ -91,8 +99,10 @@ def camera_frame(camera_id: int):
 # ---------- Regras ----------
 
 @router.get("/rules", response_model=list[RuleOut], dependencies=viewer)
-def list_rules(camera_id: int | None = None, db: Session = Depends(get_db)):
+def list_rules(camera_id: int | None = None, unit_id: int | None = None, db: Session = Depends(get_db)):
     query = select(Rule).order_by(Rule.camera_id, Rule.name)
+    if unit_id is not None:
+        query = query.where(Rule.camera_id.in_(unit_cameras(unit_id)))
     if camera_id is not None:
         query = query.where(Rule.camera_id == camera_id)
     return db.scalars(query).all()

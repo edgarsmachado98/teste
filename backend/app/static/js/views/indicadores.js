@@ -1,5 +1,5 @@
 import { drawHeatmap } from "../charts.js";
-import { $, api, bindTooltip, can, esc, isoDate, toast, withToken } from "../core.js";
+import { $, api, bindTooltip, can, esc, isoDate, scoped, toast, withToken } from "../core.js";
 import { kpis, renderCharts } from "../indicators-render.js";
 
 let el;
@@ -112,7 +112,7 @@ export async function show(element) {
     loadHeatmap();
   });
   $("#pdf-btn", el)?.addEventListener("click", () => {
-    window.location.href = withToken(`/api/reports/pdf?${query()}`);
+    window.location.href = withToken(scoped(`/api/reports/pdf?${query()}`));
   });
   $("#report-btn", el)?.addEventListener("click", () => {
     window.open(`relatorio.html?${query()}`, "_blank");

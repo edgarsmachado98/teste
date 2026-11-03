@@ -29,7 +29,24 @@ export const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 // ---------- Sessão ----------
-export const session = { user: null };
+export const session = { user: null, unitId: readUnit() };
+
+// ---------- Unidade escolhida no cabeçalho ----------
+// Fica neste navegador; vale para Painel, Ocorrências, Plano de ação, Indicadores, Ao vivo, Regras,
+// Cadastros e Relatórios. Vazio = todas as unidades.
+function readUnit() {
+  try { return Number(localStorage.getItem("vigia-unit")) || null; } catch { return null; }
+}
+export function setUnit(id) {
+  session.unitId = id || null;
+  try { id ? localStorage.setItem("vigia-unit", String(id)) : localStorage.removeItem("vigia-unit"); } catch { /* sem storage */ }
+}
+const UNIT_SCOPED = /^\/api\/(events|cameras|actions|rules|measures|people\/summary|reports\/(summary|events\.csv|pdf))(\?|$)/;
+/** Acrescenta ?unit_id= às consultas que têm filtro por unidade (quando uma unidade está escolhida). */
+export function scoped(path) {
+  if (!session.unitId || !UNIT_SCOPED.test(path) || /[?&]unit_id=/.test(path)) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}unit_id=${session.unitId}`;
+}
 
 export function getToken() {
   try { return localStorage.getItem("vigia_session") || ""; } catch { return ""; }
@@ -54,6 +71,7 @@ export async function api(path, options = {}) {
     headers["Content-Type"] = "application/json";
     body = JSON.stringify(body);
   }
+  if (!options.method || options.method === "GET") path = scoped(path);
   const resp = await fetch(path, { ...options, headers, body });
   if (resp.status === 401 && !path.startsWith("/api/auth/login")) {
     setToken("");

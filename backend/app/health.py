@@ -36,7 +36,7 @@ async def set_camera_health(db: Session, camera: Camera, health: str, background
     label = HEALTH_LABELS[health]
     audit.record(db, None, "camera_saude", "camera", camera.id, f"{camera.name}: {label}")
     payload = {"kind": "camera_health", "camera_id": camera.id, "camera_name": camera.name,
-               "health": health, "label": label}
+               "health": health, "label": label, "unit_id": camera.unit_id}
     await hub.broadcast(payload)
     if background is not None:
         background.add_task(notifier.notify_camera_health, payload)

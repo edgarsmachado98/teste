@@ -194,8 +194,11 @@ class Camera(Base):
     health: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_frame_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     sector_id: Mapped[int | None] = mapped_column(ForeignKey("sectors.id", ondelete="SET NULL"), nullable=True)
+    # Unidade (planta) da câmera: a do setor, ou escolhida quando a câmera não tem setor
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id", ondelete="SET NULL"), nullable=True, index=True)
 
     sector: Mapped[Sector | None] = relationship()
+    unit: Mapped[Unit | None] = relationship()
     rules: Mapped[list["Rule"]] = relationship(back_populates="camera", cascade="all, delete-orphan")
 
 

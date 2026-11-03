@@ -108,6 +108,9 @@ def _save(db: Session, sector: Sector, data: SectorIn, user: User) -> None:
         setattr(sector, key, value)
     sector.updated_at = datetime.now(timezone.utc)
     sector.updated_by = user.name
+    if sector.id:  # setor mudou de unidade: as câmeras dele acompanham
+        for camera in db.scalars(select(Camera).where(Camera.sector_id == sector.id)):
+            camera.unit_id = sector.unit_id
 
 
 @router.post("/sectors", status_code=201)

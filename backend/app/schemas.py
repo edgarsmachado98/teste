@@ -61,6 +61,7 @@ class CameraIn(BaseModel):
     source: str = Field(min_length=1, max_length=500)
     enabled: bool = True
     sector_id: int | None = None
+    unit_id: int | None = None  # ignorado quando há setor (vale a unidade do setor)
 
 
 class CameraOut(CameraIn):
@@ -173,6 +174,7 @@ class SectorOut(BaseModel):
 # ---------- Ocorrências e plano de ação ----------
 
 class EventOut(BaseModel):
+    unit_id: int | None = None
     id: int
     camera_id: int
     camera_name: str

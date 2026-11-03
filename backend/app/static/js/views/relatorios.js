@@ -1,6 +1,6 @@
 // Guia Relatórios e auditoria: relatórios de segurança, medidas/termos e auditoria.
 
-import { $, $$, api, badge, can, esc, fmtDate, fmtDateTime, isoDate, toast, withToken } from "../core.js";
+import { $, $$, api, badge, can, esc, fmtDate, fmtDateTime, isoDate, scoped, toast, withToken } from "../core.js";
 import * as auditoria from "./auditoria.js";
 
 const FREQ = { mensal: "Mensal (dia 1, referente ao mês anterior)", semanal: "Semanal (segunda-feira, semana anterior)",
@@ -69,8 +69,8 @@ async function renderReports(box) {
     $$("[data-preset]", box).forEach((x) => x.classList.toggle("secondary", x !== b));
   }));
   box.querySelector("[data-act=full]").addEventListener("click", () => window.open(`relatorio.html?${query()}`, "_blank"));
-  box.querySelector("[data-act=pdf]").addEventListener("click", () => { location.href = withToken(`/api/reports/pdf?${query()}`); });
-  box.querySelector("[data-act=csv]").addEventListener("click", () => { location.href = withToken(`/api/reports/events.csv?${query()}`); });
+  box.querySelector("[data-act=pdf]").addEventListener("click", () => { location.href = withToken(scoped(`/api/reports/pdf?${query()}`)); });
+  box.querySelector("[data-act=csv]").addEventListener("click", () => { location.href = withToken(scoped(`/api/reports/events.csv?${query()}`)); });
 
   if (!can("gestor")) return;
   const s = await api("/api/system/status");

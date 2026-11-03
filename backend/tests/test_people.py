@@ -380,3 +380,45 @@ def test_occupational_exams(client, admin):
     catalog = client.get("/api/people/exams/catalog", headers=admin).json()
     assert {"aso", "audiometria", "toxicologico"} <= {e["id"] for e in catalog["exams"]}
     assert "demissional" in catalog["aso_types"] and "altura" in catalog["aptitudes"]
+
+
+def test_unit_filter(client, admin):
+    """Seletor de unidade do cabeçalho: câmeras, ocorrências, ações, indicadores e CSV por unidade."""
+    from tests.test_api import DET
+    plant_a = client.post("/api/units", headers=admin, json={"name": "Planta Joinville"}).json()["id"]
+    plant_b = client.post("/api/units", headers=admin, json={"name": "Planta Curitiba"}).json()["id"]
+    sec_b = client.post("/api/sectors", headers=admin, json=sector_payload(plant_b, name="Expedição B")).json()["sector"]
+    cam_a = client.post("/api/cameras", headers=admin, json={"name": "Doca A", "source": "0", "unit_id": plant_a}).json()
+    cam_b = client.post("/api/cameras", headers=admin, json={"name": "Doca B", "source": "0", "sector_id": sec_b["id"],
+                                                            "unit_id": plant_a}).json()
+    assert cam_a["unit_id"] == plant_a
+    assert cam_b["unit_id"] == plant_b  # com setor, vale a unidade do setor (ignora a escolhida)
+    rule = client.post("/api/rules", headers=admin, json={"camera_id": cam_a["id"], "name": "Zona", "type": "restricted_zone"}).json()
+    ev_a = client.post("/api/detector/events", headers=DET, data={"camera_id": cam_a["id"], "rule_id": rule["id"],
+                                                                 "message": "pessoa na doca A"}).json()
+    b_rule = client.get("/api/rules", headers=admin, params={"camera_id": cam_b["id"]}).json()[0]
+    ev_b = client.post("/api/detector/events", headers=DET, data={"camera_id": cam_b["id"], "rule_id": b_rule["id"],
+                                                                 "message": "pessoa na doca B"}).json()
+    ids = lambda r: {x["id"] for x in r.json()}  # noqa: E731
+    assert {cam_a["id"]} == ids(client.get("/api/cameras", headers=admin, params={"unit_id": plant_a}))
+    only_a = client.get("/api/events", headers=admin, params={"unit_id": plant_a}).json()
+    assert [e["id"] for e in only_a] == [ev_a["id"]] and only_a[0]["unit_id"] == plant_a
+    assert ev_b["id"] in ids(client.get("/api/events", headers=admin, params={"unit_id": plant_b}))
+    assert all(r["camera_id"] == cam_a["id"] for r in client.get("/api/rules", headers=admin, params={"unit_id": plant_a}).json())
+    # ação da ocorrência B some na unidade A; ação avulsa aparece em todas
+    act_b = client.post("/api/actions", headers=admin, json={"title": "Sinalizar doca B", "event_id": ev_b["id"]}).json()
+    loose = client.post("/api/actions", headers=admin, json={"title": "Revisar plano de emergência"}).json()
+    in_a = ids(client.get("/api/actions", headers=admin, params={"unit_id": plant_a}))
+    assert loose["id"] in in_a and act_b["id"] not in in_a
+    # indicadores e CSV
+    s_a = client.get("/api/reports/summary", headers=admin, params={"unit_id": plant_a}).json()
+    s_all = client.get("/api/reports/summary", headers=admin).json()
+    assert s_a["totals"]["events"] == 1 and s_all["totals"]["events"] > 1
+    csv_a = client.get("/api/reports/events.csv", headers=admin, params={"unit_id": plant_a}).text
+    assert "pessoa na doca A" in csv_a and "pessoa na doca B" not in csv_a
+    assert client.get("/api/reports/pdf", headers=admin, params={"unit_id": plant_a}).status_code == 200
+    # setor muda de unidade: a câmera acompanha
+    client.put(f"/api/sectors/{sec_b['id']}", headers=admin, json=sector_payload(plant_a, name="Expedição B"))
+    assert cam_b["id"] in ids(client.get("/api/cameras", headers=admin, params={"unit_id": plant_a}))
+    meta = client.get("/api/meta", headers=admin).json()
+    assert {"Planta Joinville", "Planta Curitiba"} <= {u["name"] for u in meta["units"]}

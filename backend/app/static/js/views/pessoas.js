@@ -1,6 +1,6 @@
 // Cadastros › Pessoas: lista, cadastro com foto de identificação, EPIs entregues, treinamentos, exames (PCMSO) e importação.
 
-import { $, api, badge, can, esc, fmtDate, toast, withToken } from "../core.js";
+import { $, api, badge, can, esc, fmtDate, session, toast, withToken } from "../core.js";
 
 const EMPLOYMENT = { clt: "CLT", terceiro: "Terceiro", temporario: "Temporário", estagiario: "Estagiário" };
 const STATUS = { ativo: ["Ativo", "good"], afastado: ["Afastado", "warn"], desligado: ["Desligado", "muted"] };
@@ -10,6 +10,7 @@ let root;
 let units = [];
 let sectors = [];
 let filters = { q: "", unit_id: "", sector_id: "", status: "ativo,afastado", offset: 0 };
+let filterUnit; // unidade do cabeçalho aplicada ao filtro (muda o filtro só quando o cabeçalho muda)
 let editing = null; // id da pessoa aberta, "new" ou null (lista)
 let onOpenHistory = null;
 let catalog = null; // exames ocupacionais (PCMSO)
@@ -280,7 +281,7 @@ function sectorOptions(unitId, selected) {
 async function openPerson(id) {
   editing = id;
   const p = id === "new"
-    ? { unit_id: units[0]?.id, sector_id: null, name: "", cpf: "", registration: "", role: "", shift: "", employment: "clt",
+    ? { unit_id: (units.some((u) => u.id === session.unitId) ? session.unitId : units[0]?.id), sector_id: null, name: "", cpf: "", registration: "", role: "", shift: "", employment: "clt",
       company: "", manager: "", badge_code: "", photo_consent: false, status: "ativo", deliveries: [], trainings: [],
       required_ppe: [], delivery_ppe: [], has_photo: false }
     : await api(`/api/people/${id}`);
@@ -550,6 +551,10 @@ function openImport() {
 
 export async function render(container, openId = null) {
   root = container;
+  if (filterUnit !== session.unitId) {
+    filterUnit = session.unitId;
+    Object.assign(filters, { unit_id: session.unitId ? String(session.unitId) : "", sector_id: "", offset: 0 });
+  }
   [units, sectors, catalog] = await Promise.all([api("/api/units"), api("/api/sectors"),
     catalog ? Promise.resolve(catalog) : api("/api/people/exams/catalog")]);
   if (openId) return openPerson(openId);

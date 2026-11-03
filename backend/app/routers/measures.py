@@ -191,13 +191,15 @@ async def create_measure(data: MeasureIn, request: Request, user: User = Depends
 
 
 @router.get("/measures")
-def list_measures(status: str | None = None, person_id: int | None = None, user: User = Depends(tecnico),
-                  db: Session = Depends(get_db)):
+def list_measures(status: str | None = None, person_id: int | None = None, unit_id: int | None = None,
+                  user: User = Depends(tecnico), db: Session = Depends(get_db)):
     query = measure_query().order_by(Measure.created_at.desc()).limit(300)
     if status:
         query = query.where(Measure.status.in_(status.split(",")))
     if person_id is not None:
         query = query.where(Measure.person_id == person_id)
+    if unit_id is not None:
+        query = query.where(Measure.person_id.in_(select(Person.id).where(Person.unit_id == unit_id)))
     return [measure_out(m) for m in db.scalars(query)]
 
 

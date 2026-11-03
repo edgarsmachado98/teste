@@ -71,6 +71,17 @@ async def retention_loop() -> None:
         await asyncio.sleep(3600)
 
 
+def assign_camera_units() -> int:
+    """Câmeras de versões anteriores não tinham unidade: usa a do setor, ou a primeira unidade."""
+    with SessionLocal() as db:
+        default = ensure_default_unit(db)
+        pending = db.scalars(select(Camera).where(Camera.unit_id.is_(None))).all()
+        for camera in pending:
+            camera.unit_id = camera.sector.unit_id if camera.sector else default.id
+        db.commit()
+        return len(pending)
+
+
 def repair_orphan_cameras() -> int:
     """Versões antigas permitiam excluir câmeras com ocorrências; como o SQLite não aplica
     chaves estrangeiras, o histórico ficava apontando para uma câmera inexistente (e uma câmera
@@ -95,6 +106,7 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         ensure_default_unit(db)
     repair_orphan_cameras()
+    assign_camera_units()
     tasks = [asyncio.create_task(retention_loop()), asyncio.create_task(health_loop()),
              asyncio.create_task(scheduler_loop()), asyncio.create_task(storage_loop()),
              asyncio.create_task(usage_loop())]

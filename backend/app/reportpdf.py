@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .common import CLASS_LABELS_PT, is_overdue
 from .config import settings
-from .models import ActionItem, Camera
+from .models import ActionItem, Camera, Unit
 from .routers.reports import build_summary
 from .timeutil import local_tz, to_local
 
@@ -220,8 +220,10 @@ class Report(FPDF):
             self.ln(1)
 
 
-def build_report_pdf(db: Session, start: date, end: date, camera_id: int | None = None) -> bytes:
-    s = build_summary(db, start, end, camera_id)
+def build_report_pdf(db: Session, start: date, end: date, camera_id: int | None = None,
+                     unit_id: int | None = None) -> bytes:
+    s = build_summary(db, start, end, camera_id, unit_id)
+    unit = db.get(Unit, unit_id) if unit_id else None
     tot, comp, act = s["totals"], s["compliance"], s["actions"]
 
     pdf = Report(format="A4")
@@ -244,7 +246,8 @@ def build_report_pdf(db: Session, start: date, end: date, camera_id: int | None 
     pdf.set_font("helvetica", "", 9)
     pdf.set_text_color(*MUTED)
     camera = db.get(Camera, camera_id) if camera_id else None
-    lines = [settings.company_name, f"Período: {br(start)} a {br(end)}" + (f" · Câmera: {camera.name}" if camera else ""),
+    lines = [settings.company_name, f"Unidade: {unit.name}" if unit else "",
+             f"Período: {br(start)} a {br(end)}" + (f" · Câmera: {camera.name}" if camera else ""),
              f"Comparação: {br(s['period']['previous_start'])} a {br(s['period']['previous_end'])}",
              f"Emitido automaticamente em {datetime.now(local_tz()):%d/%m/%Y %H:%M}"]
     for line in filter(None, lines):

@@ -1,6 +1,6 @@
 // Cadastros › Setores e padrões: EPI obrigatório e regras de comportamento por setor.
 
-import { $, $$, PPE_LABELS, api, badge, can, esc, fmtDateTime, toast } from "../core.js";
+import { $, $$, PPE_LABELS, api, badge, can, esc, fmtDateTime, toast, session } from "../core.js";
 
 const PPE = ["helmet", "vest", "glasses", "gloves", "mask"];
 const SEVERITIES = [["baixa", "Baixa"], ["media", "Média"], ["alta", "Alta"], ["critica", "Crítica"]];
@@ -18,6 +18,7 @@ let examCatalog = [];
 let cameras = [];
 let rules = [];
 let unitId = null;
+let headerUnit = null;
 let current = null; // setor em edição (objeto) ou {} para novo
 let previewTimer = null;
 
@@ -178,6 +179,8 @@ function renderEditor() {
 async function load() {
   [units, sectors, cameras, rules] = await Promise.all([
     api("/api/units"), api("/api/sectors"), api("/api/cameras"), api("/api/rules")]);
+  if (session.unitId && session.unitId !== headerUnit) unitId = session.unitId; // segue o cabeçalho
+  headerUnit = session.unitId;
   if (!unitId || !units.some((u) => u.id === unitId)) unitId = units[0]?.id ?? null;
   if (current?.id) current = sectors.find((s) => s.id === current.id) || null;
   $("#unit-select", root).innerHTML = units.map((u) => `<option value="${u.id}" ${u.id === unitId ? "selected" : ""}>${esc(u.name)}</option>`).join("");
@@ -233,6 +236,7 @@ export async function render(container) {
     try {
       const u = await api("/api/units", { method: "POST", body: { name } });
       unitId = u.id;
+      window.dispatchEvent(new Event("units-changed")); // atualiza o seletor do cabeçalho
       current = null;
       await load();
     } catch (err) { toast(esc(err.message), "danger"); }

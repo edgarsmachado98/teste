@@ -1,5 +1,5 @@
 import {
-  $, $$, ROLE_LABELS, api, applyRoleVisibility, beep, esc, fmtDateTime, getToken, session, setToken,
+  $, $$, ROLE_LABELS, api, can, setUnit, applyRoleVisibility, beep, esc, fmtDateTime, getToken, session, setToken,
   setUnauthorizedHandler, toast, withToken,
 } from "./core.js";
 import { openEvent, refreshIfOpen } from "./event-detail.js";
@@ -93,12 +93,42 @@ function currentShift() {
 function renderMeta() {
   if (!meta) return;
   const units = meta.units || [];
-  const unit = units.length === 1 ? units[0] : units.length ? `${units.length} unidades` : "";
-  $("#site-pill").innerHTML = meta.company_name || unit
-    ? `${meta.company_name ? `<b>${esc(meta.company_name)}</b>` : ""}${unit ? `<span>${meta.company_name ? "· " : ""}${esc(unit)}</span>` : ""}`
-    : "";
-  if (units.length > 1) $("#site-pill").title = units.join(", ");
+  // Unidade guardada que não existe mais (ou não há escolha a fazer): volta para todas
+  if (session.unitId && (units.length < 2 || !units.some((u) => u.id === session.unitId))) setUnit(null);
+  $("#company-name").hidden = !meta.company_name;
+  $("#company-name").textContent = meta.company_name || "";
+  const sel = $("#header-unit");
+  sel.innerHTML = (units.length > 1 ? `<option value="">Todas as unidades</option>` : "")
+    + units.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join("")
+    + (can("tecnico") ? `<option value="__new">＋ Cadastrar unidade…</option>` : "");
+  sel.value = session.unitId ? String(session.unitId) : (units.length > 1 ? "" : String(units[0]?.id ?? ""));
+  $("#site-pill").classList.toggle("filtering", !!session.unitId);
   $("#shift-chip").textContent = currentShift();
+}
+
+/** Troca a unidade exibida e recarrega a tela atual já filtrada. */
+$("#header-unit").addEventListener("change", (e) => {
+  const value = e.target.value;
+  if (value === "__new") {
+    renderMeta(); // desfaz a escolha na caixa
+    cadastros.openTab("setores");
+    location.hash = "#cadastros";
+    toast("Cadastre a nova unidade em <b>Setores e padrões → + Unidade</b>.", "info", 6000);
+    return;
+  }
+  setUnit(value && (meta.units || []).length > 1 ? Number(value) : null);
+  renderMeta();
+  const name = (meta.units || []).find((u) => u.id === session.unitId)?.name;
+  toast(name ? `Mostrando a unidade <b>${esc(name)}</b>.` : "Mostrando todas as unidades.", "ok", 2500);
+  rerender();
+});
+
+window.addEventListener("units-changed", () => loadMeta());
+
+function rerender() {
+  if (!current || !VIEWS[current]) return;
+  VIEWS[current].leave?.();
+  VIEWS[current].show($(`#view-${current}`)).catch((err) => toast(esc(err.message), "danger"));
 }
 async function loadMeta() {
   try { meta = await api("/api/meta"); session.meta = meta; renderMeta(); } catch { /* cabeçalho é opcional */ }
@@ -206,6 +236,10 @@ function connectWs() {
   };
   ws.onmessage = (msg) => {
     const data = JSON.parse(msg.data);
+    // Alertas de outra unidade não interrompem quem está olhando uma unidade específica
+    const otherUnit = session.unitId && ((data.kind === "event" && data.event.unit_id && data.event.unit_id !== session.unitId)
+      || (data.kind === "camera_health" && data.unit_id && data.unit_id !== session.unitId));
+    if (otherUnit) { VIEWS[current]?.onRealtime?.(data); return; }
     if (data.kind === "event") {
       const ev = data.event;
       beep();

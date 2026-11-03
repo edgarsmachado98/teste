@@ -24,10 +24,10 @@ router = APIRouter(prefix="/api")
 @router.get("/meta")
 def meta(user: User = Depends(require_role("operador")), db: Session = Depends(get_db)):
     """Dados do cabeçalho: cliente, unidades e turno atual."""
-    units = db.scalars(select(Unit.name).where(Unit.active.is_(True)).order_by(Unit.name)).all()
+    units = db.scalars(select(Unit).where(Unit.active.is_(True)).order_by(Unit.name)).all()
     return {
         "company_name": settings.company_name,
-        "units": list(units),
+        "units": [{"id": u.id, "name": u.name} for u in units],
         "shifts": [{"name": n, "start": a, "end": b} for n, a, b in parse_shifts(settings.shifts)],
         "shift": shift_of(datetime.now(local_tz())),
     }
@@ -79,11 +79,11 @@ def report_email_now(data: ReportEmailIn, request: Request, user: User = Depends
 
 @router.get("/reports/pdf")
 def report_pdf(request: Request, start: date | None = None, end: date | None = None, camera_id: int | None = None,
-               user: User = Depends(require_role("tecnico")), db: Session = Depends(get_db)):
+               unit_id: int | None = None, user: User = Depends(require_role("tecnico")), db: Session = Depends(get_db)):
     from ..reportpdf import build_report_pdf
 
     start, end = _period(start, end)
-    pdf = build_report_pdf(db, start, end, camera_id)
+    pdf = build_report_pdf(db, start, end, camera_id, unit_id)
     audit.record(db, user, "relatorio_gerado", "relatorio", None, f"PDF {start:%d/%m/%Y} a {end:%d/%m/%Y}", request)
     db.commit()
     return Response(pdf, media_type="application/pdf", headers={

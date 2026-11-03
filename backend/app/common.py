@@ -64,6 +64,14 @@ def attachment_out(a: Attachment) -> AttachmentOut:
                          created_at=a.created_at)
 
 
+def unit_cameras(unit_id: int):
+    """Subconsulta com as câmeras de uma unidade (filtro do seletor de unidade do cabeçalho)."""
+    from sqlalchemy import select
+
+    from .models import Camera
+    return select(Camera.id).where(Camera.unit_id == unit_id)
+
+
 def camera_name(event: Event) -> str:
     """Nome da câmera da ocorrência. Ocorrências antigas podem ter perdido a câmera
     (excluída antes da proteção do histórico); o registro continua válido."""
@@ -79,6 +87,7 @@ def event_out(event: Event) -> dict:
         id=event.id,
         camera_id=event.camera_id,
         camera_name=camera_name(event),
+        unit_id=event.camera.unit_id if event.camera else None,
         location=camera_location(event),
         rule_id=event.rule_id,
         rule_name=event.rule.name if event.rule else None,
