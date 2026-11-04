@@ -150,6 +150,61 @@ $("#tabela-aportes").addEventListener("click", async ev => {
   catch (e) { toast(e.message, true); }
 });
 
+// ---------------- Importação B3 ----------------
+let previaB3 = null;
+
+$("#form-importar-b3").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const alvo = $("#resultado-importar-b3");
+  const fd = new FormData(ev.target);
+  alvo.innerHTML = `<p class="dica">Lendo arquivo…</p>`;
+  try {
+    const r = await fetch("/api/importar/b3/previa", { method: "POST", body: fd,
+      headers: { "X-Requested-With": "fetch", "X-Carteira": String(carteiraAtual) } });
+    if (r.status === 401) { location.href = "/login"; return; }
+    previaB3 = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(previaB3.erro || `Erro ${r.status}`);
+  } catch (e) { alvo.innerHTML = ""; return toast(e.message, true); }
+  renderPreviaB3();
+});
+
+function renderPreviaB3() {
+  const p = previaB3, alvo = $("#resultado-importar-b3");
+  const marca = (lista, i, item) => `<input type="checkbox" data-lista="${lista}" data-idx="${i}" ${item.ja_registrado ? "disabled" : "checked"}>`;
+  const status = item => item.ja_registrado ? `<span class="selo">já lançado</span>` : "novo";
+  const novos = p.aportes.filter(a => !a.ja_registrado).length + p.proventos.filter(x => !x.ja_registrado).length;
+  let html = `<p class="dica">Extrato de <strong>${p.tipo_arquivo === "negociacao" ? "Negociação" : "Movimentação"}</strong>:
+    ${p.aportes.length} operação(ões), ${p.proventos.length} provento(s), ${p.ignorados.length} linha(s) ignorada(s). ${novos} item(ns) novo(s).</p>`;
+  if (p.aportes.length) html += `<h3>Operações</h3><div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Classe</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Total</th><th>Situação</th></tr>
+    ${p.aportes.map((a, i) => `<tr class="${a.ja_registrado ? "desativado" : ""}"><td>${marca("aportes", i, a)}</td><td>${fmtData(a.data)}</td>
+      <td><strong>${esc(a.ticker)}</strong></td><td>${esc(CLASSES[a.classe] || a.classe)}</td>
+      <td class="${a.tipo === "compra" ? "pos" : "neg"}">${a.tipo === "compra" ? "Compra" : "Venda"}</td>
+      <td>${num.format(a.quantidade)}</td><td>${brl.format(a.preco)}</td><td>${brl.format(a.quantidade * a.preco)}</td><td>${status(a)}</td></tr>`).join("")}</table></div>`;
+  if (p.proventos.length) html += `<h3 style="margin-top:14px">Proventos</h3><div class="rolagem"><table><tr><th></th><th>Pagamento</th><th>Ativo</th><th>Tipo</th><th>Qtd.</th><th>Valor/cota</th><th>Total</th><th>Situação</th></tr>
+    ${p.proventos.map((x, i) => `<tr class="${x.ja_registrado ? "desativado" : ""}"><td>${marca("proventos", i, x)}</td><td>${fmtData(x.data_pagamento)}</td>
+      <td><strong>${esc(x.ticker)}</strong></td><td>${esc(nomeTipo(x.tipo))}</td><td>${x.quantidade == null ? "—" : num.format(x.quantidade)}</td>
+      <td>${x.valor_unitario == null ? "—" : brl.format(x.valor_unitario)}</td><td class="pos">${brl.format(x.valor_total)}</td><td>${status(x)}</td></tr>`).join("")}</table></div>`;
+  if (p.ignorados.length) html += `<details class="dica" style="margin-top:12px"><summary>${p.ignorados.length} linha(s) não importada(s)</summary>
+    <div class="rolagem"><table><tr><th>Linha</th><th>Descrição</th><th>Motivo</th></tr>${p.ignorados.map(g => `<tr><td>${g.linha}</td><td>${esc(g.descricao)}</td><td>${esc(g.motivo)}</td></tr>`).join("")}</table></div></details>`;
+  if (novos) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar selecionados</button>
+    <span class="dica">Ativos novos são criados com a classe sugerida; confira em “Ativos e metas” (tickers terminados em 11 podem ser FII, ETF ou unit).</span></div>`;
+  alvo.innerHTML = html;
+}
+
+$("#resultado-importar-b3").addEventListener("click", async ev => {
+  if (ev.target.id !== "btn-confirmar-b3") return;
+  const sel = lista => [...document.querySelectorAll(`#resultado-importar-b3 input[data-lista="${lista}"]:checked`)].map(c => previaB3[lista][c.dataset.idx]);
+  const body = { aportes: sel("aportes"), proventos: sel("proventos") };
+  if (!body.aportes.length && !body.proventos.length) return toast("Nenhum item selecionado.", true);
+  try {
+    const r = await api("/api/importar/b3/confirmar", { method: "POST", body });
+    toast(`Importados: ${r.aportes} operação(ões) e ${r.proventos} provento(s).`);
+    $("#resultado-importar-b3").innerHTML = "";
+    $("#form-importar-b3").reset();
+    carregarAportes();
+  } catch (e) { toast(e.message, true); }
+});
+
 // ---------------- Ativos ----------------
 let ativosCache = [];
 async function carregarAtivos() {

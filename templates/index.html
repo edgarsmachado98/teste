@@ -60,6 +60,24 @@
       </form>
       <datalist id="lista-tickers"></datalist>
     </div>
+    <div class="painel requer-edicao">
+      <h3>Importar extrato da B3</h3>
+      <form id="form-importar-b3" class="form-linha">
+        <label class="largo">Arquivo (.xlsx ou .csv) <input type="file" name="arquivo" accept=".xlsx,.csv" required></label>
+        <button type="submit">Ler arquivo</button>
+      </form>
+      <details class="dica">
+        <summary>Como baixar o extrato</summary>
+        <ol>
+          <li>Entre na Área do Investidor (investidor.b3.com.br) e abra <strong>Extratos</strong>.</li>
+          <li><strong>Negociação</strong>: compras e vendas de ações, FIIs, ETFs e BDRs. Escolha o período desde a sua primeira compra.</li>
+          <li><strong>Movimentação</strong>: dividendos, JCP, rendimentos e Tesouro Direto.</li>
+          <li>Baixe em <strong>Excel</strong> e envie aqui um arquivo de cada vez (primeiro Negociação, depois Movimentação).</li>
+        </ol>
+        Taxas de corretagem não constam nesses extratos. Desdobramentos e bonificações precisam ser ajustados manualmente.
+      </details>
+      <div id="resultado-importar-b3"></div>
+    </div>
     <div class="painel">
       <h3>Histórico</h3>
       <div class="rolagem"><table id="tabela-aportes"></table></div>

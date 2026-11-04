@@ -28,6 +28,16 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
 - Painel com patrimônio, alocação atual vs. meta, alocação por classe e evolução mensal dos aportes.
 - Validação: não permite vender mais do que se possui (nem excluir um aporte que deixaria uma venda descoberta).
 
+**Importação de extratos da B3**
+- Em *Aportes → Importar extrato da B3*, envie os extratos da Área do Investidor em Excel/CSV:
+  **Negociação** (compras e vendas de ações, FIIs, ETFs, BDRs) e **Movimentação** (dividendos, JCP,
+  rendimentos, amortizações e Tesouro Direto). O sistema mostra uma prévia, marca o que já foi lançado
+  e importa só o que você selecionar.
+- Não são importados: opções/termo/futuros, eventos corporativos (desdobramento, bonificação,
+  grupamento, subscrição — ajuste manual) e taxas de corretagem (não constam no extrato).
+- Fora da B3 (cadastre manualmente, com preço manual): fundos de investimento não listados,
+  previdência (PGBL/VGBL), poupança, criptomoedas e investimentos no exterior.
+
 **Proventos (dividendos, JCP, rendimentos)**
 - Busca os proventos por ação/cota nas fontes e calcula **quanto você recebeu** com base na sua quantidade
   na **data com**. JCP é calculado líquido de 15% de IR. Você revisa e importa com um clique (sem duplicar).
@@ -116,6 +126,7 @@ python -m pytest
 app.py                 # servidor Flask e API REST
 carteira/db.py         # esquema SQLite, migração e conexão por thread
 carteira/auth.py       # usuários, carteiras e permissões
+carteira/importacao.py # leitura dos extratos da B3
 carteira/portfolio.py  # posições, preço médio, resumo e sugestão de aporte
 carteira/analysis.py   # indicadores técnicos e estatísticas de risco/retorno
 carteira/market.py     # cotações (Yahoo Finance), cache e série simulada
@@ -149,5 +160,7 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | GET | `/api/proventos/estimar` | proventos calculados a partir das fontes |
 | POST | `/api/proventos/importar` | `{"itens": [...]}` importa os selecionados |
 | GET | `/api/fundamentos/<ticker>` | indicadores, DY e proventos por ano |
+| POST | `/api/importar/b3/previa` | envia o extrato (multipart, campo `arquivo`) e recebe a prévia |
+| POST | `/api/importar/b3/confirmar` | `{"aportes": [...], "proventos": [...]}` grava os selecionados |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

@@ -25,6 +25,7 @@ carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from carteira import analysis, auth, db, portfolio, providers  # noqa: E402  (após carregar o .env)
 from carteira.auth import ErroAcesso  # noqa: E402
+from carteira.importacao import ErroImportacao, analisar_extrato, marcar_duplicados  # noqa: E402
 from carteira.market import Mercado, MarketDataError, modo_demo  # noqa: E402
 
 
@@ -49,7 +50,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
     app = Flask(__name__)
     app.secret_key = secret_key or chave_secreta(db_path)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
-                      PERMANENT_SESSION_LIFETIME=dt.timedelta(days=14))
+                      PERMANENT_SESSION_LIFETIME=dt.timedelta(days=14),
+                      MAX_CONTENT_LENGTH=10 * 1024 * 1024)  # extratos de até 10 MB
     conn = db.connect(db_path)
     mercado = Mercado(conn, fonte_mercado)
     app.config["conn"] = conn
@@ -62,6 +64,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
     def fechar_conexao(_exc):
         conn.rollback()  # descarta transações não confirmadas por erro
         conn.close()
+
+    @app.errorhandler(413)
+    def arquivo_grande(_e):
+        return erro("Arquivo muito grande (limite de 10 MB).", 413)
 
     @app.errorhandler(ErroAcesso)
     def tratar_erro_acesso(e):
@@ -479,6 +485,63 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
             return erro(str(e))
         conn.commit()
         return jsonify({"ok": True, "importados": len(itens)}), 201
+
+    # ---------- Importação de extratos da B3 ----------
+    @app.post("/api/importar/b3/previa")
+    def api_importar_b3_previa():
+        cid = carteira_atual("editar")
+        arquivo = request.files.get("arquivo")
+        if arquivo is None or not arquivo.filename:
+            return erro("Selecione o arquivo do extrato.")
+        try:
+            previa = analisar_extrato(arquivo.read(), arquivo.filename)
+        except ErroImportacao as e:
+            return erro(str(e))
+        marcar_duplicados(previa, listar_aportes(cid), listar_proventos(cid))
+        return jsonify(previa)
+
+    @app.post("/api/importar/b3/confirmar")
+    def api_importar_b3_confirmar():
+        cid = carteira_atual("editar")
+        d = request.get_json(silent=True) or {}
+        novos_aportes, novos_proventos = d.get("aportes") or [], d.get("proventos") or []
+        validos = []
+        for a in novos_aportes:
+            try:
+                item = {"id": 10**12 + len(validos), "data": dt.date.fromisoformat(a["data"]).isoformat(),
+                        "ticker": str(a["ticker"]).upper().strip(), "tipo": a.get("tipo", "compra"),
+                        "quantidade": float(a["quantidade"]), "preco": float(a["preco"]),
+                        "taxas": float(a.get("taxas") or 0), "classe": a.get("classe") or "acao",
+                        "obs": a.get("obs") or "importado B3"}
+            except (KeyError, TypeError, ValueError):
+                return erro("Operação inválida na importação.")
+            if item["tipo"] not in ("compra", "venda") or item["quantidade"] <= 0 or not item["ticker"] \
+                    or item["classe"] not in portfolio.CLASSES:
+                return erro(f"Operação inválida: {item['ticker']} em {item['data']}.")
+            validos.append(item)
+        try:
+            portfolio.calcular_posicoes(listar_aportes(cid) + validos)
+        except ValueError as e:
+            return erro(f"{e} Importe um período maior (desde a primeira compra) ou registre a posição "
+                        "inicial antes de importar as vendas.", 409)
+        existentes = {r["ticker"] for r in listar_ativos(cid)}
+        for a in validos:
+            if a["ticker"] not in existentes:
+                conn.execute("INSERT INTO ativos (carteira_id, ticker, classe) VALUES (?, ?, ?)",
+                             (cid, a["ticker"], a["classe"]))
+                existentes.add(a["ticker"])
+            conn.execute(
+                """INSERT INTO aportes (carteira_id, data, ticker, tipo, quantidade, preco, taxas, obs)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (cid, a["data"], a["ticker"], a["tipo"], a["quantidade"], a["preco"], a["taxas"], a["obs"]))
+        try:
+            for p in novos_proventos:
+                inserir_provento(cid, {**p, "obs": p.get("obs") or "importado B3"})
+        except ValueError as e:
+            conn.rollback()
+            return erro(str(e))
+        conn.commit()
+        return jsonify({"ok": True, "aportes": len(validos), "proventos": len(novos_proventos)}), 201
 
     # ---------- Fundamentos ----------
     @app.get("/api/fundamentos/<ticker>")
