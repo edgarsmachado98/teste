@@ -31,6 +31,29 @@ CREATE TABLE IF NOT EXISTS precos (
     PRIMARY KEY (ticker, data)
 );
 
+CREATE TABLE IF NOT EXISTS proventos (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker         TEXT NOT NULL,
+    tipo           TEXT NOT NULL DEFAULT 'dividendo'
+                   CHECK (tipo IN ('dividendo', 'jcp', 'rendimento', 'amortizacao', 'outro')),
+    data_com       TEXT,
+    data_pagamento TEXT NOT NULL,
+    quantidade     REAL,
+    valor_unitario REAL,
+    valor_total    REAL NOT NULL CHECK (valor_total >= 0),
+    obs            TEXT
+);
+
+-- Cache de respostas das fontes (proventos por ação, fundamentos) em JSON.
+CREATE TABLE IF NOT EXISTS cache_dados (
+    ticker     TEXT NOT NULL,
+    tipo       TEXT NOT NULL,
+    atualizado TEXT NOT NULL,
+    fonte      TEXT NOT NULL,
+    conteudo   TEXT NOT NULL,
+    PRIMARY KEY (ticker, tipo)
+);
+
 CREATE TABLE IF NOT EXISTS precos_meta (
     ticker      TEXT PRIMARY KEY,
     atualizado  TEXT NOT NULL,

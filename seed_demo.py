@@ -33,4 +33,8 @@ if __name__ == "__main__":
         for d, t, q, p in APORTES:
             c.post("/api/aportes", json={"data": d, "ticker": t, "quantidade": q,
                                          "preco": preco_na_data(t, d, p)})
-    print("Carteira de exemplo criada.")
+        est = c.get("/api/proventos/estimar").get_json()
+        recebidos = [i for i in est["itens"] if i["status"] == "recebido" and not i["ja_registrado"]]
+        if recebidos:
+            c.post("/api/proventos/importar", json={"itens": recebidos})
+    print(f"Carteira de exemplo criada ({len(recebidos)} proventos importados).")

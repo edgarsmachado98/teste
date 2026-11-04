@@ -48,7 +48,7 @@ function formDados(form) {
 document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("ativo", x === b));
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos }[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -60,11 +60,13 @@ async function carregarCarteira() {
     ["Total investido (custo)", brl.format(c.total_custo)],
     ["Resultado não realizado", `<span class="${classeSinal(c.lucro)}">${brl.format(c.lucro)} (${pct(c.lucro_pct)})</span>`],
     ["Resultado realizado", `<span class="${classeSinal(c.realizado)}">${brl.format(c.realizado)}</span>`],
+    ["Proventos (12 meses)", `<span class="pos">${brl.format(c.proventos.ult_12m)}</span>`],
+    ["Yield on cost (12 meses)", pct(c.proventos.yoc_pct)],
   ].map(([r, v]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div></div>`).join("");
 
   const comPosicao = c.ativos.filter(a => a.quantidade > 0);
   $("#tabela-posicoes").innerHTML = `<tr><th>Ativo</th><th>Classe</th><th>Qtd.</th><th>Preço médio</th><th>Preço atual</th>
-    <th>Valor</th><th>Resultado</th><th>Peso</th><th>Meta</th><th>Desvio</th></tr>` +
+    <th>Valor</th><th>Resultado</th><th>Proventos 12m</th><th>YoC</th><th>Peso</th><th>Meta</th><th>Desvio</th></tr>` +
     (comPosicao.length ? comPosicao.map(a => `<tr>
       <td><strong>${esc(a.ticker)}</strong> <small>${esc(a.nome)}</small></td>
       <td>${esc(CLASSES[a.classe] || a.classe)}</td>
@@ -73,10 +75,12 @@ async function carregarCarteira() {
       <td title="Fonte: ${esc(a.fonte_preco || "indisponível — usando custo")}">${a.preco_atual == null ? "—" : brl.format(a.preco_atual)}${a.fonte_preco && a.fonte_preco !== "yahoo" ? ` <span class="selo">${esc(a.fonte_preco)}</span>` : ""}</td>
       <td>${brl.format(a.valor)}</td>
       <td class="${classeSinal(a.lucro)}">${brl.format(a.lucro)} (${pct(a.lucro_pct)})</td>
+      <td>${a.proventos_12m ? brl.format(a.proventos_12m) : "—"}</td>
+      <td>${pct(a.yoc_pct)}</td>
       <td>${pct(a.peso_pct)}</td>
       <td>${pct(a.meta_norm_pct)}</td>
       <td>${a.desvio_pct > 0 ? "+" : ""}${pct(a.desvio_pct)}</td>
-    </tr>`).join("") : `<tr><td colspan="10">Nenhuma posição. Registre seu primeiro aporte na aba “Aportes”.</td></tr>`);
+    </tr>`).join("") : `<tr><td colspan="12">Nenhuma posição. Registre seu primeiro aporte na aba “Aportes”.</td></tr>`);
 
   grafico("graf-alocacao", {
     type: "bar",
@@ -245,6 +249,7 @@ $("#form-mercado").addEventListener("submit", async ev => {
     ] },
     options: opcoesTempo,
   });
+  carregarFundamentos(r.ticker, d.atualizar);
   $("#lista-sinais").innerHTML = r.sinais.map(s => `<li class="${s.tipo}">${esc(s.texto)}</li>`).join("") || "<li>Histórico insuficiente para gerar leituras.</li>";
 });
 
@@ -258,6 +263,133 @@ async function carregarFontes() {
   } catch (e) { toast(e.message, true); }
 }
 carregarFontes();
+
+// ---------------- Fundamentos ----------------
+const compacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+const dec = v => v == null ? "—" : v.toFixed(2).replace(".", ",");
+const FORMATO_FUND = {
+  pl: dec, pvp: dec, ev_ebitda: dec, liquidez_corrente: dec, divida_pl: dec,
+  lpa: v => v == null ? "—" : brl.format(v), vpa: v => v == null ? "—" : brl.format(v),
+  roe: pctFrac, margem_liquida: pctFrac,
+  valor_mercado: v => v == null ? "—" : "R$ " + compacto.format(v),
+};
+
+async function carregarFundamentos(ticker, atualizar) {
+  let f;
+  try { f = await api(`/api/fundamentos/${encodeURIComponent(ticker)}?atualizar=${atualizar ? 1 : 0}`); }
+  catch (e) { $("#sem-fundamentos").textContent = e.message; return; }
+  const ind = f.indicadores || {};
+  const cards = [["Dividend yield (12m)", pctFrac(f.dividend_yield)]];
+  if (f.indicadores) for (const [k, rot] of f.campos) cards.push([rot, FORMATO_FUND[k](ind[k])]);
+  $("#cards-fundamentos").innerHTML = cards.map(([r, v]) => `<div class="card"><div class="rotulo">${esc(r)}</div><div class="valor">${v}</div></div>`).join("");
+  const fontes = [f.fonte_indicadores && `indicadores: ${f.fonte_indicadores}`, f.fonte_proventos && `proventos: ${f.fonte_proventos}`].filter(Boolean);
+  $("#fonte-fundamentos").textContent = fontes.length ? fontes.join(" · ") : "sem dados";
+  $("#sem-fundamentos").textContent = [f.erro_indicadores, f.erro_proventos].filter(Boolean).join(" ");
+  grafico("graf-proventos-ano", {
+    type: "bar",
+    data: { labels: f.proventos_por_ano.map(x => x.ano), datasets: [{ label: "Proventos por ação/cota (por ano da data com)", data: f.proventos_por_ano.map(x => x.valor), backgroundColor: PALETA[2] }] },
+    options: { aspectRatio: 4, scales: { y: { ticks: { callback: v => brl.format(v) } } }, plugins: { tooltip: { callbacks: { label: x => brl.format(x.raw) } } } },
+  });
+}
+
+// ---------------- Proventos ----------------
+const nomeTipo = t => TIPOS_PROVENTO[t] || t;
+const COR_TIPO = { dividendo: PALETA[0], jcp: PALETA[1], rendimento: PALETA[2], amortizacao: PALETA[4], outro: PALETA[8] };
+
+async function carregarProventos() {
+  let r;
+  try { r = await api("/api/proventos"); } catch (e) { return toast(e.message, true); }
+  const s = r.resumo;
+  $("#cards-proventos").innerHTML = [
+    ["Total recebido", brl.format(s.total)],
+    ["Últimos 12 meses", brl.format(s.ult_12m)],
+    ["Média mensal (12m)", brl.format(s.media_mensal_12m)],
+    ["Yield on cost (12m)", pct(s.yoc_pct)],
+    ["Dividend yield da carteira", pct(s.dy_pct)],
+    ["A receber (lançados)", brl.format(s.a_receber)],
+  ].map(([rot, v]) => `<div class="card"><div class="rotulo">${rot}</div><div class="valor">${v}</div></div>`).join("");
+
+  grafico("graf-proventos", {
+    type: "bar",
+    data: { labels: s.por_mes.map(x => x.mes), datasets: Object.keys(TIPOS_PROVENTO)
+      .filter(t => s.por_mes.some(m => m[t] > 0))
+      .map(t => ({ label: nomeTipo(t), data: s.por_mes.map(m => m[t]), backgroundColor: COR_TIPO[t], stack: "p" })) },
+    options: { scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => brl.format(v) } } },
+      plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl.format(x.raw)}` } } } },
+  });
+
+  $("#tabela-proventos-ativo").innerHTML = `<tr><th>Ativo</th><th>Total</th><th>12 meses</th><th>Yield on cost</th><th>DY atual</th></tr>` +
+    (s.por_ativo.length ? s.por_ativo.map(a => `<tr><td><strong>${esc(a.ticker)}</strong></td><td>${brl.format(a.total)}</td>
+      <td>${brl.format(a.ult_12m)}</td><td>${pct(a.yoc_pct)}</td><td>${pct(a.dy_pct)}</td></tr>`).join("")
+      : `<tr><td colspan="5">Nenhum provento recebido.</td></tr>`);
+
+  $("#tabela-proventos").innerHTML = `<tr><th>Pagamento</th><th>Ativo</th><th>Tipo</th><th>Data com</th><th>Qtd.</th><th>Valor/cota</th><th>Total</th><th>Obs.</th><th></th></tr>` +
+    (r.itens.length ? r.itens.map(p => `<tr><td>${fmtData(p.data_pagamento)}</td><td><strong>${esc(p.ticker)}</strong></td>
+      <td>${esc(nomeTipo(p.tipo))}</td><td>${p.data_com ? fmtData(p.data_com) : "—"}</td>
+      <td>${p.quantidade == null ? "—" : num.format(p.quantidade)}</td><td>${p.valor_unitario == null ? "—" : brl.format(p.valor_unitario)}</td>
+      <td class="pos">${brl.format(p.valor_total)}</td><td>${esc(p.obs)}</td>
+      <td><button class="link" data-remover-provento="${p.id}">excluir</button></td></tr>`).join("")
+      : `<tr><td colspan="9">Nenhum provento lançado. Use “Buscar proventos da carteira” ou lance manualmente.</td></tr>`);
+}
+
+let estimados = [];
+$("#btn-estimar").addEventListener("click", async () => {
+  const alvo = $("#resultado-estimar");
+  alvo.innerHTML = `<p class="dica">Consultando fontes…</p>`;
+  let r;
+  try { r = await api(`/api/proventos/estimar?atualizar=${$("#estimar-atualizar").checked ? 1 : 0}`); }
+  catch (e) { alvo.innerHTML = ""; return toast(e.message, true); }
+  const jaLancados = r.itens.filter(i => i.ja_registrado).length;
+  estimados = r.itens.filter(i => !i.ja_registrado);
+  const falhas = Object.entries(r.falhas).map(([t, m]) => `<li><strong>${esc(t)}</strong>: ${esc(m)}</li>`).join("");
+  alvo.innerHTML = (falhas ? `<details class="dica"><summary>Sem dados de proventos para ${Object.keys(r.falhas).length} ativo(s)</summary><ul>${falhas}</ul></details>` : "") +
+    (estimados.length ? `<div class="acoes-import">
+        <button type="button" id="btn-importar" class="btn">Importar selecionados</button>
+        <span class="dica" id="total-selecionado"></span></div>
+      <div class="rolagem"><table id="tabela-estimados"><tr><th></th><th>Ativo</th><th>Tipo</th><th>Data com</th><th>Pagamento</th><th>Qtd.</th><th>Valor/cota</th><th>Total</th><th>Status</th><th>Fonte</th></tr>
+      ${estimados.map((i, n) => `<tr class="${i.ja_registrado ? "desativado" : ""}">
+        <td><input type="checkbox" data-idx="${n}" ${i.ja_registrado ? "disabled" : i.status === "recebido" ? "checked" : ""}></td>
+        <td><strong>${esc(i.ticker)}</strong></td><td>${esc(nomeTipo(i.tipo))}</td><td>${fmtData(i.data_com)}</td>
+        <td>${fmtData(i.data_pagamento)}${i.pagamento_estimado ? ` <span class="selo">estimada</span>` : ""}</td>
+        <td>${num.format(i.quantidade)}</td><td>${brl.format(i.valor_unitario)}</td><td>${brl.format(i.valor_total)}</td>
+        <td>${i.ja_registrado ? "já lançado" : i.status === "recebido" ? "recebido" : "a receber"}</td>
+        <td>${esc(r.fontes[i.ticker] || "")}</td></tr>`).join("")}</table></div>`
+      : `<p class="dica">${jaLancados ? "Todos os proventos encontrados já estão lançados." : "Nenhum provento encontrado no período em que você teve os ativos."}</p>`) +
+    (estimados.length && jaLancados ? `<p class="dica">${jaLancados} provento(s) já lançado(s) não exibido(s).</p>` : "");
+  atualizarTotalSelecionado();
+});
+
+function atualizarTotalSelecionado() {
+  const marcados = [...document.querySelectorAll("#tabela-estimados input:checked")].map(c => estimados[c.dataset.idx]);
+  const el = $("#total-selecionado");
+  if (el) el.textContent = `${marcados.length} selecionado(s): ${brl.format(marcados.reduce((s, i) => s + i.valor_total, 0))}`;
+}
+
+$("#resultado-estimar").addEventListener("change", atualizarTotalSelecionado);
+$("#resultado-estimar").addEventListener("click", async ev => {
+  if (ev.target.id !== "btn-importar") return;
+  const itens = [...document.querySelectorAll("#tabela-estimados input:checked")].map(c => estimados[c.dataset.idx]);
+  if (!itens.length) return toast("Nenhum provento selecionado.", true);
+  try {
+    const r = await api("/api/proventos/importar", { method: "POST", body: { itens } });
+    toast(`${r.importados} provento(s) importado(s).`);
+    $("#resultado-estimar").innerHTML = "";
+    carregarProventos();
+  } catch (e) { toast(e.message, true); }
+});
+
+$("#form-provento").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  try { await api("/api/proventos", { method: "POST", body: formDados(ev.target) }); toast("Provento salvo."); ev.target.reset(); carregarProventos(); }
+  catch (e) { toast(e.message, true); }
+});
+
+$("#tabela-proventos").addEventListener("click", async ev => {
+  const id = ev.target.dataset.removerProvento;
+  if (!id || !confirm("Excluir este provento?")) return;
+  try { await api(`/api/proventos/${id}`, { method: "DELETE" }); toast("Provento excluído."); carregarProventos(); }
+  catch (e) { toast(e.message, true); }
+});
 
 // ---------------- Comparar ----------------
 $("#btn-comparar-carteira").addEventListener("click", async () => {

@@ -13,6 +13,7 @@
   <nav>
     <button data-tab="carteira" class="ativo">Carteira</button>
     <button data-tab="aportes">Aportes</button>
+    <button data-tab="proventos">Proventos</button>
     <button data-tab="ativos">Ativos e metas</button>
     <button data-tab="sugestao">Próximo aporte</button>
     <button data-tab="mercado">Análise de mercado</button>
@@ -53,6 +54,40 @@
       <h3>Histórico</h3>
       <div class="rolagem"><table id="tabela-aportes"></table></div>
     </div>
+  </section>
+
+  <section id="tab-proventos" class="tab">
+    <div class="cards" id="cards-proventos"></div>
+    <div class="painel"><h3>Proventos recebidos por mês</h3><canvas id="graf-proventos" height="90"></canvas></div>
+    <div class="painel">
+      <h3>Buscar proventos nas fontes</h3>
+      <div class="form-linha">
+        <button type="button" id="btn-estimar" class="btn">Buscar proventos da carteira</button>
+        <label class="check"><input type="checkbox" id="estimar-atualizar"> Forçar atualização</label>
+      </div>
+      <p class="dica">Consulta os proventos por ação/cota nas fontes configuradas e multiplica pela sua quantidade na data com.
+        JCP é calculado líquido de 15% de IR. Quando a fonte não informa a data de pagamento (Yahoo), ela é estimada em 30 dias após a data com.
+        Confira com o extrato da corretora antes de importar.</p>
+      <div id="resultado-estimar"></div>
+    </div>
+    <div class="grade2">
+      <div class="painel"><h3>Por ativo</h3><div class="rolagem"><table id="tabela-proventos-ativo"></table></div></div>
+      <div class="painel">
+        <h3>Lançar manualmente</h3>
+        <form id="form-provento" class="form-linha">
+          <label>Ticker <input name="ticker" list="lista-tickers" required></label>
+          <label>Tipo <select name="tipo">
+            {% for k, v in tipos_provento.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select></label>
+          <label>Data com <input type="date" name="data_com"></label>
+          <label>Pagamento <input type="date" name="data_pagamento" required></label>
+          <label>Valor total (R$) <input type="number" name="valor_total" step="any" min="0" required></label>
+          <label>Obs. <input name="obs"></label>
+          <button type="submit">Salvar</button>
+        </form>
+      </div>
+    </div>
+    <div class="painel"><h3>Histórico de proventos</h3><div class="rolagem"><table id="tabela-proventos"></table></div></div>
   </section>
 
   <section id="tab-ativos" class="tab">
@@ -108,6 +143,12 @@
     </div>
     <div id="resultado-mercado" class="oculto">
       <div class="cards" id="cards-mercado"></div>
+      <div class="painel" id="painel-fundamentos">
+        <h3>Fundamentos e proventos <span id="fonte-fundamentos" class="selo"></span></h3>
+        <div class="cards compacto" id="cards-fundamentos"></div>
+        <div id="sem-fundamentos" class="dica"></div>
+        <canvas id="graf-proventos-ano" height="70"></canvas>
+      </div>
       <div class="painel"><h3 id="titulo-preco">Preço</h3><canvas id="graf-preco" height="110"></canvas></div>
       <div class="grade2">
         <div class="painel"><h3>RSI (14)</h3><canvas id="graf-rsi"></canvas></div>
@@ -137,7 +178,7 @@
   </section>
 </main>
 <div id="toast"></div>
-<script>window.CLASSES = {{ classes|tojson }};</script>
+<script>window.CLASSES = {{ classes|tojson }}; window.TIPOS_PROVENTO = {{ tipos_provento|tojson }};</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

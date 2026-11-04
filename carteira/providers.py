@@ -48,6 +48,36 @@ def _normalizar(pontos):
     return sorted(por_data.items())
 
 
+def tipo_provento(rotulo):
+    r = (rotulo or "").upper()
+    if "JRS" in r or "JCP" in r or "JUROS" in r:
+        return "jcp"
+    if "RENDIMENTO" in r:
+        return "rendimento"
+    if "AMORT" in r:
+        return "amortizacao"
+    return "dividendo"
+
+
+def _num(v):
+    """Aceita número ou dict no formato do Yahoo/brapi ({"raw": 1.2, "fmt": "1,2"})."""
+    if isinstance(v, dict):
+        v = v.get("raw")
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+# Indicadores fundamentalistas normalizados (chave -> rótulo).
+CAMPOS_FUNDAMENTOS = {
+    "pl": "P/L", "pvp": "P/VP", "lpa": "LPA", "vpa": "VPA", "roe": "ROE",
+    "margem_liquida": "Margem líquida", "divida_pl": "Dívida/PL",
+    "liquidez_corrente": "Liquidez corrente", "ev_ebitda": "EV/EBITDA",
+    "valor_mercado": "Valor de mercado",
+}
+
+
 class Fonte:
     nome = "fonte"
     descricao = ""
@@ -58,6 +88,14 @@ class Fonte:
 
     def historico(self, ticker):
         raise NotImplementedError
+
+    def proventos(self, ticker):
+        """Lista de dicts: data_com, data_pagamento, valor (por cota/ação), tipo."""
+        raise FonteIndisponivel(f"{self.nome} não fornece proventos")
+
+    def fundamentos(self, ticker):
+        """Dict com indicadores normalizados (ver CAMPOS_FUNDAMENTOS)."""
+        raise FonteIndisponivel(f"{self.nome} não fornece fundamentos")
 
     def status(self):
         return {"nome": self.nome, "descricao": self.descricao, "site": self.site,
@@ -79,7 +117,7 @@ class Brapi(Fonte):
     def configurada(self):
         return True  # funciona sem token para os tickers de teste
 
-    def historico(self, ticker):
+    def _preparar(self, ticker):
         t = ticker.upper()
         if not B3_PATTERN.match(t):
             raise FonteIndisponivel("brapi cobre apenas ativos da B3")
@@ -88,6 +126,66 @@ class Brapi(Fonte):
         headers = dict(HEADERS)
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
+        return t, headers
+
+    def _resultado(self, ticker, params):
+        t, headers = self._preparar(ticker)
+        resp = requests.get(self.URL.format(ticker=t), headers=headers, timeout=TIMEOUT, params=params)
+        if resp.status_code in (400, 401, 402, 403):
+            raise FonteIndisponivel(f"brapi recusou a consulta (HTTP {resp.status_code}): {resp.text[:150]}")
+        resp.raise_for_status()
+        resultados = resp.json().get("results") or []
+        if not resultados:
+            raise FonteIndisponivel(f"brapi não encontrou {t}")
+        return resultados[0]
+
+    def proventos(self, ticker):
+        r = self._resultado(ticker, {"dividends": "true"})
+        itens = []
+        for d in (r.get("dividendsData") or {}).get("cashDividends") or []:
+            valor = _num(d.get("rate"))
+            data_com = d.get("lastDatePrior") or d.get("approvedOn")
+            if not valor or not data_com:
+                continue
+            pagamento = d.get("paymentDate")
+            itens.append({"data_com": _data_iso(data_com),
+                          "data_pagamento": _data_iso(pagamento) if pagamento else None,
+                          "valor": valor, "tipo": tipo_provento(d.get("label"))})
+        if not itens and "dividendsData" not in r:
+            raise FonteIndisponivel("brapi não retornou dados de proventos (verifique o plano)")
+        return itens
+
+    def fundamentos(self, ticker):
+        try:
+            r = self._resultado(ticker, {"fundamental": "true",
+                                         "modules": "defaultKeyStatistics,financialData,summaryProfile"})
+        except FonteIndisponivel:
+            r = self._resultado(ticker, {"fundamental": "true"})  # plano sem módulos
+        est = r.get("defaultKeyStatistics") or {}
+        fin = r.get("financialData") or {}
+        perfil = r.get("summaryProfile") or {}
+        divida_pl = _num(fin.get("debtToEquity"))
+        out = {
+            "nome": r.get("longName") or r.get("shortName"),
+            "setor": perfil.get("sector"),
+            "pl": _num(r.get("priceEarnings")) or _num(est.get("trailingPE")),
+            "pvp": _num(est.get("priceToBook")),
+            "lpa": _num(r.get("earningsPerShare")) or _num(est.get("trailingEps")),
+            "vpa": _num(est.get("bookValue")),
+            "roe": _num(fin.get("returnOnEquity")),
+            "margem_liquida": _num(fin.get("profitMargins")) or _num(est.get("profitMargins")),
+            # Yahoo/brapi informam dívida/PL em %, ex.: 85.3 -> 0.853
+            "divida_pl": divida_pl / 100 if divida_pl is not None else None,
+            "liquidez_corrente": _num(fin.get("currentRatio")),
+            "ev_ebitda": _num(est.get("enterpriseToEbitda")),
+            "valor_mercado": _num(r.get("marketCap")),
+        }
+        if all(out[k] is None for k in CAMPOS_FUNDAMENTOS):
+            raise FonteIndisponivel("brapi não retornou indicadores fundamentalistas")
+        return out
+
+    def historico(self, ticker):
+        t, headers = self._preparar(ticker)
         ultimo_erro = None
         for periodo in self.PERIODOS:
             resp = requests.get(self.URL.format(ticker=t), headers=headers, timeout=TIMEOUT,
@@ -179,6 +277,25 @@ class Yahoo(Fonte):
         if not serie:
             raise FonteIndisponivel(f"Yahoo sem cotações para {ticker}")
         return serie
+
+    def proventos(self, ticker):
+        """Dividendos por ação. O Yahoo informa a data ex; a data com é o dia útil anterior.
+        Não há data de pagamento nem distinção dividendo/JCP."""
+        resp = requests.get(self.URL.format(symbol=self.simbolo(ticker)),
+                            params={"range": "5y", "interval": "1mo", "events": "div"},
+                            headers={"User-Agent": "Mozilla/5.0"}, timeout=TIMEOUT)
+        resp.raise_for_status()
+        dados = resp.json()["chart"]
+        if dados.get("error") or not dados.get("result"):
+            raise FonteIndisponivel(f"Yahoo não encontrou {ticker}")
+        eventos = (dados["result"][0].get("events") or {}).get("dividends") or {}
+        itens = []
+        for ev in eventos.values():
+            ex = dt.date.fromisoformat(_data_iso(ev["date"]))
+            com = ex - dt.timedelta(days=3 if ex.weekday() == 0 else 1)
+            itens.append({"data_com": com.isoformat(), "data_pagamento": None,
+                          "valor": float(ev["amount"]), "tipo": "dividendo"})
+        return sorted(itens, key=lambda x: x["data_com"])
 
 
 class HGBrasil(Fonte):

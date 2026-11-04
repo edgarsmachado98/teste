@@ -58,3 +58,8 @@ button.link.editar { color: var(--primaria); margin-right: 10px; }
 .fontes { margin-top: 14px; } .fontes summary { cursor: pointer; color: var(--suave); font-size: .9rem; }
 .fontes table { margin-top: 8px; } .fontes td:last-child, .fontes th:last-child { text-align: left; }
 code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .85em; }
+.cards.compacto { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.cards.compacto .card { padding: 10px; background: var(--bg); }
+.cards.compacto .valor { font-size: 1.05rem; }
+.acoes-import { display: flex; gap: 12px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
+tr.desativado td { color: var(--suave); }

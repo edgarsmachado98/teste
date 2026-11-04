@@ -21,7 +21,7 @@ def carregar_env(caminho=".env"):
 
 carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-from carteira import analysis, db, portfolio  # noqa: E402  (após carregar o .env)
+from carteira import analysis, db, portfolio, providers  # noqa: E402  (após carregar o .env)
 from carteira.market import Mercado, MarketDataError, modo_demo  # noqa: E402
 
 
@@ -57,7 +57,8 @@ def create_app(db_path=None, fonte_mercado=None):
 
     @app.get("/")
     def index():
-        return render_template("index.html", classes=portfolio.CLASSES, demo=modo_demo())
+        return render_template("index.html", classes=portfolio.CLASSES,
+                               tipos_provento=portfolio.TIPOS_PROVENTO, demo=modo_demo())
 
     # ---------- Ativos ----------
     @app.get("/api/ativos")
@@ -149,7 +150,114 @@ def create_app(db_path=None, fonte_mercado=None):
     def api_carteira():
         resumo = montar_resumo()
         resumo["evolucao_aportes"] = portfolio.aportes_por_mes(listar_aportes())
+        prov = portfolio.resumo_proventos(listar_proventos(), resumo, hoje())
+        por_ativo = {p["ticker"]: p for p in prov["por_ativo"]}
+        for l in resumo["ativos"]:
+            p = por_ativo.get(l["ticker"], {})
+            l["proventos_total"] = p.get("total", 0.0)
+            l["proventos_12m"] = p.get("ult_12m", 0.0)
+            l["yoc_pct"] = p.get("yoc_pct")
+        resumo["proventos"] = {k: prov[k] for k in ("total", "ult_12m", "media_mensal_12m", "yoc_pct", "dy_pct")}
         return jsonify(resumo)
+
+    # ---------- Proventos ----------
+    def hoje():
+        return dt.date.today().isoformat()
+
+    def listar_proventos():
+        return db.rows(conn.execute("SELECT * FROM proventos ORDER BY data_pagamento DESC, id DESC"))
+
+    def inserir_provento(d):
+        ticker = (d.get("ticker") or "").upper().strip()
+        tipo = d.get("tipo") or "dividendo"
+        if not ticker or tipo not in portfolio.TIPOS_PROVENTO:
+            raise ValueError("Ticker e tipo válidos são obrigatórios.")
+        try:
+            pagamento = dt.date.fromisoformat(d.get("data_pagamento") or "").isoformat()
+            data_com = dt.date.fromisoformat(d["data_com"]).isoformat() if d.get("data_com") else None
+            qtd = float(d["quantidade"]) if d.get("quantidade") not in (None, "") else None
+            unit = float(d["valor_unitario"]) if d.get("valor_unitario") not in (None, "") else None
+            total = float(d["valor_total"]) if d.get("valor_total") not in (None, "") else None
+        except (TypeError, ValueError):
+            raise ValueError("Datas e valores do provento devem ser válidos.")
+        if total is None and qtd is not None and unit is not None:
+            total = round(qtd * unit, 2)
+        if total is None or total < 0:
+            raise ValueError("Informe o valor total (ou quantidade e valor por cota).")
+        cur = conn.execute(
+            """INSERT INTO proventos (ticker, tipo, data_com, data_pagamento, quantidade,
+               valor_unitario, valor_total, obs) VALUES (?,?,?,?,?,?,?,?)""",
+            (ticker, tipo, data_com, pagamento, qtd, unit, total, d.get("obs") or ""))
+        return cur.lastrowid
+
+    @app.get("/api/proventos")
+    def api_proventos():
+        lista = listar_proventos()
+        return jsonify({"itens": lista,
+                        "resumo": portfolio.resumo_proventos(lista, montar_resumo(), hoje())})
+
+    @app.post("/api/proventos")
+    def api_criar_provento():
+        try:
+            pid = inserir_provento(request.get_json(force=True) or {})
+        except ValueError as e:
+            return erro(str(e))
+        conn.commit()
+        return jsonify({"ok": True, "id": pid}), 201
+
+    @app.delete("/api/proventos/<int:pid>")
+    def api_remover_provento(pid):
+        conn.execute("DELETE FROM proventos WHERE id = ?", (pid,))
+        conn.commit()
+        return jsonify({"ok": True})
+
+    @app.get("/api/proventos/estimar")
+    def api_estimar_proventos():
+        """Busca proventos por ação nas fontes e calcula quanto você recebeu/receberá."""
+        aportes = listar_aportes()
+        forcar = request.args.get("atualizar") == "1"
+        por_ticker, fontes, falhas = {}, {}, {}
+        for t in sorted({a["ticker"] for a in aportes}):
+            try:
+                por_ticker[t], fontes[t] = mercado.proventos(t, forcar)
+            except MarketDataError as e:
+                falhas[t] = str(e)
+        itens = portfolio.estimar_proventos(aportes, por_ticker, listar_proventos(), hoje())
+        return jsonify({"itens": itens, "fontes": fontes, "falhas": falhas})
+
+    @app.post("/api/proventos/importar")
+    def api_importar_proventos():
+        itens = (request.get_json(force=True) or {}).get("itens") or []
+        try:
+            for d in itens:
+                inserir_provento({**d, "obs": d.get("obs") or "importado"})
+        except ValueError as e:
+            conn.rollback()
+            return erro(str(e))
+        conn.commit()
+        return jsonify({"ok": True, "importados": len(itens)}), 201
+
+    # ---------- Fundamentos ----------
+    @app.get("/api/fundamentos/<ticker>")
+    def api_fundamentos(ticker):
+        ticker = ticker.upper()
+        forcar = request.args.get("atualizar") == "1"
+        out = {"ticker": ticker, "campos": list(providers.CAMPOS_FUNDAMENTOS.items())}
+        try:
+            out["indicadores"], out["fonte_indicadores"] = mercado.fundamentos(ticker, forcar)
+        except MarketDataError as e:
+            out["indicadores"], out["erro_indicadores"] = None, str(e)
+        try:
+            itens, out["fonte_proventos"] = mercado.proventos(ticker, forcar)
+        except MarketDataError as e:
+            itens, out["erro_proventos"] = [], str(e)
+        manual = conn.execute("SELECT preco_manual FROM ativos WHERE ticker = ?", (ticker,)).fetchone()
+        preco, _ = mercado.preco_atual(ticker, manual["preco_manual"] if manual else None)
+        out["preco"] = preco
+        out["dividend_yield"] = portfolio.dividend_yield(itens, preco, hoje())
+        out["proventos_por_ano"] = portfolio.proventos_por_ano(itens)
+        out["proventos"] = sorted(itens, key=lambda x: x["data_com"], reverse=True)[:24]
+        return jsonify(out)
 
     @app.post("/api/sugestao")
     def api_sugestao():

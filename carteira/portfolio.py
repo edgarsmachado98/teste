@@ -1,4 +1,5 @@
-"""Cálculo de posições, rentabilidade e sugestão de aporte (rebalanceamento)."""
+"""Cálculo de posições, rentabilidade, sugestão de aporte e proventos."""
+import datetime as dt
 import math
 from collections import defaultdict
 
@@ -221,3 +222,135 @@ def aportes_por_mes(aportes):
         acumulado += meses[m]
         serie.append({"mes": m, "aporte": meses[m], "acumulado": acumulado})
     return serie
+
+
+# ---------------------------------------------------------------- Proventos
+
+TIPOS_PROVENTO = {
+    "dividendo": "Dividendo",
+    "jcp": "JCP",
+    "rendimento": "Rendimento",
+    "amortizacao": "Amortização",
+    "outro": "Outro",
+}
+IR_JCP = 0.15  # JCP sofre retenção de 15% de IR na fonte
+
+
+def quantidade_na_data(aportes, ticker, data):
+    """Quantidade do ativo ao fim do dia `data` (compras - vendas até a data, inclusive)."""
+    qtd = 0.0
+    for a in aportes:
+        if a["ticker"] == ticker and a["data"] <= data:
+            qtd += float(a["quantidade"]) * (1 if a.get("tipo", "compra") == "compra" else -1)
+    return max(qtd, 0.0)
+
+
+def _somar_dias(data_iso, dias):
+    return (dt.date.fromisoformat(data_iso) + dt.timedelta(days=dias)).isoformat()
+
+
+def estimar_proventos(aportes, proventos_fonte, registrados, hoje):
+    """Cruza os proventos por ação informados pelas fontes com a sua posição na data com.
+
+    proventos_fonte: {ticker: [{"data_com", "data_pagamento", "valor", "tipo"}]}
+    registrados: proventos já lançados (para não duplicar)
+    Retorna itens com status 'recebido' (pagamento já ocorreu) ou 'a_receber'.
+    JCP é calculado líquido de 15% de IR.
+    """
+    chaves = {(r["ticker"], r.get("data_com"), r["tipo"]) for r in registrados}
+    chaves_pag = {(r["ticker"], r["data_pagamento"], r["tipo"]) for r in registrados}
+    itens = []
+    for ticker, lista in proventos_fonte.items():
+        for p in lista:
+            data_com = p["data_com"]
+            if data_com > hoje:
+                continue  # data com ainda não chegou: posição indefinida
+            qtd = quantidade_na_data(aportes, ticker, data_com)
+            if qtd <= 0:
+                continue
+            bruto = float(p["valor"])
+            unitario = bruto * (1 - IR_JCP) if p["tipo"] == "jcp" else bruto
+            pagamento = p.get("data_pagamento")
+            estimado = pagamento is None
+            if estimado:
+                pagamento = _somar_dias(data_com, 30)
+            itens.append({
+                "ticker": ticker,
+                "tipo": p["tipo"],
+                "data_com": data_com,
+                "data_pagamento": pagamento,
+                "pagamento_estimado": estimado,
+                "quantidade": qtd,
+                "valor_unitario": unitario,
+                "valor_bruto_unitario": bruto,
+                "valor_total": round(qtd * unitario, 2),
+                "status": "recebido" if pagamento <= hoje else "a_receber",
+                "ja_registrado": (ticker, data_com, p["tipo"]) in chaves
+                                 or (ticker, pagamento, p["tipo"]) in chaves_pag,
+            })
+    return sorted(itens, key=lambda x: (x["data_pagamento"], x["ticker"]), reverse=True)
+
+
+def resumo_proventos(proventos, resumo, hoje, meses=24):
+    """Indicadores de renda passiva a partir dos proventos registrados."""
+    d_hoje = dt.date.fromisoformat(hoje)
+    inicio_12m = _somar_dias(hoje, -365)
+
+    recebidos = [p for p in proventos if p["data_pagamento"] <= hoje]
+    total = sum(p["valor_total"] for p in recebidos)
+    ult_12m = sum(p["valor_total"] for p in recebidos if p["data_pagamento"] > inicio_12m)
+
+    por_mes = defaultdict(lambda: defaultdict(float))
+    for p in recebidos:
+        por_mes[p["data_pagamento"][:7]][p["tipo"]] += p["valor_total"]
+    serie = []
+    ano, mes = d_hoje.year, d_hoje.month
+    for _ in range(meses):
+        chave = f"{ano:04d}-{mes:02d}"
+        serie.append({"mes": chave, **{t: por_mes[chave].get(t, 0.0) for t in TIPOS_PROVENTO}})
+        mes -= 1
+        if mes == 0:
+            mes, ano = 12, ano - 1
+    serie.reverse()
+
+    por_ticker = defaultdict(lambda: {"total": 0.0, "ult_12m": 0.0})
+    for p in recebidos:
+        por_ticker[p["ticker"]]["total"] += p["valor_total"]
+        if p["data_pagamento"] > inicio_12m:
+            por_ticker[p["ticker"]]["ult_12m"] += p["valor_total"]
+    linhas = {l["ticker"]: l for l in resumo["ativos"]}
+    ativos = []
+    for t, v in sorted(por_ticker.items(), key=lambda x: -x[1]["ult_12m"]):
+        l = linhas.get(t, {})
+        custo, valor = l.get("custo") or 0, l.get("valor") or 0
+        ativos.append({"ticker": t, "total": v["total"], "ult_12m": v["ult_12m"],
+                       "yoc_pct": v["ult_12m"] / custo * 100 if custo else None,
+                       "dy_pct": v["ult_12m"] / valor * 100 if valor else None})
+
+    return {
+        "total": total,
+        "ult_12m": ult_12m,
+        "media_mensal_12m": ult_12m / 12,
+        "a_receber": sum(p["valor_total"] for p in proventos if p["data_pagamento"] > hoje),
+        "yoc_pct": ult_12m / resumo["total_custo"] * 100 if resumo["total_custo"] else None,
+        "dy_pct": ult_12m / resumo["total_valor"] * 100 if resumo["total_valor"] else None,
+        "por_mes": serie,
+        "por_ativo": ativos,
+    }
+
+
+def proventos_por_ano(itens):
+    """Soma dos proventos por ação agrupados pelo ano da data com."""
+    anos = defaultdict(float)
+    for p in itens:
+        anos[p["data_com"][:4]] += float(p["valor"])
+    return [{"ano": a, "valor": v} for a, v in sorted(anos.items())]
+
+
+def dividend_yield(itens, preco, hoje):
+    """DY dos últimos 12 meses (pela data com) em relação ao preço atual."""
+    if not preco:
+        return None
+    inicio = _somar_dias(hoje, -365)
+    soma = sum(float(p["valor"]) for p in itens if inicio < p["data_com"] <= hoje)
+    return soma / preco
