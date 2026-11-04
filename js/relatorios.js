@@ -125,7 +125,7 @@
     const b = ev.target.closest('button[data-contrato], button[data-distrato]');
     if (!b) return;
     if (b.dataset.contrato) {
-      App.mostrarModulo('contratos');
+      App.mostrarAba('contratos');
       await window.EscalaContratosUI.abrirPorId(b.dataset.contrato, true, 'rel-contratos');
     } else {
       App.mostrarModulo('distratos');

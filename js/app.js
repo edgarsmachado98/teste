@@ -211,31 +211,30 @@
     const cumprimento = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     $('#saudacao').textContent = `${cumprimento}, ${usuario.nome.split(' ')[0]}`;
 
-    const ativos = estado.colaboradores.filter((c) => !c.desligamento || c.desligamento >= M.formatarData(new Date()));
-    const mulheres = ativos.filter((c) => c.sexo === 'F').length;
-    const total = ativos.length;
-    let escalaValor = 'Nenhuma';
-    let escalaDetalhe = podeEditar() ? 'Gere a primeira em Gestão de Jornada' : 'Ainda não há escala gerada';
-    let escalaClasse = '';
-    const geradas = Object.entries(estado.escalas || {});
-    if (geradas.length) {
-      // a escala mais recente; violações somadas de todas
-      const [, e] = geradas.reduce((a, b) => (a[1].atualizadaEm >= b[1].atualizadaEm ? a : b));
-      escalaValor = `${dataBR(e.inicio).slice(0, 5)} a ${dataBR(e.fim)}`;
-      const erros = geradas.reduce((t, [escopo, x]) => t + M.validarEscala(configMotor(escopo), x).filter((o) => o.nivel === 'erro').length, 0);
-      escalaDetalhe = (geradas.length > 1 ? `${geradas.length} escalas por centro de custo; ` : '') +
-        (erros ? `${erros} violação(ões) da legislação` : 'sem violações da legislação');
-      escalaClasse = erros ? 'ruim' : 'bom';
-    }
     const tile = (rotulo, valor, detalhe, classe = '') => `<div class="tile">
         <span class="tile-rotulo">${rotulo}</span>
         <span class="tile-valor">${esc(valor)}</span>
         <span class="tile-detalhe ${classe}">${esc(detalhe)}</span></div>`;
-    $('#resumo-inicio').innerHTML =
-      tile('Colaboradores', String(total), total ? `${mulheres} mulheres, ${total - mulheres} homens` : 'Nenhum cadastrado') +
-      tile('Setores', String(estado.setores.length), estado.setores.map((x) => x.nome).slice(0, 3).join(', ') +
-        (estado.setores.length > 3 ? '…' : '') || 'Nenhum cadastrado') +
-      tile('Escala atual', escalaValor, escalaDetalhe, escalaClasse);
+    // representantes: ativos, por região (estado) de atuação e distratos
+    Promise.all([api.get('/api/contratos'), api.get('/api/distratos')]).then(([contratos, distratos]) => {
+      const C = window.EscalaContrato;
+      const ativos = contratos.filter((c) => c.situacao !== 'encerrado');
+      const porEstado = {};
+      for (const c of ativos) {
+        const uf = C.listaEstados(c.estados)[0] || 'sem estado';
+        porEstado[uf] = (porEstado[uf] || 0) + 1;
+      }
+      const ordem = [...C.ESTADOS_ATUACAO.map((e) => e.uf), 'sem estado'].filter((uf) => porEstado[uf]);
+      const nomeUF = Object.fromEntries(C.ESTADOS_ATUACAO.map((e) => [e.uf, e.nome]));
+      const regioes = ordem.map((uf) => `<span class="tile-regiao"><b>${porEstado[uf]}</b> ${esc(nomeUF[uf] || 'Sem estado definido')}</span>`).join('');
+      const encerrados = contratos.length - ativos.length;
+      $('#resumo-inicio').innerHTML =
+        tile('Representantes ativos', String(ativos.length), encerrados ? `${encerrados} contrato(s) encerrado(s)` : 'Nenhum contrato encerrado') +
+        `<div class="tile"><span class="tile-rotulo">Por região de atuação</span>
+          <span class="tile-regioes">${regioes || '<span class="tile-detalhe">Nenhum representante ativo</span>'}</span></div>` +
+        tile('Distratos', String(distratos.length), distratos.length
+          ? `${new Set(distratos.map((d) => d.contratoId)).size} representante(s)` : 'Nenhum distrato registrado');
+    }).catch(() => { /* sem acesso ou fora do ar: o painel fica sem os números */ });
   }
 
   // --------------------------------------------------------------- setores

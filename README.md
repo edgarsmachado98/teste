@@ -9,9 +9,11 @@ cada uma com seu login e perfil, e todas as alterações ficam registradas no hi
 
 ## Módulos
 
-A barra de ícones agrupa os módulos em **Pessoas** (Cadastros Gerais, Gestão de Jornada), **Comercial**
-(Representação Comercial, Distratos), **Gestão** (Relatórios Gerenciais, Gestão de Custos) e
-**Sistema** (Configurações, Acessos e Permissões). Os nomes são só de tela: os dados e o banco não mudam.
+A barra de ícones mostra o **Painel** (representantes ativos, representantes por região/estado de atuação e
+distratos) e os grupos **Comercial** (Representantes Comerciais, com Contratos e Empresas do Grupo; Distratos),
+**Gestão** (Relatórios Gerenciais: Distratos Realizados e Carteira de Representantes) e **Sistema**
+(Configurações, Acessos e Permissões). Os módulos de cadastros de pessoal, jornada/escalas e custos estão fora do
+menu nesta versão: o código e os dados continuam no sistema e podem ser reativados.
 
 | Módulo | Situação | O que faz |
 |--------|----------|-----------|
