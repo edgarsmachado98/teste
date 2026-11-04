@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carteira de Aportes</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+</head>
+<body>
+<header>
+  <h1>Carteira de Aportes</h1>
+  <nav>
+    <button data-tab="carteira" class="ativo">Carteira</button>
+    <button data-tab="aportes">Aportes</button>
+    <button data-tab="ativos">Ativos e metas</button>
+    <button data-tab="sugestao">Próximo aporte</button>
+    <button data-tab="mercado">Análise de mercado</button>
+    <button data-tab="comparar">Comparar</button>
+  </nav>
+</header>
+{% if demo %}<div class="aviso">Modo demonstração: as cotações exibidas são <strong>simuladas</strong>.</div>{% endif %}
+<main>
+  <section id="tab-carteira" class="tab visivel">
+    <div class="cards" id="cards-resumo"></div>
+    <div class="grade2">
+      <div class="painel"><h3>Alocação por ativo</h3><canvas id="graf-alocacao"></canvas></div>
+      <div class="painel"><h3>Alocação por classe</h3><canvas id="graf-classe"></canvas></div>
+    </div>
+    <div class="painel"><h3>Evolução dos aportes</h3><canvas id="graf-evolucao" height="90"></canvas></div>
+    <div class="painel">
+      <h3>Posições</h3>
+      <div class="rolagem"><table id="tabela-posicoes"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-aportes" class="tab">
+    <div class="painel">
+      <h3>Registrar operação</h3>
+      <form id="form-aporte" class="form-linha">
+        <label>Data <input type="date" name="data" required></label>
+        <label>Ticker <input name="ticker" list="lista-tickers" required placeholder="PETR4"></label>
+        <label>Tipo <select name="tipo"><option value="compra">Compra</option><option value="venda">Venda</option></select></label>
+        <label>Quantidade <input type="number" name="quantidade" step="any" min="0" required></label>
+        <label>Preço unitário <input type="number" name="preco" step="any" min="0" required></label>
+        <label>Taxas <input type="number" name="taxas" step="any" min="0" value="0"></label>
+        <label>Obs. <input name="obs"></label>
+        <button type="submit">Salvar</button>
+      </form>
+      <datalist id="lista-tickers"></datalist>
+    </div>
+    <div class="painel">
+      <h3>Histórico</h3>
+      <div class="rolagem"><table id="tabela-aportes"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-ativos" class="tab">
+    <div class="painel">
+      <h3>Cadastrar / editar ativo</h3>
+      <form id="form-ativo" class="form-linha">
+        <label>Ticker <input name="ticker" required placeholder="KNRI11"></label>
+        <label>Nome <input name="nome"></label>
+        <label>Classe <select name="classe">
+          {% for k, v in classes.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+        </select></label>
+        <label>Meta (%) <input type="number" name="meta_pct" step="any" min="0" value="0"></label>
+        <label>Preço manual <input type="number" name="preco_manual" step="any" min="0" placeholder="opcional"></label>
+        <button type="submit">Salvar</button>
+      </form>
+      <p class="dica">O preço manual substitui a cotação online (útil para renda fixa ou sem acesso à internet). Metas são normalizadas para somar 100%.</p>
+    </div>
+    <div class="painel">
+      <h3>Ativos cadastrados <span id="soma-metas" class="selo"></span></h3>
+      <div class="rolagem"><table id="tabela-ativos"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-sugestao" class="tab">
+    <div class="painel">
+      <h3>Quanto você vai aportar?</h3>
+      <form id="form-sugestao" class="form-linha">
+        <label>Valor (R$) <input type="number" name="valor" step="any" min="0" required></label>
+        <button type="submit">Calcular distribuição</button>
+      </form>
+      <p class="dica">A sugestão direciona o dinheiro para os ativos mais abaixo da meta, considerando o patrimônio após o aporte, e respeita lotes inteiros para ações, FIIs, ETFs e BDRs.</p>
+      <div id="resultado-sugestao"></div>
+    </div>
+  </section>
+
+  <section id="tab-mercado" class="tab">
+    <div class="painel">
+      <form id="form-mercado" class="form-linha">
+        <label>Ticker <input name="ticker" list="lista-tickers" required placeholder="ITUB4"></label>
+        <label>Período <select name="dias">
+          <option value="63">3 meses</option><option value="126">6 meses</option>
+          <option value="252" selected>1 ano</option><option value="0">Tudo</option>
+        </select></label>
+        <label>Taxa livre de risco (% a.a.) <input type="number" name="rf" step="any" value="10"></label>
+        <label class="check"><input type="checkbox" name="atualizar"> Forçar atualização</label>
+        <button type="submit">Analisar</button>
+      </form>
+    </div>
+    <div id="resultado-mercado" class="oculto">
+      <div class="cards" id="cards-mercado"></div>
+      <div class="painel"><h3 id="titulo-preco">Preço</h3><canvas id="graf-preco" height="110"></canvas></div>
+      <div class="grade2">
+        <div class="painel"><h3>RSI (14)</h3><canvas id="graf-rsi"></canvas></div>
+        <div class="painel"><h3>MACD (12, 26, 9)</h3><canvas id="graf-macd"></canvas></div>
+      </div>
+      <div class="painel"><h3>Leitura dos indicadores</h3><ul id="lista-sinais" class="sinais"></ul>
+        <p class="dica">Leitura automática de indicadores técnicos, apenas para fins educacionais. Não é recomendação de investimento.</p></div>
+    </div>
+  </section>
+
+  <section id="tab-comparar" class="tab">
+    <div class="painel">
+      <form id="form-comparar" class="form-linha">
+        <label class="largo">Tickers (separados por vírgula) <input name="tickers" required placeholder="PETR4, VALE3, BOVA11"></label>
+        <label>Período <select name="dias"><option value="126">6 meses</option><option value="252" selected>1 ano</option><option value="504">2 anos</option></select></label>
+        <button type="submit">Comparar</button>
+        <button type="button" id="btn-comparar-carteira" class="secundario">Usar ativos da carteira</button>
+      </form>
+    </div>
+    <div id="resultado-comparar" class="oculto">
+      <div class="painel"><h3>Desempenho (base 100)</h3><canvas id="graf-comparar" height="100"></canvas></div>
+      <div class="grade2">
+        <div class="painel"><h3>Estatísticas</h3><div class="rolagem"><table id="tabela-comparar"></table></div></div>
+        <div class="painel"><h3>Correlação dos retornos diários</h3><div class="rolagem"><table id="tabela-correlacao" class="correlacao"></table></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+<script>window.CLASSES = {{ classes|tojson }};</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
