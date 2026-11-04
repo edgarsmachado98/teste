@@ -248,6 +248,17 @@ $("#form-mercado").addEventListener("submit", async ev => {
   $("#lista-sinais").innerHTML = r.sinais.map(s => `<li class="${s.tipo}">${esc(s.texto)}</li>`).join("") || "<li>Histórico insuficiente para gerar leituras.</li>";
 });
 
+async function carregarFontes() {
+  try {
+    const r = await api("/api/fontes");
+    $("#tabela-fontes").innerHTML = `<tr><th>#</th><th>Fonte</th><th>Status</th><th>Descrição</th></tr>` +
+      (r.demo ? `<tr><td colspan="4">Modo demonstração ativo: todas as cotações são simuladas.</td></tr>` : "") +
+      r.fontes.map((f, i) => `<tr><td>${i + 1}</td><td><a href="${esc(f.site || "#")}" target="_blank" rel="noopener">${esc(f.nome)}</a></td>
+        <td class="${f.configurada ? "pos" : "neg"}">${f.configurada ? "ativa" : "sem token"}</td><td>${esc(f.descricao || "")}</td></tr>`).join("");
+  } catch (e) { toast(e.message, true); }
+}
+carregarFontes();
+
 // ---------------- Comparar ----------------
 $("#btn-comparar-carteira").addEventListener("click", async () => {
   const ativos = await api("/api/ativos").catch(() => []);

@@ -55,3 +55,6 @@ button.link.editar { color: var(--primaria); margin-right: 10px; }
 #toast { position: fixed; bottom: 20px; right: 20px; background: var(--texto); color: var(--painel); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 420px; }
 #toast.mostrar { opacity: 1; } #toast.erro { background: var(--neg); color: #fff; }
 @media (max-width: 600px) { header, main { padding-left: 16px; padding-right: 16px; } .form-linha input:not([type=checkbox]), .form-linha select { width: 100%; } .form-linha label { flex: 1 1 140px; } }
+.fontes { margin-top: 14px; } .fontes summary { cursor: pointer; color: var(--suave); font-size: .9rem; }
+.fontes table { margin-top: 8px; } .fontes td:last-child, .fontes th:last-child { text-align: left; }
+code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .85em; }

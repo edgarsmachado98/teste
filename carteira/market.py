@@ -1,50 +1,17 @@
-"""Obtenção de cotações (Yahoo Finance) com cache em SQLite e modo demonstração."""
+"""Obtenção de cotações com várias fontes, cache em SQLite e modo demonstração."""
 import datetime as dt
 import hashlib
 import math
 import os
 import random
-import re
-
-import requests
-
-YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-HEADERS = {"User-Agent": "Mozilla/5.0 (carteira-aportes)"}
-B3_PATTERN = re.compile(r"^[A-Z]{4}\d{1,2}F?$")
+from carteira.providers import FonteIndisponivel, Yahoo, fontes_configuradas
 
 
 class MarketDataError(Exception):
     pass
 
 
-def simbolo_yahoo(ticker):
-    """PETR4 -> PETR4.SA ; BTC -> BTC-USD ; demais permanecem iguais."""
-    t = ticker.upper().strip()
-    if "." in t or "-" in t or t.startswith("^"):
-        return t
-    if B3_PATTERN.match(t):
-        return t + ".SA"
-    if t in {"BTC", "ETH", "SOL", "ADA", "XRP"}:
-        return t + "-USD"
-    return t
-
-
-def buscar_yahoo(ticker, periodo="2y"):
-    resp = requests.get(YAHOO_URL.format(symbol=simbolo_yahoo(ticker)),
-                        params={"range": periodo, "interval": "1d"},
-                        headers=HEADERS, timeout=10)
-    resp.raise_for_status()
-    dados = resp.json()["chart"]
-    if dados.get("error") or not dados.get("result"):
-        raise MarketDataError(f"Ticker não encontrado: {ticker}")
-    r = dados["result"][0]
-    ts = r.get("timestamp") or []
-    closes = r["indicators"]["quote"][0].get("close") or []
-    serie = [(dt.datetime.fromtimestamp(t, dt.timezone.utc).date().isoformat(), float(c))
-             for t, c in zip(ts, closes) if c is not None]
-    if not serie:
-        raise MarketDataError(f"Sem cotações para {ticker}")
-    return serie
+simbolo_yahoo = Yahoo.simbolo
 
 
 def serie_simulada(ticker, dias=504, fim=None):
@@ -73,10 +40,25 @@ def modo_demo():
     return os.environ.get("CARTEIRA_DEMO", "").lower() in {"1", "true", "sim"}
 
 
+class _FonteFuncao:
+    """Adapta uma função ticker -> série para a interface de fonte (usado nos testes)."""
+    nome = "personalizada"
+
+    def __init__(self, func, nome=None):
+        self.func, self.nome = func, nome or self.nome
+
+    def historico(self, ticker):
+        return self.func(ticker)
+
+
 class Mercado:
-    def __init__(self, conn, fonte=None):
+    def __init__(self, conn, fontes=None):
         self.conn = conn
-        self.fonte = fonte or buscar_yahoo
+        if fontes is None:
+            fontes = fontes_configuradas()
+        elif callable(fontes):
+            fontes = [_FonteFuncao(fontes, "yahoo")]
+        self.fontes = list(fontes)
 
     def _cache_valido(self, ticker):
         row = self.conn.execute(
@@ -102,7 +84,11 @@ class Mercado:
         return [(r["data"], r["fechamento"]) for r in rows], (meta["fonte"] if meta else None)
 
     def historico(self, ticker, forcar=False):
-        """Retorna (serie, fonte). Fonte: 'yahoo', 'cache' (desatualizado) ou 'simulado'."""
+        """Retorna (serie, fonte).
+
+        Fonte: nome do provedor que respondeu (brapi, dadosdemercado, yahoo, hgbrasil),
+        'cache' (último histórico salvo, desatualizado) ou 'simulado' (modo demonstração).
+        """
         ticker = ticker.upper()
         if not forcar and self._cache_valido(ticker):
             serie, fonte = self._do_cache(ticker)
@@ -112,17 +98,36 @@ class Mercado:
             serie = serie_simulada(ticker)
             self._salvar(ticker, serie, "simulado")
             return serie, "simulado"
-        try:
-            serie = self.fonte(ticker)
-            self._salvar(ticker, serie, "yahoo")
-            return serie, "yahoo"
-        except Exception as exc:  # rede indisponível, ticker inválido etc.
-            serie, fonte = self._do_cache(ticker)
-            if serie:
-                return serie, "cache"
-            raise MarketDataError(
-                f"Não foi possível obter cotações de {ticker}: {exc}. "
-                "Informe um preço manual ou ative o modo demonstração (CARTEIRA_DEMO=1).") from exc
+        erros = []
+        for fonte in self.fontes:
+            try:
+                serie = fonte.historico(ticker)
+            except FonteIndisponivel as exc:
+                erros.append(f"{fonte.nome}: {exc}")
+                continue
+            except Exception as exc:  # rede indisponível, HTTP 5xx, JSON inesperado...
+                erros.append(f"{fonte.nome}: {exc.__class__.__name__}: {exc}")
+                continue
+            if not serie:
+                erros.append(f"{fonte.nome}: sem dados")
+                continue
+            if len(serie) == 1:
+                # Fonte só de cotação atual: acrescenta ao histórico que já temos.
+                antigo, _ = self._do_cache(ticker)
+                serie = sorted(dict(antigo + serie).items())
+            self._salvar(ticker, serie, fonte.nome)
+            return serie, fonte.nome
+        serie, _ = self._do_cache(ticker)
+        if serie:
+            return serie, "cache"
+        detalhes = "; ".join(erros) or "nenhuma fonte configurada"
+        raise MarketDataError(
+            f"Não foi possível obter cotações de {ticker} ({detalhes}). "
+            "Informe um preço manual ou ative o modo demonstração (CARTEIRA_DEMO=1).")
+
+    def status_fontes(self):
+        return [f.status() if hasattr(f, "status") else {"nome": f.nome, "configurada": True}
+                for f in self.fontes]
 
     def preco_atual(self, ticker, preco_manual=None):
         if preco_manual:

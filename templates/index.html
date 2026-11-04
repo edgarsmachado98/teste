@@ -100,6 +100,11 @@
         <label class="check"><input type="checkbox" name="atualizar"> Forçar atualização</label>
         <button type="submit">Analisar</button>
       </form>
+      <details class="fontes"><summary>Fontes de cotação</summary>
+        <table id="tabela-fontes"></table>
+        <p class="dica">As fontes são consultadas nesta ordem até uma responder; o resultado fica em cache por um dia.
+        Configure tokens no arquivo <code>.env</code> (veja <code>.env.example</code>) e reinicie o servidor.</p>
+      </details>
     </div>
     <div id="resultado-mercado" class="oculto">
       <div class="cards" id="cards-mercado"></div>

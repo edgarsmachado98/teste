@@ -4,8 +4,25 @@ import os
 
 from flask import Flask, jsonify, render_template, request
 
-from carteira import analysis, db, portfolio
-from carteira.market import Mercado, MarketDataError, modo_demo
+
+
+def carregar_env(caminho=".env"):
+    """Lê variáveis de um arquivo .env (CHAVE=valor) sem sobrescrever as já definidas."""
+    if not os.path.exists(caminho):
+        return
+    with open(caminho, encoding="utf-8") as f:
+        for linha in f:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            chave, valor = linha.split("=", 1)
+            os.environ.setdefault(chave.strip(), valor.strip().strip('"').strip("'"))
+
+
+carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
+from carteira import analysis, db, portfolio  # noqa: E402  (após carregar o .env)
+from carteira.market import Mercado, MarketDataError, modo_demo  # noqa: E402
 
 
 def create_app(db_path=None, fonte_mercado=None):
@@ -156,7 +173,10 @@ def create_app(db_path=None, fonte_mercado=None):
         dias = int(request.args.get("dias", 0) or 0)
         datas = [d for d, _ in serie]
         fech = [c for _, c in serie]
-        res = analysis.analisar(datas, fech, rf)
+        try:
+            res = analysis.analisar(datas, fech, rf)
+        except ValueError as e:
+            return erro(f"{e} A fonte '{fonte}' retornou apenas {len(fech)} cotação(ões).", 422)
         if dias and dias < len(datas):
             for k in ("datas", "fechamento", "mm20", "mm50", "mm200", "bollinger_sup",
                       "bollinger_inf", "rsi", "macd", "macd_sinal", "macd_hist"):
@@ -164,6 +184,10 @@ def create_app(db_path=None, fonte_mercado=None):
         res["ticker"] = ticker.upper()
         res["fonte"] = fonte
         return jsonify(res)
+
+    @app.get("/api/fontes")
+    def api_fontes():
+        return jsonify({"demo": modo_demo(), "fontes": mercado.status_fontes()})
 
     @app.get("/api/comparar")
     def api_comparar():
