@@ -27,6 +27,21 @@ cd detector
 python -m vigia_detector.dataset criar-meta --modelo ..\modelos\yolox_s.onnx --formato yolox --classes coco --licenca Apache-2.0 --origem "YOLOX oficial (COCO)"
 ```
 
+### Testar antes de usar
+
+O comando `testar_modelo` roda o motor do VigIA numa foto, numa pasta de fotos ou na câmera e grava as
+imagens marcadas (pasta `teste-modelo`), com a contagem por classe e o tempo por imagem:
+
+```
+cd detector
+python -m vigia_detector.testar_modelo --modelos ..\modelos\yolox_s.onnx --fonte "rtsp://admin:SENHA@IP:554/cam/realmonitor?channel=1&subtype=0" --quadros 10
+```
+
+- `--blocos 2x2`: analisa em blocos – para obra e pátio, onde as pessoas aparecem pequenas (equivale a
+  `TILES=2x2` no `.env`; ~4 vezes mais lento).
+- `--comparar yolov8n.pt`: roda também o modelo da Ultralytics nas mesmas imagens, para comparar.
+- Use o stream **principal** (`subtype=0`) no teste: mais pixels por pessoa.
+
 ### 2. EPI – treinar com as suas imagens
 
 1. Colete e corrija as imagens (veja o README: `DATASET_DIR`, `importar`, Label Studio).

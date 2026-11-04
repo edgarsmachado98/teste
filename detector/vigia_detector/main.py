@@ -29,6 +29,15 @@ def load_env_file() -> None:
         return
 
 
+def parse_tiles(value: str) -> tuple[int, int]:
+    """TILES=2x2 (linhas x colunas): analisa a imagem em blocos – para cenas abertas com pessoas pequenas."""
+    try:
+        rows, cols = (int(v) for v in value.lower().split("x"))
+        return max(1, min(rows, 4)), max(1, min(cols, 4))
+    except ValueError:
+        return 1, 1
+
+
 def main() -> None:
     load_env_file()
     backend = os.getenv("BACKEND_URL", "http://localhost:8000")
@@ -46,7 +55,7 @@ def main() -> None:
         log.info("coleta de imagens para treinamento ativa em %s", os.getenv("DATASET_DIR"))
 
     engine = Engine(model_paths, device=os.getenv("DEVICE") or None, imgsz=int(os.getenv("IMG_SIZE", "640")),
-                    ppe_crops=os.getenv("PPE_CROPS", "1") != "0")
+                    ppe_crops=os.getenv("PPE_CROPS", "1") != "0", tiles=parse_tiles(os.getenv("TILES", "1x1")))
     engine_lock = threading.Lock()
     client = BackendClient(backend, api_key, verify)
     workers: dict[int, CameraWorker] = {}

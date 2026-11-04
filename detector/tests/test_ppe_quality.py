@@ -2,6 +2,7 @@
 capacete fora da cabeça; e a segunda olhada recortando cada pessoa."""
 
 import numpy as np
+import pytest
 
 from vigia_detector.engine import Engine
 from vigia_detector.rules import Detection, evaluate_frame, observe, unverifiable
@@ -71,3 +72,37 @@ def test_second_look_maps_crop_back_to_frame():
     x1, y1, x2, y2 = helmet.box
     assert WORKER.box[0] - 0.02 <= x1 < x2 <= WORKER.box[2] + 0.02 and y1 < WORKER.box[1] + 0.1  # na cabeça
     assert evaluate_frame(rule(PPE_MODEL), [WORKER, helmet]) is None
+
+
+class TileModel:
+    """Só "enxerga" a pessoa quando ela ocupa bastante da imagem recebida (como um modelo real com gente pequena)."""
+    names = ["person"]
+    path, license = "falso.onnx", "teste"
+
+    def predict(self, img, imgsz, conf):
+        h, w = img.shape[:2]
+        # pessoa fixa no quadro 1000x1000: x 600-640, y 600-700 → só aparece em pedaços menores que 700 px
+        if w > 700:
+            return []
+        return self._find(img)
+
+    def _find(self, img):
+        ys, xs = np.where(img[:, :, 0] > 0)
+        if not len(xs):
+            return []
+        h, w = img.shape[:2]
+        return [("person", 0.8, (xs.min() / w, ys.min() / h, (xs.max() + 1) / w, (ys.max() + 1) / h))]
+
+
+def test_tiles_find_small_people_once():
+    frame = np.zeros((1000, 1000, 3), np.uint8)
+    frame[600:700, 600:640] = 255
+    eng = object.__new__(Engine)
+    eng.aliases, eng.conf, eng.imgsz, eng.ppe_models = {"person": "person"}, 0.25, 640, []
+    eng.models, eng.tile_overlap = [TileModel()], 0.2
+    eng.tiles = (1, 1)
+    assert eng.detect(frame) == []                    # imagem inteira: pessoa pequena demais
+    eng.tiles = (2, 2)
+    found = eng.detect(frame)
+    assert len(found) == 1                            # vista em 2 blocos sobrepostos → uma pessoa só
+    assert found[0].box == pytest.approx((0.6, 0.6, 0.64, 0.7), abs=0.01)
