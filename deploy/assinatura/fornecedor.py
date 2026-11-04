@@ -28,6 +28,7 @@ PUB_FILE = ROOT / "edge" / "vigia_edge" / "fornecedor.pub"
 SOURCES = {"vigia_edge": ROOT / "edge" / "vigia_edge", "vigia_detector": ROOT / "detector" / "vigia_detector"}
 REQUIREMENTS = {"requirements-edge.txt": ROOT / "edge" / "requirements.txt",
                 "requirements-detector.txt": ROOT / "detector" / "requirements.txt"}
+# requirements-ultralytics.txt não entra no pacote: a planta só instala a Ultralytics se usar modelos .pt
 
 
 def generate_keys(key_file: Path = KEY_FILE, pub_file: Path = PUB_FILE) -> None:

@@ -17,11 +17,22 @@ sys.path.insert(0, str(HERE))
 
 
 def ensure_packages() -> None:
-    missing = [m for m in ("fastapi", "uvicorn", "httpx", "websockets", "PIL", "multipart", "ultralytics", "cv2")
-               if importlib.util.find_spec(m) is None]
+    value = os.getenv("MODEL_PATHS", "")
+    env_file = ROOT / ".env"
+    if not value and env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("MODEL_PATHS="):
+                value = line.split("=", 1)[1].strip().strip('"').strip("'")
+    models = [p.strip() for p in (value or "yolov8n.pt").split(",") if p.strip()]
+    needs_pt = any(not p.lower().endswith(".onnx") for p in models)  # Ultralytics (AGPL) só para modelos .pt
+    wanted = ["fastapi", "uvicorn", "httpx", "websockets", "PIL", "multipart", "cv2", "onnxruntime"]
+    missing = [m for m in wanted + (["ultralytics"] if needs_pt else []) if importlib.util.find_spec(m) is None]
     if missing:
         print("Instalando dependências (só na primeira vez)...")
-        for req in (HERE / "requirements.txt", ROOT / "detector" / "requirements.txt"):
+        reqs = [HERE / "requirements.txt", ROOT / "detector" / "requirements.txt"]
+        if needs_pt:
+            reqs.append(ROOT / "detector" / "requirements-ultralytics.txt")
+        for req in reqs:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", str(req)])
 
 

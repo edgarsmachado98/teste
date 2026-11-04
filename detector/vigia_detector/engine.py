@@ -1,6 +1,7 @@
-"""Executa um ou mais modelos YOLO e devolve detecções normalizadas.
+"""Executa um ou mais modelos de detecção e devolve detecções normalizadas.
 
-Combinar modelos é comum: um modelo COCO (pessoas), um de EPI e um de fogo/fumaça."""
+Combinar modelos é comum: um modelo COCO (pessoas), um de EPI e um de fogo/fumaça. Os modelos podem ser
+ONNX (motor livre, MIT) ou Ultralytics .pt (AGPL-3.0) – ver backends.py."""
 
 from __future__ import annotations
 
@@ -34,37 +35,35 @@ PPE_LABELS = set(PPE_ITEMS_ALL) | {f"no_{i}" for i in PPE_ITEMS_ALL}
 
 
 class Engine:
-    def __init__(self, model_paths: list[str], device: str | None = None, conf: float = 0.25, imgsz: int = 640,
-                 ppe_crops: bool = True, crop_imgsz: int = 320, max_crops: int = 8):
-        from ultralytics import YOLO  # importado aqui para os testes não exigirem a biblioteca
+    """Roda os modelos configurados (ONNX ou Ultralytics) e devolve detecções com rótulos canônicos."""
 
-        self.models = [YOLO(path) for path in model_paths]
+    def __init__(self, model_paths: list[str], device: str | None = None, conf: float = 0.25, imgsz: int = 640,
+                 ppe_crops: bool = True, crop_imgsz: int = 320, max_crops: int = 8, backends: list | None = None):
+        from .backends import load_backend
+
+        self.models = backends if backends is not None else [load_backend(p, device) for p in model_paths]
         self.aliases = load_aliases()
         self.device = device
         self.conf = conf
         self.imgsz = imgsz
         self.crop_imgsz, self.max_crops = crop_imgsz, max_crops
         # Rótulos (canônicos) que cada modelo sabe reconhecer: as regras não cobram EPI que nenhum modelo vê
-        self.model_labels = [{canonical(n, self.aliases) for n in m.names.values()} for m in self.models]
+        self.model_labels = [{canonical(n, self.aliases) for n in m.names} for m in self.models]
         self.labels: set[str] = set().union(*self.model_labels) if self.models else set()
         # Modelos de EPI (os que conhecem capacete, colete...) ganham uma segunda olhada em cada pessoa
         self.ppe_models = [m for m, labels in zip(self.models, self.model_labels) if labels & PPE_LABELS] \
             if ppe_crops else []
-        for path, model in zip(model_paths, self.models):
-            log.info("modelo %s carregado – classes: %s", path, list(model.names.values()))
+        for model in self.models:
+            log.info("modelo %s carregado (%s) – classes: %s", model.path, model.license or "licença não informada",
+                     model.names)
         if not self.labels & PPE_LABELS:
             log.warning("nenhum modelo de EPI carregado: regras de EPI ficam pausadas (veja modelos/ e MODEL_PATHS)")
 
     def detect(self, frame) -> list[Detection]:
         detections = []
         for model in self.models:
-            result = model.predict(frame, conf=self.conf, imgsz=self.imgsz, device=self.device, verbose=False)[0]
-            names = result.names
-            for box, conf, cls in zip(
-                result.boxes.xyxyn.tolist(), result.boxes.conf.tolist(), result.boxes.cls.tolist()
-            ):
-                label = canonical(names[int(cls)], self.aliases)
-                detections.append(Detection(label, float(conf), tuple(box)))
+            for name, conf, box in model.predict(frame, self.imgsz, self.conf):
+                detections.append(Detection(canonical(name, self.aliases), conf, box))
         if self.ppe_models:
             detections += self._ppe_on_people(frame, detections)
         return merge(detections)
@@ -87,13 +86,11 @@ class Engine:
             if crop.size == 0 or min(crop.shape[:2]) < 12:
                 continue
             for model in self.ppe_models:
-                result = model.predict(crop, conf=self.conf, imgsz=self.crop_imgsz, device=self.device, verbose=False)[0]
-                for box, conf, cls in zip(result.boxes.xyxyn.tolist(), result.boxes.conf.tolist(),
-                                          result.boxes.cls.tolist()):
-                    label = canonical(result.names[int(cls)], self.aliases)
+                for name, conf, (bx1, by1, bx2, by2) in model.predict(crop, self.crop_imgsz, self.conf):
+                    label = canonical(name, self.aliases)
                     if label == "person":
                         continue
-                    bx1, by1, bx2, by2 = box  # coordenadas do recorte → do quadro inteiro
+                    # coordenadas do recorte → do quadro inteiro
                     found.append(Detection(label, float(conf), (cx1 + bx1 * (cx2 - cx1), cy1 + by1 * (cy2 - cy1),
                                                                 cx1 + bx2 * (cx2 - cx1), cy1 + by2 * (cy2 - cy1))))
         return found

@@ -1,8 +1,6 @@
 """Falsos alarmes de EPI: sem modelo de capacete, pessoa longe demais, objeto que não é pessoa em pé,
 capacete fora da cabeça; e a segunda olhada recortando cada pessoa."""
 
-from types import SimpleNamespace
-
 import numpy as np
 
 from vigia_detector.engine import Engine
@@ -48,20 +46,15 @@ def test_far_or_odd_shapes_are_not_judged():
 
 class FakeModel:
     """Modelo de EPI que só encontra o capacete quando recebe o recorte ampliado da pessoa."""
-    names = {0: "Hardhat", 1: "NO-Hardhat"}
+    names = ["Hardhat", "NO-Hardhat"]
+    path, license = "falso.onnx", "teste"
 
     def __init__(self):
         self.calls = []
 
-    def predict(self, img, **kw):
+    def predict(self, img, imgsz, conf):
         self.calls.append(img.shape)
-        boxes = SimpleNamespace(xyxyn=_T([[0.3, 0.05, 0.7, 0.25]]), conf=_T([0.8]), cls=_T([0]))
-        return [SimpleNamespace(names=self.names, boxes=boxes)]
-
-
-class _T(list):
-    def tolist(self):
-        return list(self)
+        return [("Hardhat", 0.8, (0.3, 0.05, 0.7, 0.25))]
 
 
 def test_second_look_maps_crop_back_to_frame():

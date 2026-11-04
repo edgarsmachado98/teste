@@ -169,6 +169,85 @@ def prepare(source: Path, output: Path, val_fraction: float = 0.2, seed: int = 7
     return counts
 
 
+COCO80 = ["person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
+          "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+          "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+          "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
+          "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+          "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+          "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard",
+          "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
+          "scissors", "teddy bear", "hair drier", "toothbrush"]
+
+
+def export_coco(data_dir: Path, output: Path) -> dict:
+    """Converte o conjunto preparado (YOLO) para o formato COCO usado pelo YOLOX e pelo D-FINE:
+    saida/train2017, saida/val2017 e saida/annotations/instances_{train,val}2017.json.
+    Treinar nessas ferramentas (Apache-2.0) gera modelos sem a restrição AGPL da Ultralytics."""
+    import json
+
+    import cv2
+
+    names = CLASSES
+    yaml_file = data_dir / "data.yaml"
+    if yaml_file.exists():
+        found = re.findall(r"^\s+(\d+):\s*(.+)$", yaml_file.read_text(encoding="utf-8"), re.M)
+        if found:
+            names = [n.strip() for _, n in sorted(found, key=lambda x: int(x[0]))]
+    (output / "annotations").mkdir(parents=True, exist_ok=True)
+    counts = {}
+    for part in ("train", "val"):
+        images = sorted((data_dir / "images" / part).glob("*.jpg"))
+        target = output / f"{part}2017"
+        target.mkdir(parents=True, exist_ok=True)
+        coco = {"images": [], "annotations": [],
+                "categories": [{"id": i, "name": n} for i, n in enumerate(names)]}
+        ann_id = 1
+        for img_id, img in enumerate(images, start=1):
+            frame = cv2.imread(str(img))
+            if frame is None:
+                continue
+            h, w = frame.shape[:2]
+            shutil.copy2(img, target / img.name)
+            coco["images"].append({"id": img_id, "file_name": img.name, "width": w, "height": h})
+            label = data_dir / "labels" / part / f"{img.stem}.txt"
+            for line in (label.read_text(encoding="utf-8").splitlines() if label.exists() else []):
+                parts = line.split()
+                if len(parts) != 5:
+                    continue
+                c, cx, cy, bw, bh = int(parts[0]), *map(float, parts[1:])
+                box = [(cx - bw / 2) * w, (cy - bh / 2) * h, bw * w, bh * h]
+                coco["annotations"].append({"id": ann_id, "image_id": img_id, "category_id": c, "bbox": box,
+                                            "area": box[2] * box[3], "iscrowd": 0})
+                ann_id += 1
+        (output / "annotations" / f"instances_{part}2017.json").write_text(json.dumps(coco), encoding="utf-8")
+        counts[part] = len(coco["images"])
+    (output / "classes.json").write_text(json.dumps(names, ensure_ascii=False), encoding="utf-8")
+    print(f"COCO em {output}: {counts.get('train', 0)} imagens de treino, {counts.get('val', 0)} de validação, "
+          f"{len(names)} classes (num_classes={len(names)} no YOLOX/D-FINE).")
+    return counts
+
+
+def write_meta(model: Path, fmt: str, classes: str, input_size: int, license_: str, source: str,
+               decoded: bool = False) -> Path:
+    """Cria o .json que acompanha um modelo .onnx (formato, classes, tamanho de entrada e licença)."""
+    import json
+
+    if classes == "coco":
+        names = COCO80
+    elif Path(classes).exists():
+        text = Path(classes).read_text(encoding="utf-8")
+        names = json.loads(text) if text.lstrip().startswith("[") else [c.strip() for c in text.splitlines() if c.strip()]
+    else:
+        names = [c.strip() for c in classes.split(",") if c.strip()]
+    meta = {"format": fmt, "classes": names, "input_size": input_size, "decoded": decoded,
+            "license": license_, "source": source}
+    target = model.with_suffix(".json")
+    target.write_text(json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(f"{target} criado: formato {fmt}, {len(names)} classes, entrada {input_size}px, licença {license_ or '?'}.")
+    return target
+
+
 def train(data: Path, base: str, epochs: int, imgsz: int, device: str | None, models_dir: Path) -> Path:
     from ultralytics import YOLO
 
@@ -207,7 +286,18 @@ def main() -> None:
     i.add_argument("--destino", required=True, type=Path, help="pasta de coleta (a mesma do DATASET_DIR)")
     i.add_argument("--modelos", default="", help="modelos para pré-rotular, ex.: yolov8n.pt,../modelos/epi.pt")
     i.add_argument("--prefixo", default="ref", help="início do nome dos arquivos (separa estas imagens das câmeras)")
-    t = sub.add_parser("treinar", help="treina um modelo a partir do data.yaml")
+    c = sub.add_parser("exportar-coco", help="converte o conjunto preparado para COCO (treino no YOLOX/D-FINE, Apache-2.0)")
+    c.add_argument("--dados", required=True, type=Path, help="pasta gerada pelo 'preparar' (com data.yaml)")
+    c.add_argument("--saida", required=True, type=Path)
+    m = sub.add_parser("criar-meta", help="cria o .json que acompanha um modelo .onnx")
+    m.add_argument("--modelo", required=True, type=Path, help="arquivo .onnx")
+    m.add_argument("--formato", choices=["yolox", "detr"], required=True)
+    m.add_argument("--classes", required=True, help="'coco', arquivo (classes.json/classes.txt) ou lista separada por vírgula")
+    m.add_argument("--entrada", type=int, default=640, help="tamanho da entrada do modelo (640)")
+    m.add_argument("--licenca", default="", help="ex.: Apache-2.0")
+    m.add_argument("--origem", default="", help="de onde veio o modelo (para auditoria de licenças)")
+    m.add_argument("--decodificado", action="store_true", help="YOLOX exportado com a decodificação na rede")
+    t = sub.add_parser("treinar", help="treina com Ultralytics (AGPL-3.0: uso comercial exige Enterprise License)")
     t.add_argument("--dados", required=True, type=Path)
     t.add_argument("--base", default="yolov8s.pt", help="modelo inicial (padrão yolov8s.pt)")
     t.add_argument("--epocas", default=100, type=int)
@@ -223,6 +313,10 @@ def main() -> None:
 
     if args.cmd == "preparar":
         prepare(args.origem, args.saida, args.validacao)
+    elif args.cmd == "exportar-coco":
+        export_coco(args.dados, args.saida)
+    elif args.cmd == "criar-meta":
+        write_meta(args.modelo, args.formato, args.classes, args.entrada, args.licenca, args.origem, args.decodificado)
     elif args.cmd == "importar":
         import_images(args.origem, args.destino, [m.strip() for m in args.modelos.split(",") if m.strip()], args.prefixo)
     elif args.cmd == "treinar":

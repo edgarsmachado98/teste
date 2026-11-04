@@ -44,18 +44,38 @@ def in_venv() -> bool:
     return Path(sys.prefix).resolve() == VENV.resolve()
 
 
+def model_paths() -> list[str]:
+    """MODEL_PATHS do .env (ou o padrão do detector)."""
+    value = os.getenv("MODEL_PATHS", "")
+    env_file = ROOT / ".env"
+    if not value and env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("MODEL_PATHS="):
+                value = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return [p.strip() for p in (value or "yolov8n.pt").split(",") if p.strip()]
+
+
+def requirements() -> list[Path]:
+    """Ultralytics (AGPL-3.0) só entra se algum modelo configurado for .pt; modelos .onnx não precisam dela."""
+    reqs = list(REQUIREMENTS)
+    if any(not p.lower().endswith(".onnx") for p in model_paths()):
+        reqs.append(ROOT / "detector" / "requirements-ultralytics.txt")
+    return reqs
+
+
 def ensure_venv() -> Path:
     python = venv_python()
     if not python.exists():
         print("Criando o ambiente Python (.venv)...")
         venv.create(VENV, with_pip=True)
 
-    digest = hashlib.sha256(b"".join(p.read_bytes() for p in REQUIREMENTS)).hexdigest()
+    reqs = requirements()
+    digest = hashlib.sha256(b"".join(p.read_bytes() for p in reqs)).hexdigest()
     marker = VENV / ".requisitos-instalados"
     if not marker.exists() or marker.read_text() != digest:
         print("Instalando as dependências. Na primeira vez isso leva alguns minutos...")
         args = [str(python), "-m", "pip", "install", "--disable-pip-version-check"]
-        for req in REQUIREMENTS:
+        for req in reqs:
             args += ["-r", str(req)]
         subprocess.check_call(args)
         marker.write_text(digest)

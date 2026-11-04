@@ -263,6 +263,13 @@ modelo de capacete). O fluxo:
 
 As imagens coletadas mostram trabalhadores: restrinja o acesso à pasta e apague-a depois do treino.
 
+#### Motor de IA e licenças
+
+O detector roda modelos **`.onnx`** no ONNX Runtime (MIT) ou **`.pt`** na Ultralytics YOLO (AGPL-3.0). Para
+vender o VigIA sem a restrição AGPL, use só modelos ONNX treinados com YOLOX ou D-FINE (Apache-2.0); o passo
+a passo está em [`modelos/LEIAME.md`](modelos/LEIAME.md). O comando `treinar` usa a Ultralytics e, portanto,
+gera modelos AGPL.
+
 #### EPIs que o VigIA verifica
 
 Capacete, colete, óculos, luvas, máscara, **cinto paraquedista**, **botina**, **protetor auricular** e
