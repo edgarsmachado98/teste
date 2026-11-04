@@ -8,29 +8,57 @@
   <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 </head>
 <body>
-<header>
-  <h1>Carteira de Aportes</h1>
-  <div class="seletor-carteira">
-    <select id="sel-carteira" aria-label="Carteira"></select>
-    <span id="selo-permissao" class="selo"></span>
-  </div>
-  <nav>
-    <button data-tab="carteira" class="ativo">Carteira</button>
-    <button data-tab="aportes">Aportes</button>
-    <button data-tab="proventos">Proventos</button>
-    <button data-tab="ativos">Ativos e metas</button>
-    <button data-tab="sugestao">Próximo aporte</button>
-    <button data-tab="mercado">Análise de mercado</button>
-    <button data-tab="comparar">Comparar</button>
-    <button data-tab="acessos">Acessos e conta</button>
-  </nav>
-  <div class="usuario">
-    <span>{{ usuario.nome }}{% if usuario.admin %} <span class="selo">admin</span>{% endif %}</span>
-    <button type="button" id="btn-sair" class="secundario">Sair</button>
-  </div>
-</header>
-<div id="aviso-leitura" class="aviso leitura oculto">Você tem acesso <strong>somente de visualização</strong> a esta carteira.</div>
-{% if demo %}<div class="aviso">Modo demonstração: as cotações exibidas são <strong>simuladas</strong>.</div>{% endif %}
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="marca">
+      <span class="logo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6 4 4 6-8"/><path d="M14 7h6v6"/></svg></span>
+      <div><strong>Carteira</strong><small>de Aportes</small></div>
+    </div>
+    <div class="bloco-carteira">
+      <label for="sel-carteira">Carteira</label>
+      <select id="sel-carteira"></select>
+      <span id="selo-permissao" class="selo-permissao"></span>
+    </div>
+    <nav aria-label="Menu principal">
+      <p class="grupo-nav">Visão geral</p>
+      <button data-tab="carteira" data-titulo="Patrimônio" data-sub="Resumo, alocação e evolução da carteira" class="ativo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15.5 3.7A9 9 0 0 1 20.3 8.5H15.5z"/></svg><span>Patrimônio</span></button>
+      <p class="grupo-nav">Movimentações</p>
+      <button data-tab="aportes" data-titulo="Aportes" data-sub="Compras, vendas e importação de extratos da B3"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m0 0l-3-3m3 3l3-3"/><path d="M17 20V4m0 0l-3 3m3-3l3 3"/></svg><span>Aportes</span></button>
+      <button data-tab="proventos" data-titulo="Proventos" data-sub="Dividendos, JCP e rendimentos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.5-.9-1.6-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2s1.2 1.7 2.8 2 2.8.9 2.8 2.1-1.2 2.1-2.8 2.1c-1.3 0-2.4-.6-2.9-1.5M12 6v1.8m0 8.4V18"/></svg><span>Proventos</span></button>
+      <p class="grupo-nav">Planejamento</p>
+      <button data-tab="ativos" data-titulo="Ativos e metas" data-sub="Cadastro dos ativos e alocação desejada"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg><span>Ativos e metas</span></button>
+      <button data-tab="sugestao" data-titulo="Próximo aporte" data-sub="Quanto comprar de cada ativo para seguir a meta"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7.5h7M8.5 12h1m2.5 0h1m2.5 0h0M8.5 16h1m2.5 0h1m2.5 0h0"/></svg><span>Próximo aporte</span></button>
+      <p class="grupo-nav">Mercado</p>
+      <button data-tab="mercado" data-titulo="Análise de ativos" data-sub="Indicadores técnicos, fundamentos e sinais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Análise de ativos</span></button>
+      <button data-tab="comparar" data-titulo="Comparar ativos" data-sub="Desempenho e correlação entre ativos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-7"/></svg><span>Comparar ativos</span></button>
+      <p class="grupo-nav">Configurações</p>
+      <button data-tab="acessos" data-titulo="Acessos e conta" data-sub="Carteiras, permissões, usuários e senha"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Acessos e conta</span></button>
+    </nav>
+    <div class="usuario-card">
+      <span class="avatar" id="avatar"></span>
+      <div class="usuario-info">
+        <strong>{{ usuario.nome }}</strong>
+        <small>{{ "Administrador" if usuario.admin else usuario.email }}</small>
+      </div>
+      <button type="button" id="btn-sair" class="btn-icone" title="Sair" aria-label="Sair"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5M5 12h11"/></svg></button>
+    </div>
+  </aside>
+  <div class="sombra-menu" id="sombra-menu"></div>
+
+  <div class="conteudo">
+    <header class="topo">
+      <button type="button" class="btn-icone btn-menu" id="btn-menu" aria-label="Abrir menu"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <div class="topo-titulo">
+        <h1 id="titulo-pagina">Patrimônio</h1>
+        <p id="sub-pagina">Resumo, alocação e evolução da carteira</p>
+      </div>
+      <div class="topo-dir">
+        <span class="saudacao" id="saudacao"></span>
+        <span class="data-hoje" id="data-hoje"></span>
+      </div>
+    </header>
+    <div id="aviso-leitura" class="aviso leitura oculto">Você tem acesso <strong>somente de visualização</strong> a esta carteira.</div>
+    {% if demo %}<div class="aviso">Modo demonstração: as cotações exibidas são <strong>simuladas</strong>.</div>{% endif %}
 <main>
   <section id="tab-carteira" class="tab visivel">
     <div class="cards" id="cards-resumo"></div>
@@ -260,6 +288,8 @@
     </div>
   </section>
 </main>
+  </div>
+</div>
 <div id="toast"></div>
 <script>window.USUARIO = {{ usuario|tojson }}; window.CLASSES = {{ classes|tojson }}; window.TIPOS_PROVENTO = {{ tipos_provento|tojson }};</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

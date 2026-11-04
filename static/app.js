@@ -8,7 +8,7 @@ const classeSinal = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
 const fmtData = s => s.split("-").reverse().join("/");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const $ = sel => document.querySelector(sel);
-const PALETA = ["#2457c5", "#e07b39", "#3a9d5d", "#c8312f", "#8457c5", "#1aa3b8", "#c59b24", "#d0558f", "#5f6b7a", "#7fb03a"];
+const PALETA = ["#2f5bea", "#e07b39", "#3a9d5d", "#c8312f", "#8457c5", "#1aa3b8", "#c59b24", "#d0558f", "#5f6b7a", "#7fb03a"];
 const graficos = {};
 
 function toast(msg, erro = false) {
@@ -51,6 +51,11 @@ function formDados(form) {
 // ---------------- Navegação ----------------
 document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("ativo", x === b));
+  $("#titulo-pagina").textContent = b.dataset.titulo;
+  $("#sub-pagina").textContent = b.dataset.sub;
+  document.title = `${b.dataset.titulo} · Carteira de Aportes`;
+  document.body.classList.remove("menu-aberto");
+  window.scrollTo({ top: 0 });
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
   ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos }[b.dataset.tab] || (() => {}))();
 }));
@@ -662,6 +667,19 @@ $("#form-senha").addEventListener("submit", async ev => {
   try { await api("/api/eu/senha", { method: "POST", body: formDados(ev.target) }); toast("Senha alterada."); ev.target.reset(); }
   catch (e) { toast(e.message, true); }
 });
+
+// ---------------- Layout: menu lateral, saudação e avatar ----------------
+$("#btn-menu").addEventListener("click", () => document.body.classList.add("menu-aberto"));
+$("#sombra-menu").addEventListener("click", () => document.body.classList.remove("menu-aberto"));
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") document.body.classList.remove("menu-aberto"); });
+(() => {
+  const partes = USUARIO.nome.trim().split(/\s+/);
+  $("#avatar").textContent = (partes[0][0] + (partes.length > 1 ? partes[partes.length - 1][0] : "")).toUpperCase();
+  const h = new Date().getHours();
+  $("#saudacao").textContent = `${h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"}, ${partes[0]}`;
+  const data = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  $("#data-hoje").textContent = data.charAt(0).toUpperCase() + data.slice(1);
+})();
 
 // ---------------- Início ----------------
 $("#form-aporte").data.value = new Date().toISOString().slice(0, 10);
