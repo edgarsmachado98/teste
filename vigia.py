@@ -302,8 +302,23 @@ class Stack:
         stop(self.detector, self.backend)
 
 
+def port_busy(port: str) -> bool:
+    """Outro programa (em geral outro VigIA ou o serviço instalado) já usa a porta?"""
+    import socket
+
+    with socket.socket() as s:
+        s.settimeout(1)
+        return s.connect_ex(("127.0.0.1", int(port))) == 0
+
+
 def run_interactive() -> int:
     stack = Stack(ensure_env())
+    if port_busy(stack.port):
+        print(f"\nO VigIA já está aberto: a porta {stack.port} está em uso (outra janela do VigIA ou o serviço).")
+        print(f"  - Para usar o que já está rodando, abra {stack.local_url}/ no navegador.")
+        print("  - Para reiniciar com o código novo, feche a outra janela (Ctrl+C) ou rode")
+        print("    'python vigia.py --remover-servico' se instalou como serviço, e abra de novo.")
+        return 1
     print("Iniciando o servidor...")
     if not stack.start_backend():
         print(f"\nO servidor não iniciou. A porta {stack.port} pode estar em uso: feche outro VigIA aberto")
