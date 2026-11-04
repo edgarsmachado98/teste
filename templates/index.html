@@ -10,6 +10,10 @@
 <body>
 <header>
   <h1>Carteira de Aportes</h1>
+  <div class="seletor-carteira">
+    <select id="sel-carteira" aria-label="Carteira"></select>
+    <span id="selo-permissao" class="selo"></span>
+  </div>
   <nav>
     <button data-tab="carteira" class="ativo">Carteira</button>
     <button data-tab="aportes">Aportes</button>
@@ -18,8 +22,14 @@
     <button data-tab="sugestao">Próximo aporte</button>
     <button data-tab="mercado">Análise de mercado</button>
     <button data-tab="comparar">Comparar</button>
+    <button data-tab="acessos">Acessos e conta</button>
   </nav>
+  <div class="usuario">
+    <span>{{ usuario.nome }}{% if usuario.admin %} <span class="selo">admin</span>{% endif %}</span>
+    <button type="button" id="btn-sair" class="secundario">Sair</button>
+  </div>
 </header>
+<div id="aviso-leitura" class="aviso leitura oculto">Você tem acesso <strong>somente de visualização</strong> a esta carteira.</div>
 {% if demo %}<div class="aviso">Modo demonstração: as cotações exibidas são <strong>simuladas</strong>.</div>{% endif %}
 <main>
   <section id="tab-carteira" class="tab visivel">
@@ -36,7 +46,7 @@
   </section>
 
   <section id="tab-aportes" class="tab">
-    <div class="painel">
+    <div class="painel requer-edicao">
       <h3>Registrar operação</h3>
       <form id="form-aporte" class="form-linha">
         <label>Data <input type="date" name="data" required></label>
@@ -72,7 +82,7 @@
     </div>
     <div class="grade2">
       <div class="painel"><h3>Por ativo</h3><div class="rolagem"><table id="tabela-proventos-ativo"></table></div></div>
-      <div class="painel">
+      <div class="painel requer-edicao">
         <h3>Lançar manualmente</h3>
         <form id="form-provento" class="form-linha">
           <label>Ticker <input name="ticker" list="lista-tickers" required></label>
@@ -91,7 +101,7 @@
   </section>
 
   <section id="tab-ativos" class="tab">
-    <div class="painel">
+    <div class="painel requer-edicao">
       <h3>Cadastrar / editar ativo</h3>
       <form id="form-ativo" class="form-linha">
         <label>Ticker <input name="ticker" required placeholder="KNRI11"></label>
@@ -159,6 +169,60 @@
     </div>
   </section>
 
+  <section id="tab-acessos" class="tab">
+    <div class="painel" id="painel-carteiras">
+      <h3>Carteiras</h3>
+      <div class="rolagem"><table id="tabela-carteiras"></table></div>
+      <form id="form-carteira" class="form-linha" style="margin-top:14px">
+        <label>Nova carteira <input name="nome" required placeholder="ex.: Carteira Eliandra"></label>
+        <label class="so-admin">Dono <select name="dono_id" id="sel-dono"></select></label>
+        <button type="submit">Criar carteira</button>
+      </form>
+    </div>
+
+    <div class="painel oculto" id="painel-acessos">
+      <h3>Acessos à carteira <span id="nome-carteira-acessos"></span></h3>
+      <p class="dica" id="dono-carteira-acessos"></p>
+      <div class="rolagem"><table id="tabela-acessos"></table></div>
+      <form id="form-acesso" class="form-linha" style="margin-top:14px">
+        <label class="largo">E-mail do usuário <input type="email" name="email" list="lista-emails" required></label>
+        <label class="check"><input type="checkbox" name="ver" checked disabled> Visualizar</label>
+        <label class="check"><input type="checkbox" name="editar"> Controlar</label>
+        <label class="check"><input type="checkbox" name="gerenciar"> Gerenciar acessos</label>
+        <button type="submit">Conceder acesso</button>
+      </form>
+      <datalist id="lista-emails"></datalist>
+      <p class="dica"><strong>Visualizar</strong>: vê a carteira, proventos e análises (somente leitura).
+        <strong>Controlar</strong>: registra e exclui aportes, ativos e proventos.
+        <strong>Gerenciar acessos</strong>: concede e revoga acessos a outras pessoas.
+        O dono e os administradores sempre têm acesso total.</p>
+    </div>
+
+    <div class="painel so-admin" id="painel-usuarios">
+      <h3>Usuários</h3>
+      <div class="rolagem"><table id="tabela-usuarios"></table></div>
+      <h3 style="margin-top:18px">Novo usuário</h3>
+      <form id="form-usuario" class="form-linha">
+        <label>Nome <input name="nome" required placeholder="ex.: Eliandra"></label>
+        <label>E-mail <input type="email" name="email" required></label>
+        <label>Senha provisória <input type="text" name="senha" required minlength="8" autocomplete="off"></label>
+        <label class="check"><input type="checkbox" name="admin"> Administrador</label>
+        <label class="check"><input type="checkbox" name="criar_carteira" checked> Criar carteira própria</label>
+        <button type="submit">Cadastrar</button>
+      </form>
+      <p class="dica">Informe a senha provisória à pessoa; ela pode trocá-la em “Minha conta”. Administradores veem e controlam todas as carteiras.</p>
+    </div>
+
+    <div class="painel">
+      <h3>Minha conta</h3>
+      <form id="form-senha" class="form-linha">
+        <label>Senha atual <input type="password" name="atual" required autocomplete="current-password"></label>
+        <label>Nova senha <input type="password" name="nova" required minlength="8" autocomplete="new-password"></label>
+        <button type="submit">Alterar senha</button>
+      </form>
+    </div>
+  </section>
+
   <section id="tab-comparar" class="tab">
     <div class="painel">
       <form id="form-comparar" class="form-linha">
@@ -178,7 +242,7 @@
   </section>
 </main>
 <div id="toast"></div>
-<script>window.CLASSES = {{ classes|tojson }}; window.TIPOS_PROVENTO = {{ tipos_provento|tojson }};</script>
+<script>window.USUARIO = {{ usuario|tojson }}; window.CLASSES = {{ classes|tojson }}; window.TIPOS_PROVENTO = {{ tipos_provento|tojson }};</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ "Configuração inicial" if configurar else "Entrar" }} · Carteira de Aportes</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="pagina-login">
+  <main class="caixa-login">
+    <h1>Carteira de Aportes</h1>
+    {% if configurar %}
+      <p class="dica">Primeiro acesso: crie a conta de <strong>administrador</strong>. Os dados já existentes
+        no sistema passam a pertencer à carteira dele. Depois você cadastra os demais usuários e carteiras.</p>
+      <form id="form-login" data-url="{{ url_for('auth_setup') }}">
+        <label>Seu nome <input name="nome" required autocomplete="name" placeholder="ex.: Edgar Machado"></label>
+        <label>E-mail <input type="email" name="email" required autocomplete="email"></label>
+        <label>Senha (mín. 8 caracteres) <input type="password" name="senha" required minlength="8" autocomplete="new-password"></label>
+        <label>Confirme a senha <input type="password" name="confirmar" required minlength="8" autocomplete="new-password"></label>
+        <label>Nome da sua carteira <input name="nome_carteira" placeholder="ex.: Carteira Edgar Machado"></label>
+        <button type="submit">Criar administrador e entrar</button>
+      </form>
+    {% else %}
+      <form id="form-login" data-url="{{ url_for('auth_login') }}">
+        <label>E-mail <input type="email" name="email" required autocomplete="username" autofocus></label>
+        <label>Senha <input type="password" name="senha" required autocomplete="current-password"></label>
+        <button type="submit">Entrar</button>
+      </form>
+      <p class="dica">Esqueceu a senha? Peça ao administrador para redefini-la.</p>
+    {% endif %}
+    <p id="msg-erro" class="erro-login" role="alert"></p>
+  </main>
+<script>
+document.getElementById("form-login").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const f = ev.target, msg = document.getElementById("msg-erro");
+  const dados = Object.fromEntries(new FormData(f).entries());
+  if (dados.confirmar !== undefined && dados.confirmar !== dados.senha) {
+    msg.textContent = "As senhas não conferem."; return;
+  }
+  msg.textContent = "";
+  f.querySelector("button").disabled = true;
+  try {
+    const r = await fetch(f.dataset.url, { method: "POST", body: JSON.stringify(dados),
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.erro || `Erro ${r.status}`);
+    location.href = "/";
+  } catch (e) { msg.textContent = e.message; f.querySelector("button").disabled = false; }
+});
+</script>
+</body>
+</html>

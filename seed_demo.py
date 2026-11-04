@@ -1,6 +1,43 @@
-"""Popula o banco com uma carteira de exemplo (use junto com CARTEIRA_DEMO=1)."""
+"""Cria usuários e carteiras de exemplo (use junto com CARTEIRA_DEMO=1).
+
+Usuários criados:
+    edgar@exemplo.com     / demo12345  (administrador, dono da "Carteira Edgar Machado")
+    eliandra@exemplo.com  / demo12345  (dona da "Carteira Eliandra")
+"""
+import sys
+
 from app import create_app
 from carteira.market import modo_demo, serie_simulada
+
+SENHA = "demo12345"
+
+CARTEIRA_EDGAR = {
+    "ativos": [
+        ("ITUB4", "Itaú Unibanco", "acao", 15), ("VALE3", "Vale", "acao", 15),
+        ("WEGE3", "WEG", "acao", 10), ("KNRI11", "Kinea Renda Imobiliária", "fii", 15),
+        ("HGLG11", "CSHG Logística", "fii", 10), ("IVVB11", "iShares S&P 500", "etf", 20),
+        ("TESOURO-IPCA", "Tesouro IPCA+ 2035", "renda_fixa", 15),
+    ],
+    "aportes": [
+        ("2025-01-10", "ITUB4", 100, 31.50), ("2025-01-10", "KNRI11", 20, 138.0),
+        ("2025-02-12", "VALE3", 50, 58.20), ("2025-03-11", "IVVB11", 15, 320.0),
+        ("2025-04-09", "WEGE3", 30, 52.0), ("2025-05-13", "HGLG11", 10, 158.0),
+        ("2025-06-10", "TESOURO-IPCA", 2, 2150.0), ("2025-08-12", "ITUB4", 50, 35.1),
+    ],
+}
+
+CARTEIRA_ELIANDRA = {
+    "ativos": [
+        ("BBAS3", "Banco do Brasil", "acao", 20), ("TAEE11", "Taesa", "acao", 20),
+        ("MXRF11", "Maxi Renda", "fii", 25), ("BOVA11", "iShares Ibovespa", "etf", 15),
+        ("TESOURO-SELIC", "Tesouro Selic 2029", "renda_fixa", 20),
+    ],
+    "aportes": [
+        ("2025-02-05", "BBAS3", 40, 27.0), ("2025-02-05", "MXRF11", 150, 9.6),
+        ("2025-04-07", "TAEE11", 30, 34.0), ("2025-06-09", "BOVA11", 10, 128.0),
+        ("2025-07-08", "TESOURO-SELIC", 1, 15800.0), ("2025-09-10", "MXRF11", 100, 9.9),
+    ],
+}
 
 
 def preco_na_data(ticker, data, padrao):
@@ -11,30 +48,54 @@ def preco_na_data(ticker, data, padrao):
     datas = [d for d in sorted(serie) if d <= data]
     return serie[datas[-1]] if datas else padrao
 
-ATIVOS = [
-    ("ITUB4", "Itaú Unibanco", "acao", 15), ("VALE3", "Vale", "acao", 15),
-    ("WEGE3", "WEG", "acao", 10), ("KNRI11", "Kinea Renda Imobiliária", "fii", 15),
-    ("HGLG11", "CSHG Logística", "fii", 10), ("IVVB11", "iShares S&P 500", "etf", 20),
-    ("TESOURO-IPCA", "Tesouro IPCA+ 2035", "renda_fixa", 15),
-]
-APORTES = [
-    ("2025-01-10", "ITUB4", 100, 31.50), ("2025-01-10", "KNRI11", 20, 138.0),
-    ("2025-02-12", "VALE3", 50, 58.20), ("2025-03-11", "IVVB11", 15, 320.0),
-    ("2025-04-09", "WEGE3", 30, 52.0), ("2025-05-13", "HGLG11", 10, 158.0),
-    ("2025-06-10", "TESOURO-IPCA", 2, 2150.0), ("2025-08-12", "ITUB4", 50, 35.1),
-]
+
+def popular(c, dados):
+    for t, n, cl, m in dados["ativos"]:
+        preco_manual = None
+        if cl == "renda_fixa":
+            preco_manual = 2400 if "IPCA" in t else 16900
+        c.post("/api/ativos", json={"ticker": t, "nome": n, "classe": cl, "meta_pct": m,
+                                    "preco_manual": preco_manual})
+    for d, t, q, p in dados["aportes"]:
+        c.post("/api/aportes", json={"data": d, "ticker": t, "quantidade": q,
+                                     "preco": preco_na_data(t, d, p)})
+    est = c.get("/api/proventos/estimar").get_json()
+    recebidos = [i for i in est["itens"] if i["status"] == "recebido" and not i["ja_registrado"]]
+    if recebidos:
+        c.post("/api/proventos/importar", json={"itens": recebidos})
+    return len(recebidos)
+
+
+def cliente(app):
+    c = app.test_client()
+    c.environ_base["HTTP_X_REQUESTED_WITH"] = "fetch"
+    return c
+
 
 if __name__ == "__main__":
     app = create_app()
-    with app.test_client() as c:
-        for t, n, cl, m in ATIVOS:
-            c.post("/api/ativos", json={"ticker": t, "nome": n, "classe": cl, "meta_pct": m,
-                                        "preco_manual": 2400 if cl == "renda_fixa" else None})
-        for d, t, q, p in APORTES:
-            c.post("/api/aportes", json={"data": d, "ticker": t, "quantidade": q,
-                                         "preco": preco_na_data(t, d, p)})
-        est = c.get("/api/proventos/estimar").get_json()
-        recebidos = [i for i in est["itens"] if i["status"] == "recebido" and not i["ja_registrado"]]
-        if recebidos:
-            c.post("/api/proventos/importar", json={"itens": recebidos})
-    print(f"Carteira de exemplo criada ({len(recebidos)} proventos importados).")
+    conn = app.config["conn"]
+    if conn.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0] or \
+            conn.execute("SELECT COUNT(*) FROM aportes").fetchone()[0]:
+        sys.exit("O banco já tem dados. Apague o arquivo do banco (ex.: demo.db) e rode de novo.")
+
+    edgar = cliente(app)
+    edgar.post("/auth/setup", json={"nome": "Edgar Machado", "email": "edgar@exemplo.com",
+                                    "senha": SENHA, "nome_carteira": "Carteira Edgar Machado"})
+    edgar.post("/api/usuarios", json={"nome": "Eliandra", "email": "eliandra@exemplo.com", "senha": SENHA,
+                                      "criar_carteira": True, "nome_carteira": "Carteira Eliandra"})
+    ids = {c["nome"]: c["id"] for c in edgar.get("/api/eu").get_json()["carteiras"]}
+
+    edgar.environ_base["HTTP_X_CARTEIRA"] = str(ids["Carteira Edgar Machado"])
+    n1 = popular(edgar, CARTEIRA_EDGAR)
+    # O Edgar (administrador) gerencia também a carteira da Eliandra.
+    edgar.environ_base["HTTP_X_CARTEIRA"] = str(ids["Carteira Eliandra"])
+    n2 = popular(edgar, CARTEIRA_ELIANDRA)
+    # Exemplo de compartilhamento: Eliandra pode visualizar a carteira do Edgar.
+    edgar.put(f"/api/carteiras/{ids['Carteira Edgar Machado']}/acessos",
+              json={"email": "eliandra@exemplo.com", "ver": True})
+
+    print("Dados de exemplo criados.")
+    print(f"  Carteira Edgar Machado: {n1} proventos importados")
+    print(f"  Carteira Eliandra:      {n2} proventos importados")
+    print(f"Login: edgar@exemplo.com (administrador) ou eliandra@exemplo.com, senha {SENHA}")

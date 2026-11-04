@@ -63,3 +63,20 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: .
 .cards.compacto .valor { font-size: 1.05rem; }
 .acoes-import { display: flex; gap: 12px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
 tr.desativado td { color: var(--suave); }
+.seletor-carteira { display: flex; align-items: center; gap: 6px; }
+.seletor-carteira select { font-weight: 600; max-width: 260px; }
+.usuario { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: .9rem; color: var(--suave); }
+.usuario button { padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.aviso.leitura { background: #e5edff; color: #1d3d8f; }
+@media (prefers-color-scheme: dark) { .aviso.leitura { background: #1c2a4d; color: #b8ccff; } }
+body.somente-leitura .requer-edicao { display: none !important; }
+body:not(.admin) .so-admin { display: none !important; }
+button.link.acao { color: var(--primaria); margin-right: 10px; }
+td .check-acesso { width: auto; }
+.pagina-login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+.caixa-login { background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; padding: 28px; width: 100%; max-width: 400px; }
+.caixa-login h1 { font-size: 1.3rem; margin: 0 0 16px; }
+.caixa-login form { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.caixa-login label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--suave); }
+.caixa-login button { margin-top: 6px; padding: 10px; }
+.erro-login { color: var(--neg); min-height: 1.2em; margin: 12px 0 0; }

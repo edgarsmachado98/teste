@@ -19,12 +19,16 @@ function toast(msg, erro = false) {
   t._timer = setTimeout(() => (t.className = ""), 3500);
 }
 
+// Carteira selecionada: enviada em todas as requisições pelo cabeçalho X-Carteira.
+let carteiraAtual = null;
+let carteiras = [];
+const permissao = () => carteiras.find(c => c.id === carteiraAtual)?.permissoes || { ver: false, editar: false, gerenciar: false };
+
 async function api(url, opts = {}) {
-  const r = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  const headers = { "Content-Type": "application/json", "X-Requested-With": "fetch" };
+  if (carteiraAtual) headers["X-Carteira"] = String(carteiraAtual);
+  const r = await fetch(url, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  if (r.status === 401) { location.href = "/login"; throw new Error("Sessão expirada."); }
   const dados = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
   return dados;
@@ -48,7 +52,7 @@ function formDados(form) {
 document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("ativo", x === b));
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos }[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -122,7 +126,7 @@ async function carregarAportes() {
         <td>${num.format(a.quantidade)}</td><td>${brl.format(a.preco)}</td><td>${brl.format(a.taxas)}</td>
         <td>${brl.format(a.quantidade * a.preco + (a.tipo === "compra" ? a.taxas : -a.taxas))}</td>
         <td>${esc(a.obs)}</td>
-        <td><button class="link" data-remover-aporte="${a.id}">excluir</button></td></tr>`).join("")
+        <td><button class="link requer-edicao" data-remover-aporte="${a.id}">excluir</button></td></tr>`).join("")
         : `<tr><td colspan="9">Nenhum aporte registrado.</td></tr>`);
   } catch (e) { toast(e.message, true); }
 }
@@ -158,7 +162,7 @@ async function carregarAtivos() {
       <td>${pct(a.meta_pct)}</td>
       <td><div class="barra" title="${pct(soma ? a.meta_pct / soma * 100 : 0)}"><span style="width:${soma ? a.meta_pct / soma * 100 : 0}%"></span></div></td>
       <td>${a.preco_manual == null ? "—" : brl.format(a.preco_manual)}</td>
-      <td><button class="link editar" data-editar="${esc(a.ticker)}">editar</button><button class="link" data-remover-ativo="${esc(a.ticker)}">excluir</button></td>
+      <td><span class="requer-edicao"><button class="link editar" data-editar="${esc(a.ticker)}">editar</button><button class="link" data-remover-ativo="${esc(a.ticker)}">excluir</button></span></td>
     </tr>`).join("") : `<tr><td colspan="7">Nenhum ativo cadastrado.</td></tr>`);
 }
 
@@ -328,7 +332,7 @@ async function carregarProventos() {
       <td>${esc(nomeTipo(p.tipo))}</td><td>${p.data_com ? fmtData(p.data_com) : "—"}</td>
       <td>${p.quantidade == null ? "—" : num.format(p.quantidade)}</td><td>${p.valor_unitario == null ? "—" : brl.format(p.valor_unitario)}</td>
       <td class="pos">${brl.format(p.valor_total)}</td><td>${esc(p.obs)}</td>
-      <td><button class="link" data-remover-provento="${p.id}">excluir</button></td></tr>`).join("")
+      <td><button class="link requer-edicao" data-remover-provento="${p.id}">excluir</button></td></tr>`).join("")
       : `<tr><td colspan="9">Nenhum provento lançado. Use “Buscar proventos da carteira” ou lance manualmente.</td></tr>`);
 }
 
@@ -343,12 +347,12 @@ $("#btn-estimar").addEventListener("click", async () => {
   estimados = r.itens.filter(i => !i.ja_registrado);
   const falhas = Object.entries(r.falhas).map(([t, m]) => `<li><strong>${esc(t)}</strong>: ${esc(m)}</li>`).join("");
   alvo.innerHTML = (falhas ? `<details class="dica"><summary>Sem dados de proventos para ${Object.keys(r.falhas).length} ativo(s)</summary><ul>${falhas}</ul></details>` : "") +
-    (estimados.length ? `<div class="acoes-import">
+    (estimados.length ? `<div class="acoes-import requer-edicao">
         <button type="button" id="btn-importar" class="btn">Importar selecionados</button>
         <span class="dica" id="total-selecionado"></span></div>
-      <div class="rolagem"><table id="tabela-estimados"><tr><th></th><th>Ativo</th><th>Tipo</th><th>Data com</th><th>Pagamento</th><th>Qtd.</th><th>Valor/cota</th><th>Total</th><th>Status</th><th>Fonte</th></tr>
+      <div class="rolagem"><table id="tabela-estimados"><tr><th class="requer-edicao"></th><th>Ativo</th><th>Tipo</th><th>Data com</th><th>Pagamento</th><th>Qtd.</th><th>Valor/cota</th><th>Total</th><th>Status</th><th>Fonte</th></tr>
       ${estimados.map((i, n) => `<tr class="${i.ja_registrado ? "desativado" : ""}">
-        <td><input type="checkbox" data-idx="${n}" ${i.ja_registrado ? "disabled" : i.status === "recebido" ? "checked" : ""}></td>
+        <td class="requer-edicao"><input type="checkbox" data-idx="${n}" ${i.ja_registrado ? "disabled" : i.status === "recebido" ? "checked" : ""}></td>
         <td><strong>${esc(i.ticker)}</strong></td><td>${esc(nomeTipo(i.tipo))}</td><td>${fmtData(i.data_com)}</td>
         <td>${fmtData(i.data_pagamento)}${i.pagamento_estimado ? ` <span class="selo">estimada</span>` : ""}</td>
         <td>${num.format(i.quantidade)}</td><td>${brl.format(i.valor_unitario)}</td><td>${brl.format(i.valor_total)}</td>
@@ -420,7 +424,198 @@ $("#form-comparar").addEventListener("submit", async ev => {
       return `<td style="background:${cor}">${v == null ? "—" : v.toFixed(2).replace(".", ",")}</td>`; }).join("")}</tr>`).join("");
 });
 
+// ---------------- Carteiras e permissões ----------------
+const ROTULO_PERM = p => p.gerenciar && p.editar ? "acesso total" : p.editar ? "controle" : "somente leitura";
+
+function aplicarPermissoes() {
+  const p = permissao();
+  document.body.classList.toggle("somente-leitura", !p.editar);
+  document.body.classList.toggle("admin", !!USUARIO.admin);
+  $("#aviso-leitura").classList.toggle("oculto", !carteiraAtual || p.editar);
+  $("#selo-permissao").textContent = carteiraAtual ? ROTULO_PERM(p) : "";
+}
+
+async function carregarCarteiras(preferida) {
+  const r = await api("/api/eu");
+  carteiras = r.carteiras;
+  let salva = null;
+  try { salva = Number(localStorage.getItem("carteira")); } catch (e) { /* armazenamento indisponível */ }
+  const ids = carteiras.map(c => c.id);
+  carteiraAtual = [preferida, carteiraAtual, salva].find(id => ids.includes(id)) ?? ids[0] ?? null;
+  $("#sel-carteira").innerHTML = carteiras.length
+    ? carteiras.map(c => `<option value="${c.id}">${esc(c.nome)}${c.sou_dono ? "" : ` (${esc(c.dono_nome || "sem dono")})`}</option>`).join("")
+    : `<option value="">Nenhuma carteira disponível</option>`;
+  if (carteiraAtual) $("#sel-carteira").value = carteiraAtual;
+  aplicarPermissoes();
+}
+
+function recarregarAbaAtual() {
+  $("#resultado-sugestao").innerHTML = "";
+  $("#resultado-estimar").innerHTML = "";
+  const aba = document.querySelector("nav button.ativo")?.dataset.tab;
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos }[aba] || (() => {}))();
+}
+
+$("#sel-carteira").addEventListener("change", ev => {
+  carteiraAtual = Number(ev.target.value) || null;
+  try { localStorage.setItem("carteira", carteiraAtual); } catch (e) { /* ignora */ }
+  aplicarPermissoes();
+  recarregarAbaAtual();
+});
+
+$("#btn-sair").addEventListener("click", async () => {
+  await api("/auth/logout", { method: "POST" }).catch(() => {});
+  location.href = "/login";
+});
+
+// ---------------- Acessos e conta ----------------
+let usuariosCache = [];
+let carteiraAcessos = null;
+
+async function carregarAcessos() {
+  await carregarCarteiras();
+  const gerenciaveis = carteiras.filter(c => c.permissoes.gerenciar);
+  if (USUARIO.admin) {
+    try { usuariosCache = await api("/api/usuarios"); } catch (e) { toast(e.message, true); }
+    $("#sel-dono").innerHTML = usuariosCache.filter(u => u.ativo)
+      .map(u => `<option value="${u.id}" ${u.id === USUARIO.id ? "selected" : ""}>${esc(u.nome)}</option>`).join("");
+    $("#lista-emails").innerHTML = usuariosCache.map(u => `<option value="${esc(u.email)}">${esc(u.nome)}</option>`).join("");
+    renderUsuarios();
+  }
+  $("#tabela-carteiras").innerHTML = `<tr><th>Carteira</th><th>Dono</th><th>Seu acesso</th><th></th></tr>` +
+    carteiras.map(c => `<tr><td><strong>${esc(c.nome)}</strong></td><td>${esc(c.dono_nome || "—")}</td>
+      <td>${c.sou_dono ? "dono" : ROTULO_PERM(c.permissoes)}</td>
+      <td>${c.permissoes.gerenciar ? `<button class="link acao" data-acessos="${c.id}">acessos</button><button class="link acao" data-renomear="${c.id}">renomear</button>` : ""}
+          <button class="link acao" data-abrir="${c.id}">abrir</button>
+          ${c.sou_dono || USUARIO.admin ? `<button class="link" data-excluir-carteira="${c.id}">excluir</button>` : ""}</td></tr>`).join("");
+  if (carteiraAcessos && !gerenciaveis.some(c => c.id === carteiraAcessos)) carteiraAcessos = null;
+  carteiraAcessos = carteiraAcessos || (permissao().gerenciar ? carteiraAtual : gerenciaveis[0]?.id);
+  if (carteiraAcessos) mostrarAcessos(carteiraAcessos); else $("#painel-acessos").classList.add("oculto");
+}
+
+async function mostrarAcessos(cid) {
+  carteiraAcessos = cid;
+  let r;
+  try { r = await api(`/api/carteiras/${cid}/acessos`); } catch (e) { return toast(e.message, true); }
+  $("#painel-acessos").classList.remove("oculto");
+  $("#nome-carteira-acessos").textContent = r.carteira.nome;
+  $("#dono-carteira-acessos").textContent = r.dono ? `Dono: ${r.dono.nome} (${r.dono.email}) — acesso total.` : "Carteira sem dono definido.";
+  const marca = (a, k) => `<input type="checkbox" class="check-acesso" data-perm="${k}" data-email="${esc(a.email)}" ${a[k] ? "checked" : ""} ${k === "ver" && (a.editar || a.gerenciar) ? "disabled" : ""}>`;
+  $("#tabela-acessos").innerHTML = `<tr><th>Usuário</th><th>E-mail</th><th>Visualizar</th><th>Controlar</th><th>Gerenciar acessos</th><th></th></tr>` +
+    (r.acessos.length ? r.acessos.map(a => `<tr><td>${esc(a.nome)}</td><td>${esc(a.email)}</td>
+      <td>${marca(a, "ver")}</td><td>${marca(a, "editar")}</td><td>${marca(a, "gerenciar")}</td>
+      <td><button class="link" data-revogar="${a.usuario_id}">revogar</button></td></tr>`).join("")
+      : `<tr><td colspan="6">Ninguém além do dono e dos administradores tem acesso a esta carteira.</td></tr>`);
+}
+
+$("#tabela-carteiras").addEventListener("click", async ev => {
+  const d = ev.target.dataset;
+  if (d.acessos) mostrarAcessos(Number(d.acessos));
+  if (d.abrir) {
+    $("#sel-carteira").value = d.abrir;
+    $("#sel-carteira").dispatchEvent(new Event("change"));
+    document.querySelector('nav button[data-tab="carteira"]').click();
+  }
+  if (d.renomear) {
+    const c = carteiras.find(x => x.id === Number(d.renomear));
+    const nome = prompt("Novo nome da carteira:", c.nome);
+    if (!nome) return;
+    try { await api(`/api/carteiras/${c.id}`, { method: "PATCH", body: { nome } }); toast("Carteira renomeada."); carregarAcessos(); }
+    catch (e) { toast(e.message, true); }
+  }
+  if (d.excluirCarteira) {
+    const c = carteiras.find(x => x.id === Number(d.excluirCarteira));
+    if (!confirm(`Excluir a carteira "${c.nome}"? Só é possível se ela não tiver aportes nem proventos.`)) return;
+    try { await api(`/api/carteiras/${c.id}`, { method: "DELETE" }); toast("Carteira excluída."); carregarAcessos(); }
+    catch (e) { toast(e.message, true); }
+  }
+});
+
+$("#tabela-acessos").addEventListener("change", async ev => {
+  const email = ev.target.dataset.email;
+  if (!email) return;
+  const linha = ev.target.closest("tr");
+  const valor = k => linha.querySelector(`[data-perm="${k}"]`).checked;
+  const body = { email, ver: valor("ver"), editar: valor("editar"), gerenciar: valor("gerenciar") };
+  try { await api(`/api/carteiras/${carteiraAcessos}/acessos`, { method: "PUT", body }); toast("Permissões atualizadas."); }
+  catch (e) { toast(e.message, true); }
+  mostrarAcessos(carteiraAcessos);
+});
+
+$("#tabela-acessos").addEventListener("click", async ev => {
+  const uid = ev.target.dataset.revogar;
+  if (!uid || !confirm("Revogar o acesso deste usuário à carteira?")) return;
+  try { await api(`/api/carteiras/${carteiraAcessos}/acessos/${uid}`, { method: "DELETE" }); toast("Acesso revogado."); mostrarAcessos(carteiraAcessos); }
+  catch (e) { toast(e.message, true); }
+});
+
+$("#form-acesso").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const d = formDados(ev.target);
+  try {
+    await api(`/api/carteiras/${carteiraAcessos}/acessos`, { method: "PUT", body: { email: d.email, ver: true, editar: d.editar, gerenciar: d.gerenciar } });
+    toast("Acesso concedido."); ev.target.reset(); mostrarAcessos(carteiraAcessos);
+  } catch (e) { toast(e.message, true); }
+});
+
+$("#form-carteira").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const d = formDados(ev.target);
+  try {
+    const r = await api("/api/carteiras", { method: "POST", body: { nome: d.nome, dono_id: USUARIO.admin ? Number(d.dono_id) : undefined } });
+    toast("Carteira criada."); ev.target.reset(); carteiraAcessos = r.id; carregarAcessos();
+  } catch (e) { toast(e.message, true); }
+});
+
+function renderUsuarios() {
+  $("#tabela-usuarios").innerHTML = `<tr><th>Nome</th><th>E-mail</th><th>Administrador</th><th>Ativo</th><th></th></tr>` +
+    usuariosCache.map(u => `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td>
+      <td><input type="checkbox" data-usuario="${u.id}" data-campo="admin" ${u.admin ? "checked" : ""}></td>
+      <td><input type="checkbox" data-usuario="${u.id}" data-campo="ativo" ${u.ativo ? "checked" : ""} ${u.id === USUARIO.id ? "disabled" : ""}></td>
+      <td><button class="link acao" data-redefinir="${u.id}">redefinir senha</button></td></tr>`).join("");
+}
+
+$("#tabela-usuarios").addEventListener("change", async ev => {
+  const { usuario, campo } = ev.target.dataset;
+  if (!usuario) return;
+  try { await api(`/api/usuarios/${usuario}`, { method: "PATCH", body: { [campo]: ev.target.checked } }); toast("Usuário atualizado."); }
+  catch (e) { toast(e.message, true); }
+  carregarAcessos();
+});
+
+$("#tabela-usuarios").addEventListener("click", async ev => {
+  const uid = ev.target.dataset.redefinir;
+  if (!uid) return;
+  const senha = prompt("Nova senha provisória (mínimo 8 caracteres):");
+  if (!senha) return;
+  try { await api(`/api/usuarios/${uid}`, { method: "PATCH", body: { senha } }); toast("Senha redefinida."); }
+  catch (e) { toast(e.message, true); }
+});
+
+$("#form-usuario").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const d = formDados(ev.target);
+  try {
+    await api("/api/usuarios", { method: "POST", body: { ...d, nome_carteira: `Carteira ${d.nome.trim()}` } });
+    toast(d.criar_carteira ? `Usuário e “Carteira ${d.nome.trim()}” criados.` : "Usuário criado.");
+    ev.target.reset(); carregarAcessos();
+  } catch (e) { toast(e.message, true); }
+});
+
+$("#form-senha").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  try { await api("/api/eu/senha", { method: "POST", body: formDados(ev.target) }); toast("Senha alterada."); ev.target.reset(); }
+  catch (e) { toast(e.message, true); }
+});
+
 // ---------------- Início ----------------
 $("#form-aporte").data.value = new Date().toISOString().slice(0, 10);
-carregarCarteira();
-carregarAportes();
+carregarCarteiras().then(() => {
+  if (!carteiraAtual) {
+    toast("Você ainda não tem acesso a nenhuma carteira. Peça ao administrador.", true);
+    document.querySelector('nav button[data-tab="acessos"]').click();
+    return;
+  }
+  carregarCarteira();
+  carregarAportes();
+}).catch(e => toast(e.message, true));

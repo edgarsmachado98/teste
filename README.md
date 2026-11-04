@@ -5,6 +5,23 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
 
 ## Funcionalidades
 
+**Usuários, carteiras e controle de acesso**
+- Login por e-mail e senha. No primeiro acesso o sistema pede para criar o **administrador**; os dados
+  já existentes passam a ser da carteira dele.
+- Várias carteiras (ex.: *Carteira Edgar Machado* e *Carteira Eliandra*), alternadas pelo seletor no topo.
+- Permissões por carteira e por usuário, em *Acessos e conta*:
+
+  | Permissão | O que permite |
+  |---|---|
+  | Visualizar | ver carteira, aportes, proventos e análises (somente leitura) |
+  | Controlar | registrar e excluir aportes, ativos e proventos |
+  | Gerenciar acessos | conceder e revogar acessos de outras pessoas à carteira |
+
+  O dono da carteira e os administradores têm acesso total. Administradores também cadastram
+  usuários, redefinem senhas e desativam contas.
+- Segurança: senhas com hash, sessão em cookie `HttpOnly`/`SameSite`, proteção contra CSRF e
+  bloqueio de 5 minutos após 5 tentativas de login erradas.
+
 **Gestão da carteira**
 - Cadastro de ativos (ações, FIIs, ETFs, BDRs, renda fixa, cripto, exterior) com **meta de alocação** (%).
 - Registro de compras e vendas com taxas; cálculo de **preço médio**, resultado **realizado** e **não realizado**.
@@ -44,9 +61,15 @@ python app.py
 
 Acesse http://localhost:5000. O banco fica em `carteira.db` (altere com a variável `CARTEIRA_DB`).
 
+Na primeira vez, a página pede para criar o administrador. Depois, em **Acessos e conta → Usuários**,
+cadastre as outras pessoas (marcando "Criar carteira própria" para gerar a carteira delas).
+
+Para que outras pessoas acessem pela rede local (ex.: celular no mesmo Wi-Fi), use
+`http://IP-DO-COMPUTADOR:5000`. Não exponha o sistema na internet sem HTTPS.
+
 ### Modo demonstração (sem internet)
 
-Gera cotações **simuladas** e uma carteira de exemplo:
+Gera cotações **simuladas** e duas carteiras de exemplo (Edgar e Eliandra; senha `demo12345`):
 
 ```bash
 CARTEIRA_DEMO=1 python seed_demo.py
@@ -91,7 +114,8 @@ python -m pytest
 
 ```
 app.py                 # servidor Flask e API REST
-carteira/db.py         # esquema SQLite
+carteira/db.py         # esquema SQLite, migração e conexão por thread
+carteira/auth.py       # usuários, carteiras e permissões
 carteira/portfolio.py  # posições, preço médio, resumo e sugestão de aporte
 carteira/analysis.py   # indicadores técnicos e estatísticas de risco/retorno
 carteira/market.py     # cotações (Yahoo Finance), cache e série simulada
@@ -101,8 +125,18 @@ tests/                 # testes automatizados
 
 ### API
 
+Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeçalho
+`X-Carteira: <id>`; requisições que alteram dados exigem `X-Requested-With: fetch`.
+
 | Método | Rota | Descrição |
 |---|---|---|
+| POST | `/auth/setup` · `/auth/login` · `/auth/logout` | configuração inicial, entrar, sair |
+| GET | `/api/eu` | usuário logado e carteiras acessíveis |
+| POST | `/api/eu/senha` | alterar a própria senha |
+| GET/POST/PATCH | `/api/usuarios[/<id>]` | usuários (administrador) |
+| POST/PATCH/DELETE | `/api/carteiras[/<id>]` | criar, renomear, excluir carteira |
+| GET/PUT | `/api/carteiras/<id>/acessos` | listar / conceder ou alterar permissões |
+| DELETE | `/api/carteiras/<id>/acessos/<usuario>` | revogar acesso |
 | GET/POST | `/api/ativos` | lista / cria ou atualiza ativo |
 | DELETE | `/api/ativos/<ticker>` | remove ativo sem aportes |
 | GET/POST | `/api/aportes` | lista / registra compra ou venda |

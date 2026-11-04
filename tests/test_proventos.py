@@ -1,8 +1,8 @@
 import pytest
 
-from app import create_app
 from carteira import portfolio, providers
 from carteira.market import serie_simulada
+from tests.conftest import cliente_logado
 
 
 def ap(data, ticker, qtd, tipo="compra"):
@@ -111,8 +111,8 @@ class FonteFake:
 
 
 @pytest.fixture
-def client(tmp_path):
-    return create_app(str(tmp_path / "t.db"), [FonteFake()]).test_client()
+def client(novo_app):
+    return cliente_logado(novo_app([FonteFake()]))
 
 
 def test_api_fluxo_proventos(client):
