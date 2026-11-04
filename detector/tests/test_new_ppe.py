@@ -65,3 +65,10 @@ def test_import_reference_photos(tmp_path):
     assert "face_shield" in (out / "classes.txt").read_text()
     import_images(src, out)  # importar de novo não sobrescreve
     assert len(list((out / "images").glob("*.jpg"))) == 4
+
+
+def test_head_is_not_absence_and_ultralytics_names():
+    a = dict(ALIASES)
+    assert canonical("head", a) == "head"            # SH17 marca a cabeça de todos: não pode virar "sem capacete"
+    assert canonical("no_goggle", a) == "no_glasses" and canonical("goggles", a) == "glasses"
+    assert canonical("face-mask-medical", a) == "mask" and canonical("Person", a) == "person"

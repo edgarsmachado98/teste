@@ -9,13 +9,16 @@ import os
 ALIASES = {
     "person": "person", "worker": "person", "pessoa": "person",
     "helmet": "helmet", "hardhat": "helmet", "hard_hat": "helmet", "capacete": "helmet",
-    "no_helmet": "no_helmet", "no_hardhat": "no_helmet", "without_helmet": "no_helmet", "head": "no_helmet",
+    "no_helmet": "no_helmet", "no_hardhat": "no_helmet", "without_helmet": "no_helmet",
+    # "head" NÃO é tratado como ausência: no Hard Hat Workers é cabeça sem capacete, mas no SH17 é a parte do corpo
+    # (marcada em todos). A falta do capacete já é percebida quando ele não é visto na cabeça. Para modelos
+    # treinados no Hard Hat Workers, pode-se usar LABEL_MAP='{"head": "no_helmet"}'.
     "vest": "vest", "safety_vest": "vest", "reflective_vest": "vest", "colete": "vest",
     "no_vest": "no_vest", "no_safety_vest": "no_vest",
     "glasses": "glasses", "goggles": "glasses", "safety_glasses": "glasses",
-    "no_glasses": "no_glasses", "no_goggles": "no_glasses",
+    "no_glasses": "no_glasses", "no_goggles": "no_glasses", "no_goggle": "no_glasses",
     "gloves": "gloves", "glove": "gloves", "no_gloves": "no_gloves", "no_glove": "no_gloves",
-    "mask": "mask", "face_mask": "mask", "no_mask": "no_mask",
+    "mask": "mask", "face_mask": "mask", "face_mask_medical": "mask", "no_mask": "no_mask",
     # cinto paraquedista / talabarte (NR-35)
     "harness": "harness", "safety_harness": "harness", "fall_arrest": "harness", "fall_protection": "harness",
     "cinto": "harness", "cinturao": "harness", "cinto_paraquedista": "harness",
