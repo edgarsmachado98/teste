@@ -121,3 +121,23 @@ def test_importacao_exige_permissao_de_controle(novo_app):
     edgar.put(f"/api/carteiras/{cid}/acessos", json={"email": "eli@exemplo.com", "ver": True})
     eli = cliente_logado(app, "eli@exemplo.com", "senha-eli-123")
     assert enviar(eli, xlsx(NEG_CAB, NEG), "neg.xlsx").status_code == 403
+
+
+def test_eventos():
+    cab = ["Produto", "Pagamento", "Tipo de Evento", "Instituição", "Quantidade", "Preço unitário", "Valor líquido"]
+    linhas = [
+        ["BBAS3 - BANCO DO BRASIL S/A", "28/02/2025", "Juros Sobre Capital Próprio", "X", 40, 0.25, 8.5],
+        ["MXRF11 - MAXI RENDA FII", "14/03/2025", "Rendimento", "X", 150, 0.09, "13,50"],
+        ["TAEE11 - TAESA", "15/12/2026", "Dividendo", "X", 30, 1.0, 30],
+        ["ITUB4 - ITAU", "05/03/2025", "Bonificação em Ativos", "X", 3, "-", "-"],
+    ]
+    r = importacao.analisar_extrato(xlsx(cab, linhas), "eventos-2026.xlsx")
+    assert r["tipo_arquivo"] == "eventos"
+    assert [(p["ticker"], p["tipo"], p["valor_total"]) for p in r["proventos"]] == [
+        ("BBAS3", "jcp", 8.5), ("MXRF11", "rendimento", 13.5), ("TAEE11", "dividendo", 30.0)]
+    assert len(r["ignorados"]) == 1 and "Evento corporativo" in r["ignorados"][0]["motivo"]
+
+
+def test_erro_mostra_colunas():
+    with pytest.raises(importacao.ErroImportacao, match="Colunas encontradas: Coluna A, Coluna B, Coluna C"):
+        importacao.analisar_extrato(xlsx(["Coluna A", "Coluna B", "Coluna C"], [[1, 2, 3]]), "x.xlsx")

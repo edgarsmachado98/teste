@@ -30,7 +30,7 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
 
 **Importação de extratos da B3**
 - Em *Aportes → Importar extrato da B3*, envie os extratos da Área do Investidor em Excel/CSV:
-  **Negociação** (compras e vendas de ações, FIIs, ETFs, BDRs) e **Movimentação** (dividendos, JCP,
+  **Negociação** (compras e vendas de ações, FIIs, ETFs, BDRs), **Eventos** (proventos) e **Movimentação** (dividendos, JCP,
   rendimentos, amortizações e Tesouro Direto). O sistema mostra uma prévia, marca o que já foi lançado
   e importa só o que você selecionar.
 - Não são importados: opções/termo/futuros, eventos corporativos (desdobramento, bonificação,

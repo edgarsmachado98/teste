@@ -103,6 +103,28 @@ COLUNAS_MOVIMENTACAO = {"es": "entrada/saida", "data": "data", "mov": "movimenta
                         "instituicao": "instituicao"}
 
 
+# Extrato de Eventos (proventos recebidos/provisionados). O layout varia; aceitamos sinônimos.
+COLUNAS_EVENTOS = {
+    "produto": ("produto", "ativo", "codigo de negociacao"),
+    "tipo": ("tipo de evento", "tipo evento", "evento", "tipo de provento", "tipo"),
+    "data": ("pagamento", "data de pagamento", "data do pagamento", "data pagamento", "data"),
+    "quantidade": ("quantidade", "qtd", "quantidade base"),
+    "preco": ("preco unitario", "valor unitario", "valor por cota", "valor por acao"),
+    "valor": ("valor liquido", "valor liquido (r$)", "valor total", "valor da operacao", "valor bruto",
+              "valor", "total"),
+}
+
+
+def _indices_flexiveis(nomes, colunas):
+    idx = {}
+    for chave, candidatos in colunas.items():
+        for c in candidatos:
+            if c in nomes:
+                idx[chave] = nomes.index(c)
+                break
+    return idx
+
+
 def _localizar_cabecalho(linhas):
     for i, linha in enumerate(linhas):
         nomes = [_norm(c) for c in linha]
@@ -110,8 +132,15 @@ def _localizar_cabecalho(linhas):
             return "negociacao", i, nomes
         if "movimentacao" in nomes and "produto" in nomes and "entrada/saida" in nomes:
             return "movimentacao", i, nomes
-    raise ErroImportacao("Não reconheci o arquivo. Use o extrato de Negociação ou de Movimentação "
-                         "da Área do Investidor da B3, sem alterar o cabeçalho.")
+        idx = _indices_flexiveis(nomes, COLUNAS_EVENTOS)
+        if {"produto", "tipo", "data", "valor"} <= set(idx) and \
+                any("evento" in n or "provento" in n for n in nomes):
+            return "eventos", i, nomes
+    cabecalhos = next((", ".join(str(c) for c in l if c not in (None, ""))
+                       for l in linhas if sum(c not in (None, "") for c in l) >= 3), "")
+    raise ErroImportacao("Não reconheci o arquivo. Use os extratos de Negociação, Movimentação ou Eventos "
+                         "da Área do Investidor da B3, sem alterar o cabeçalho."
+                         + (f" Colunas encontradas: {cabecalhos[:300]}" if cabecalhos else ""))
 
 
 def _registros(linhas, inicio, nomes, colunas):
@@ -223,11 +252,42 @@ def _movimentacao(linhas, inicio, nomes):
     return aportes, proventos, ignorados
 
 
+def _eventos(linhas, inicio, nomes):
+    """Extrato de Eventos: um provento por linha (já creditado ou provisionado)."""
+    idx = _indices_flexiveis(nomes, COLUNAS_EVENTOS)
+    proventos, ignorados = [], []
+    for n, linha in enumerate(linhas[inicio + 1:], start=inicio + 2):
+        if not any(c not in (None, "") for c in linha):
+            continue
+        r = {k: (linha[i] if i < len(linha) else None) for k, i in idx.items()}
+        tipo_txt = _norm(r.get("tipo"))
+        ticker, _ = ticker_do_produto(r.get("produto"))
+        desc = f"{r.get('tipo')} · {r.get('produto')}"
+        tipo = next((t for chave, t in TIPOS_PROVENTO_B3.items() if tipo_txt.startswith(chave)), None)
+        if tipo is None and tipo_txt.startswith("jcp"):
+            tipo = "jcp"
+        if tipo is None:
+            motivo = ("Evento corporativo: ajuste a quantidade manualmente."
+                      if any(tipo_txt.startswith(e) for e in EVENTOS) else "Tipo de evento não reconhecido.")
+            ignorados.append({"linha": n, "descricao": desc, "motivo": motivo})
+            continue
+        data, valor = _data(r.get("data")), _numero(r.get("valor"))
+        if not data or valor is None or not ticker:
+            ignorados.append({"linha": n, "descricao": desc, "motivo": "Sem data de pagamento ou valor."})
+            continue
+        proventos.append({"ticker": ticker, "tipo": tipo, "data_pagamento": data,
+                          "quantidade": _numero(r.get("quantidade")), "valor_unitario": _numero(r.get("preco")),
+                          "valor_total": round(valor, 2), "obs": "B3 eventos"})
+    return [], proventos, ignorados
+
+
 def analisar_extrato(conteudo, nome_arquivo):
     linhas = ler_planilha(conteudo, nome_arquivo)
     tipo, inicio, nomes = _localizar_cabecalho(linhas)
     if tipo == "negociacao":
         aportes, proventos, ignorados = _negociacao(linhas, inicio, nomes)
+    elif tipo == "eventos":
+        aportes, proventos, ignorados = _eventos(linhas, inicio, nomes)
     else:
         aportes, proventos, ignorados = _movimentacao(linhas, inicio, nomes)
     return {"tipo_arquivo": tipo, "aportes": aportes, "proventos": proventos, "ignorados": ignorados}

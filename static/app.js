@@ -173,7 +173,7 @@ function renderPreviaB3() {
   const marca = (lista, i, item) => `<input type="checkbox" data-lista="${lista}" data-idx="${i}" ${item.ja_registrado ? "disabled" : "checked"}>`;
   const status = item => item.ja_registrado ? `<span class="selo">já lançado</span>` : "novo";
   const novos = p.aportes.filter(a => !a.ja_registrado).length + p.proventos.filter(x => !x.ja_registrado).length;
-  let html = `<p class="dica">Extrato de <strong>${p.tipo_arquivo === "negociacao" ? "Negociação" : "Movimentação"}</strong>:
+  let html = `<p class="dica">Extrato de <strong>${({ negociacao: "Negociação", movimentacao: "Movimentação", eventos: "Eventos" })[p.tipo_arquivo]}</strong>:
     ${p.aportes.length} operação(ões), ${p.proventos.length} provento(s), ${p.ignorados.length} linha(s) ignorada(s). ${novos} item(ns) novo(s).</p>`;
   if (p.aportes.length) html += `<h3>Operações</h3><div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Classe</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Total</th><th>Situação</th></tr>
     ${p.aportes.map((a, i) => `<tr class="${a.ja_registrado ? "desativado" : ""}"><td>${marca("aportes", i, a)}</td><td>${fmtData(a.data)}</td>
