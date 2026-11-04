@@ -8,9 +8,9 @@
   const esc = App.esc;
 
   const PERFIS = {
-    admin: { nome: 'Administrador', descricao: 'Acesso total, inclusive cadastro de usuários' },
-    operador: { nome: 'Operador', descricao: 'Cadastra setores e colaboradores e gera escalas' },
-    consulta: { nome: 'Consulta', descricao: 'Apenas visualiza as escalas' },
+    admin: { nome: 'Administrador', descricao: 'Acesso total, inclusive usuários e permissões, cópia de segurança e restauração de dados' },
+    operador: { nome: 'Operador', descricao: 'Cadastra e altera contratos de representantes, empresas do grupo e distratos, e gera os documentos legais' },
+    consulta: { nome: 'Consulta', descricao: 'Consulta representantes, contratos, distratos e relatórios e baixa os documentos, sem alterar cadastros' },
   };
   const ACOES = {
     'acesso.login': 'Entrou no sistema',

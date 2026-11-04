@@ -69,7 +69,7 @@
   const podeEditar = () => !!usuario && usuario.perfil !== 'consulta';
   function exigirEdicao() {
     if (podeEditar()) return true;
-    avisar('Seu perfil permite apenas consultar as escalas.');
+    avisar('Seu perfil permite apenas consultar os cadastros.');
     return false;
   }
 
@@ -997,7 +997,7 @@
     } catch (e) {
       return avisar('Arquivo de backup inválido.');
     }
-    if (!(await confirmar('Restaurar o backup substitui todos os setores, colaboradores e a escala atual. Continuar?'))) return;
+    if (!(await confirmar('Restaurar a cópia de segurança substitui todos os dados atuais do sistema (contratos, distratos, empresas e demais cadastros). Continuar?'))) return;
     if (await executar(() => api.post('/api/restaurar', dados))) avisar('Backup restaurado.');
   });
 
