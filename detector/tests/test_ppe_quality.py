@@ -99,10 +99,29 @@ def test_tiles_find_small_people_once():
     frame[600:700, 600:640] = 255
     eng = object.__new__(Engine)
     eng.aliases, eng.conf, eng.imgsz, eng.ppe_models = {"person": "person"}, 0.25, 640, []
-    eng.models, eng.tile_overlap = [TileModel()], 0.2
+    eng.models, eng.tile_overlap, eng.tile_conf = [TileModel()], 0.2, 0.55
     eng.tiles = (1, 1)
     assert eng.detect(frame) == []                    # imagem inteira: pessoa pequena demais
     eng.tiles = (2, 2)
     found = eng.detect(frame)
     assert len(found) == 1                            # vista em 2 blocos sobrepostos → uma pessoa só
     assert found[0].box == pytest.approx((0.6, 0.6, 0.64, 0.7), abs=0.01)
+
+
+class BrickModel(TileModel):
+    """Pilha de tijolos que, ampliada num bloco, parece gente com confiança baixa (caso real de obra)."""
+
+    def _find(self, img):
+        found = super()._find(img)
+        return [(n, 0.45, b) for n, _, b in found]
+
+
+def test_tile_only_detection_needs_higher_confidence():
+    frame = np.zeros((1000, 1000, 3), np.uint8)
+    frame[600:700, 600:640] = 255
+    eng = object.__new__(Engine)
+    eng.aliases, eng.conf, eng.imgsz, eng.ppe_models = {"person": "person"}, 0.25, 640, []
+    eng.models, eng.tile_overlap, eng.tiles, eng.tile_conf = [BrickModel()], 0.2, (2, 2), 0.55
+    assert eng.detect(frame) == []          # só nos blocos e com 0.45: descartada
+    eng.tile_conf = 0.4
+    assert len(eng.detect(frame)) == 1

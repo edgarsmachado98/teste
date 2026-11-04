@@ -38,7 +38,9 @@ python -m vigia_detector.testar_modelo --modelos ..\modelos\yolox_s.onnx --fonte
 ```
 
 - `--blocos 2x2`: analisa em blocos – para obra e pátio, onde as pessoas aparecem pequenas (equivale a
-  `TILES=2x2` no `.env`; ~4 vezes mais lento).
+  `TILES=2x2` no `.env`; ~4 vezes mais lento). O que só aparece nos blocos precisa de confiança 0,55
+  (`--confianca-blocos` / `TILE_CONF`), para pilha de tijolos ou poste ampliado não virar pessoa.
+- Objeto fixo que ainda vira pessoa: desenhe a **zona** da regra sem aquele trecho (só conta quem pisa na zona).
 - `--comparar yolov8n.pt`: roda também o modelo da Ultralytics nas mesmas imagens, para comparar.
 - Use o stream **principal** (`subtype=0`) no teste: mais pixels por pessoa.
 

@@ -88,8 +88,8 @@ def draw(img, detections):
 
 
 def run(models: list[str], source: str, out_dir: Path, conf: float, count: int, every: float, tag: str,
-        tiles: tuple[int, int] = (1, 1)) -> dict:
-    engine = Engine(models, conf=conf, ppe_crops=True, tiles=tiles)
+        tiles: tuple[int, int] = (1, 1), tile_conf: float = 0.55) -> dict:
+    engine = Engine(models, conf=conf, ppe_crops=True, tiles=tiles, tile_conf=tile_conf)
     print(f"\n== {tag}: {', '.join(Path(m).name for m in models)}")
     for m in engine.models:
         print(f"   {Path(m.path).name}: {len(m.names)} classes · licença: {m.license or 'não informada'}")
@@ -104,6 +104,9 @@ def run(models: list[str], source: str, out_dir: Path, conf: float, count: int, 
         totals.update(counts)
         cv2.imwrite(str(out_dir / f"{name}-{tag}.jpg"), draw(img, [d for d in dets if d.confidence >= conf]))
         desc = ", ".join(f"{n} {lbl}" for lbl, n in counts.most_common()) or "nada"
+        people = [f"{d.confidence:.2f}" for d in dets if d.label == "person" and d.confidence >= conf]
+        if people:
+            desc += f" [confiança das pessoas: {', '.join(people)}]"
         print(f"   {name}: {desc}  ({times[-1]:.0f} ms)")
     if not times:
         raise SystemExit("Nenhuma imagem analisada.")
@@ -123,15 +126,17 @@ def main() -> None:
     p.add_argument("--intervalo", default=2.0, type=float, help="segundos entre quadros da câmera")
     p.add_argument("--comparar", default="", help="outros modelos para comparar (ex.: yolov8n.pt)")
     p.add_argument("--blocos", default="1x1", help="analisar em blocos, ex.: 2x2 (cenas abertas, pessoas pequenas)")
+    p.add_argument("--confianca-blocos", default=0.55, type=float,
+                   help="confiança mínima do que só aparece nos blocos (evita tijolo/poste virar pessoa)")
     a = p.parse_args()
     a.fonte = ask_password(a.fonte)
     models = [m.strip() for m in a.modelos.split(",") if m.strip()]
     from .main import parse_tiles
     tiles = parse_tiles(a.blocos)
-    run(models, a.fonte, a.saida, a.confianca, a.quadros, a.intervalo, "teste", tiles)
+    run(models, a.fonte, a.saida, a.confianca, a.quadros, a.intervalo, "teste", tiles, a.confianca_blocos)
     if a.comparar:
         others = [m.strip() for m in a.comparar.split(",") if m.strip()]
-        run(others, a.fonte, a.saida, a.confianca, a.quadros, a.intervalo, "comparacao", tiles)
+        run(others, a.fonte, a.saida, a.confianca, a.quadros, a.intervalo, "comparacao", tiles, a.confianca_blocos)
 
 
 if __name__ == "__main__":
