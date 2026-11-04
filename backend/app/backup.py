@@ -17,6 +17,7 @@ import sqlite3
 import tempfile
 import threading
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
@@ -24,6 +25,18 @@ from .config import settings
 from .timeutil import local_tz
 
 log = logging.getLogger("vigia.backup")
+
+
+@contextmanager
+def _db(*args, **kwargs):
+    """Abre o SQLite e FECHA ao sair. O "with sqlite3.connect()" do Python só confirma a transação e deixa o
+    arquivo aberto – no Windows isso trava a pasta temporária do backup (WinError 32)."""
+    conn = sqlite3.connect(*args, **kwargs)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 NAME_RE = re.compile(r"vigia-\d{8}-\d{6}(-[a-z0-9-]+)?\.(zip|db)")
 FORMAT_VERSION = 1
@@ -80,7 +93,7 @@ def backup_path(name: str) -> Path:
 
 
 def _counts(db_file: Path) -> dict:
-    with sqlite3.connect(db_file) as conn:
+    with _db(db_file) as conn:
         tables = {r[0] for r in conn.execute("select name from sqlite_master where type='table'")}
         return {t: conn.execute(f"select count(*) from {t}").fetchone()[0]
                 for t in ("users", "cameras", "rules", "events", "actions") if t in tables}
@@ -111,7 +124,7 @@ def _run_backup(source: Path, include_evidence: bool, label: str, rotate: bool) 
     evidence_files = 0
     with tempfile.TemporaryDirectory() as tmp:
         snapshot = Path(tmp) / "vigia.db"
-        with sqlite3.connect(source) as src, sqlite3.connect(snapshot) as dst:
+        with _db(source) as src, _db(snapshot) as dst:
             src.backup(dst)
         partial = target.with_suffix(".parcial")
         with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -172,7 +185,7 @@ def _safe_member(name: str) -> bool:
 
 def _validate_db(db_file: Path) -> dict:
     try:
-        with sqlite3.connect(f"file:{db_file}?mode=ro", uri=True) as conn:
+        with _db(f"file:{db_file}?mode=ro", uri=True) as conn:
             if conn.execute("pragma integrity_check").fetchone()[0] != "ok":
                 raise BackupError("o banco de dados do backup está corrompido")
             tables = {r[0] for r in conn.execute("select name from sqlite_master where type='table'")}
@@ -225,7 +238,7 @@ def restore(path: Path) -> dict:
         try:
             safety = _run_backup(target, include_evidence=False, label="antes-restauracao", rotate=False)
             engine.dispose()  # fecha as conexões abertas do sistema
-            with sqlite3.connect(db_file) as src, sqlite3.connect(target, timeout=30) as dst:
+            with _db(db_file) as src, _db(target, timeout=30) as dst:
                 src.backup(dst)
             engine.dispose()
             migrate()  # backup de versão anterior: acrescenta as colunas novas
