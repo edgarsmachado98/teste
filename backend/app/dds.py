@@ -64,7 +64,7 @@ THEMES = [
         "Plug: enrole, puxe a orelha para cima e para trás, insira e segure até expandir.",
         "Tirar o protetor por poucos minutos em área ruidosa já reduz muito a proteção.",
         "A audiometria periódica acompanha a sua audição – não falte ao exame.",
-    ], "Quais equipamentos do setor são mais barulhentos?", []),
+    ], "Quais equipamentos do setor são mais barulhentos?", ["ppe:ear_protection"]),
     ("epi_conservacao", "EPI", "Conservação, higienização e troca do EPI (CA válido)", "NR-6", [
         "Todo EPI precisa de Certificado de Aprovação (CA) válido.",
         "Guarde em local limpo e seco; não deixe ao sol ou junto de produtos químicos.",
@@ -136,7 +136,7 @@ THEMES = [
         "Ancore o talabarte em ponto resistente, acima da cabeça, antes de se expor ao risco.",
         "Inspecione o cinto antes do uso: costuras, fivelas e absorvedor de energia.",
         "Sem permissão de trabalho e análise de risco, o serviço não começa.",
-    ], "Que tarefas 'rápidas' em altura fazemos sem ancoragem?", []),
+    ], "Que tarefas 'rápidas' em altura fazemos sem ancoragem?", ["ppe:harness"]),
     ("escadas", "Trabalho em altura", "Escadas portáteis: inspeção e três pontos de apoio", "NR-35 · NR-18", [
         "Inspecione degraus, sapatas e travas antes de subir.",
         "Mantenha três pontos de contato: duas mãos e um pé, ou dois pés e uma mão.",
@@ -265,15 +265,20 @@ THEMES = [
 THEME_INDEX = {t[0]: t for t in THEMES}
 
 PPE_WORDS = {"capacete": "helmet", "colete": "vest", "óculos": "glasses", "oculos": "glasses",
-             "luva": "gloves", "máscara": "mask", "mascara": "mask"}
+             "luva": "gloves", "máscara": "mask", "mascara": "mask", "cinto": "harness", "botina": "boots",
+             "auricular": "ear_protection", "protetor facial": "face_shield"}
 
 
 def ensure_themes(db: Session) -> int:
-    """Cria os temas de referência que ainda não existem (instalação nova ou versão nova)."""
-    existing = set(db.scalars(select(DDSTheme.code).where(DDSTheme.code.is_not(None))))
+    """Cria os temas de referência que ainda não existem e atualiza os gatilhos dos que já existem
+    (instalação nova ou versão nova)."""
+    existing = {t.code: t for t in db.scalars(select(DDSTheme).where(DDSTheme.code.is_not(None)))}
     added = 0
     for code, category, title, reference, points, question, triggers in THEMES:
         if code in existing:
+            if existing[code].builtin and list(existing[code].triggers or []) != triggers:
+                existing[code].triggers = triggers
+                added += 1
             continue
         db.add(DDSTheme(code=code, category=category, title=title, reference=reference, points=points,
                         question=question, triggers=triggers, builtin=True))
@@ -307,7 +312,9 @@ def suggestions(db: Session, unit_id: int | None, sector_id: int | None, days: i
     labels = {"type:ppe_missing": "falta de EPI", "type:restricted_zone": "entrada em zona restrita",
               "type:max_people": "excesso de pessoas", "type:fire_smoke": "fogo/fumaça",
               "ppe:helmet": "falta de capacete", "ppe:vest": "falta de colete", "ppe:glasses": "falta de óculos",
-              "ppe:gloves": "falta de luvas", "ppe:mask": "falta de máscara"}
+              "ppe:gloves": "falta de luvas", "ppe:mask": "falta de máscara", "ppe:harness": "falta de cinto",
+              "ppe:boots": "falta de botina", "ppe:ear_protection": "falta de protetor auricular",
+              "ppe:face_shield": "falta de protetor facial"}
     out = []
     for theme in db.scalars(select(DDSTheme).where(DDSTheme.active.is_(True))):
         hits = {t: tags[t] for t in (theme.triggers or []) if tags.get(t)}

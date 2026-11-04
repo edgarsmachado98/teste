@@ -2,7 +2,7 @@
 
 import { $, $$, PPE_LABELS, api, badge, can, esc, fmtDateTime, toast, session } from "../core.js";
 
-const PPE = ["helmet", "vest", "glasses", "gloves", "mask"];
+const PPE = ["helmet", "vest", "glasses", "gloves", "mask", "harness", "boots", "ear_protection", "face_shield"];
 const SEVERITIES = [["baixa", "Baixa"], ["media", "Média"], ["alta", "Alta"], ["critica", "Crítica"]];
 const BEHAVIORS = [
   ["restricted_zone", "Zona restrita", "Ninguém dentro da área demarcada (a zona é desenhada em cada câmera)"],

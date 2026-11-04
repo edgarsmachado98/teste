@@ -26,8 +26,11 @@ from pathlib import Path
 from .rules import Detection
 
 # Classes canônicas (mesmos nomes usados pelas regras; ver labels.py)
+# Novas classes entram SEMPRE no fim: os números das antigas não mudam (rótulos já feitos continuam valendo)
 CLASSES = ["person", "helmet", "no_helmet", "vest", "no_vest", "glasses", "no_glasses",
-           "gloves", "no_gloves", "mask", "no_mask", "fire", "smoke"]
+           "gloves", "no_gloves", "mask", "no_mask", "fire", "smoke",
+           "harness", "no_harness", "boots", "no_boots", "ear_protection", "no_ear_protection",
+           "face_shield", "no_face_shield"]
 CLASS_INDEX = {name: i for i, name in enumerate(CLASSES)}
 
 
@@ -81,6 +84,49 @@ class Collector:
         cv2.imwrite(str(self.images / f"{name}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
         (self.labels / f"{name}.txt").write_text("\n".join(yolo_lines(detections)), encoding="utf-8")
         return True
+
+
+IMAGE_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+
+
+def import_images(source: Path, target: Path, model_paths: list[str] | None = None, prefix: str = "ref") -> dict:
+    """Traz imagens de fora das câmeras (fotos de referência, bancos públicos, fotos tiradas na obra) para a
+    pasta de coleta, no mesmo formato YOLO. Com modelos, cada imagem já vai PRÉ-ROTULADA pela IA atual
+    (só corrigir no Label Studio); sem modelos, vai sem rótulo (marcar do zero)."""
+    import cv2
+
+    files = sorted(p for p in Path(source).rglob("*") if p.suffix.lower() in IMAGE_TYPES)
+    if not files:
+        raise SystemExit(f"Nenhuma imagem ({', '.join(sorted(IMAGE_TYPES))}) em {source}.")
+    images, labels = Path(target) / "images", Path(target) / "labels"
+    images.mkdir(parents=True, exist_ok=True)
+    labels.mkdir(parents=True, exist_ok=True)
+    (Path(target) / "classes.txt").write_text("\n".join(CLASSES) + "\n", encoding="utf-8")
+    engine = None
+    if model_paths:
+        from .engine import Engine
+        engine = Engine(model_paths)
+    result = {"imported": 0, "prelabeled": 0, "skipped": 0}
+    for path in files:
+        frame = cv2.imread(str(path))
+        if frame is None:  # arquivo corrompido ou formato que o OpenCV não lê
+            result["skipped"] += 1
+            continue
+        name = f"{prefix}-{slug(path.stem)}"
+        n = 1
+        while (images / f"{name}.jpg").exists():
+            n += 1
+            name = f"{prefix}-{slug(path.stem)}-{n}"
+        cv2.imwrite(str(images / f"{name}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        result["imported"] += 1
+        if engine is not None:
+            (labels / f"{name}.txt").write_text("\n".join(yolo_lines(engine.detect(frame))), encoding="utf-8")
+            result["prelabeled"] += 1
+    print(f"{result['imported']} imagem(ns) importada(s) para {target}"
+          + (f", {result['prelabeled']} pré-rotulada(s) pela IA" if engine else " (sem rótulo: marque no Label Studio)")
+          + (f"; {result['skipped']} ignorada(s)" if result["skipped"] else "") + ".")
+    print("Corrija/marque no Label Studio (formato YOLO, classes em classes.txt) e depois rode 'preparar'.")
+    return result
 
 
 def prepare(source: Path, output: Path, val_fraction: float = 0.2, seed: int = 7) -> dict:
@@ -156,6 +202,11 @@ def main() -> None:
     p.add_argument("--origem", required=True, type=Path, help="pasta da coleta (DATASET_DIR)")
     p.add_argument("--saida", default=Path("treino"), type=Path)
     p.add_argument("--validacao", default=0.2, type=float, help="fração para validação (padrão 0.2)")
+    i = sub.add_parser("importar", help="traz fotos de fora (referência, bancos públicos) para a pasta de coleta")
+    i.add_argument("--origem", required=True, type=Path, help="pasta com as imagens (jpg, png, webp...)")
+    i.add_argument("--destino", required=True, type=Path, help="pasta de coleta (a mesma do DATASET_DIR)")
+    i.add_argument("--modelos", default="", help="modelos para pré-rotular, ex.: yolov8n.pt,../modelos/epi.pt")
+    i.add_argument("--prefixo", default="ref", help="início do nome dos arquivos (separa estas imagens das câmeras)")
     t = sub.add_parser("treinar", help="treina um modelo a partir do data.yaml")
     t.add_argument("--dados", required=True, type=Path)
     t.add_argument("--base", default="yolov8s.pt", help="modelo inicial (padrão yolov8s.pt)")
@@ -172,6 +223,8 @@ def main() -> None:
 
     if args.cmd == "preparar":
         prepare(args.origem, args.saida, args.validacao)
+    elif args.cmd == "importar":
+        import_images(args.origem, args.destino, [m.strip() for m in args.modelos.split(",") if m.strip()], args.prefixo)
     elif args.cmd == "treinar":
         train(args.dados, args.base, args.epocas, args.img, args.device, args.modelos)
     else:

@@ -108,7 +108,7 @@ class RuleOut(RuleIn):
 
 # ---------- Unidades e setores ----------
 
-PPEItem = Literal["helmet", "vest", "glasses", "gloves", "mask"]
+PPEItem = Literal["helmet", "vest", "glasses", "gloves", "mask", "harness", "boots", "ear_protection", "face_shield"]
 
 
 class UnitIn(BaseModel):

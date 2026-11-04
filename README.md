@@ -263,6 +263,29 @@ modelo de capacete). O fluxo:
 
 As imagens coletadas mostram trabalhadores: restrinja o acesso à pasta e apague-a depois do treino.
 
+#### EPIs que o VigIA verifica
+
+Capacete, colete, óculos, luvas, máscara, **cinto paraquedista**, **botina**, **protetor auricular** e
+**protetor facial**. Cada item só é cobrado se algum modelo carregado em `MODEL_PATHS` souber reconhecê-lo;
+caso contrário a regra mostra um aviso em **Regras** e não acusa ninguém por aquele item. O detector também
+confere se o EPI está no lugar certo do corpo (capacete na cabeça, botina nos pés, cinto no tronco) e não
+julga pessoas pequenas demais na imagem.
+
+Nomes de classes de bancos públicos são reconhecidos automaticamente (ex.: `Hardhat`, `NO-Hardhat`,
+`safety-vest`, `shoes`, `ear-mufs`, `face-guard`, `Safety Harness`). Para outros nomes, use
+`LABEL_MAP='{"nome_no_modelo": "harness"}'` no `.env`.
+
+#### Fotos de fora das câmeras (referência, bancos públicos, fotos da obra)
+
+```powershell
+cd detector; python -m vigia_detector.dataset importar --origem C:\fotos-epi --destino C:\vigia-treino\coleta --modelos yolov8n.pt,..\modelos\epi.pt
+```
+
+As fotos entram na mesma pasta da coleta (nomes começando com `ref-`), já pré-rotuladas pela IA atual
+quando `--modelos` é informado. Elas **complementam** as imagens das câmeras, que continuam sendo a base:
+fotos de frente e de perto ensinam pouco sobre a visão de cima e de longe das câmeras. Bancos públicos
+(Roboflow Universe, SH17 e outros) aceleram o começo; confira a licença antes de uso comercial.
+
 ### Dados de demonstração (para apresentar a clientes)
 
 Gera 60 dias de ocorrências, ações e conformidade de EPI realistas, com usuários de exemplo

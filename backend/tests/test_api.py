@@ -849,3 +849,14 @@ def test_camera_connect_error_shown_and_cleared(client, admin):
                 files={"frame": ("f.jpg", b"\xff\xd8x", "image/jpeg")})
     got = next(c for c in client.get("/api/cameras", headers=admin).json() if c["id"] == cam["id"])
     assert got["connect_error"] is None
+
+
+def test_new_ppe_items_accepted_in_sector_standard(client, admin):
+    unit = client.get("/api/units", headers=admin).json()[0]["id"]
+    r = client.post("/api/sectors", headers=admin, json={
+        "unit_id": unit, "name": "Montagem metálica", "required_ppe": ["helmet", "harness", "boots", "ear_protection",
+                                                                        "face_shield"], "behaviors": {}})
+    assert r.status_code == 201, r.text
+    assert r.json()["sector"]["required_ppe"] == ["helmet", "harness", "boots", "ear_protection", "face_shield"]
+    assert client.post("/api/sectors", headers=admin, json={"unit_id": unit, "name": "X", "required_ppe": ["capa"],
+                                                              "behaviors": {}}).status_code == 422

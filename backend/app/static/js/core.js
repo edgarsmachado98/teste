@@ -6,8 +6,11 @@ export const TYPE_LABELS = {
   fire_smoke: "Fogo / fumaça",
   max_people: "Excesso de pessoas",
 };
-export const PPE_ITEMS = ["helmet", "vest", "glasses", "gloves", "mask"];
-export const PPE_LABELS = { helmet: "capacete", vest: "colete", glasses: "óculos", gloves: "luvas", mask: "máscara" };
+export const PPE_ITEMS = ["helmet", "vest", "glasses", "gloves", "mask", "harness", "boots", "ear_protection", "face_shield"];
+export const PPE_LABELS = {
+  helmet: "capacete", vest: "colete", glasses: "óculos", gloves: "luvas", mask: "máscara",
+  harness: "cinto paraquedista", boots: "botina", ear_protection: "protetor auricular", face_shield: "protetor facial",
+};
 export const STATUS_LABELS = { nova: "Nova", confirmada: "Em tratamento", descartada: "Falso alarme", encerrada: "Encerrada" };
 export const CLASS_LABELS = {
   ato_inseguro: "Ato inseguro",

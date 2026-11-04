@@ -29,8 +29,8 @@ def merge(detections: list[Detection], threshold: float = 0.5) -> list[Detection
     return kept
 
 
-PPE_LABELS = {"helmet", "vest", "glasses", "gloves", "mask", "no_helmet", "no_vest", "no_glasses", "no_gloves",
-              "no_mask"}
+PPE_ITEMS_ALL = ("helmet", "vest", "glasses", "gloves", "mask", "harness", "boots", "ear_protection", "face_shield")
+PPE_LABELS = set(PPE_ITEMS_ALL) | {f"no_{i}" for i in PPE_ITEMS_ALL}
 
 
 class Engine:

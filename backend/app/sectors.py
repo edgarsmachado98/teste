@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .models import Camera, Rule, Sector, Unit
 
-PPE_LABELS = {"helmet": "capacete", "vest": "colete", "glasses": "óculos", "gloves": "luvas", "mask": "máscara"}
+PPE_LABELS = {"helmet": "capacete", "vest": "colete", "glasses": "óculos", "gloves": "luvas", "mask": "máscara",
+              "harness": "cinto paraquedista", "boots": "botina", "ear_protection": "protetor auricular",
+              "face_shield": "protetor facial"}
 BEHAVIOR_TYPES = ("restricted_zone", "max_people", "fire_smoke")
 
 # Modelos de referência por atividade (ponto de partida; o cliente ajusta à sua realidade)

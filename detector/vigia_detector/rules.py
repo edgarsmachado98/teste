@@ -8,11 +8,13 @@ from datetime import datetime
 
 # Rótulos canônicos usados pelas regras. Os modelos são mapeados para estes nomes em labels.py.
 PERSON = "person"
-PPE_ITEMS = ("helmet", "vest", "glasses", "gloves", "mask")
+PPE_ITEMS = ("helmet", "vest", "glasses", "gloves", "mask", "harness", "boots", "ear_protection", "face_shield")
 FIRE_LABELS = ("fire", "smoke")
 
 PT_FIRE = {"fire": "fogo", "smoke": "fumaça"}
-PPE_NAMES = {"helmet": "capacete", "vest": "colete", "glasses": "óculos", "gloves": "luvas", "mask": "máscara"}
+PPE_NAMES = {"helmet": "capacete", "vest": "colete", "glasses": "óculos", "gloves": "luvas", "mask": "máscara",
+             "harness": "cinto paraquedista", "boots": "botina", "ear_protection": "protetor auricular",
+             "face_shield": "protetor facial"}
 
 
 @dataclass(frozen=True)
@@ -76,7 +78,8 @@ def in_schedule(rule: dict, now: datetime) -> bool:
 # Onde cada EPI fica no corpo, em fração da altura da caixa da pessoa (0 = topo da cabeça).
 # Capacete no chão ou na mão perto da pessoa não conta; capacete de outra pessoa ao lado também não.
 BODY_REGION = {"helmet": (-0.10, 0.35), "glasses": (0.0, 0.30), "mask": (0.0, 0.35), "vest": (0.12, 0.80),
-               "gloves": (0.0, 1.0)}
+               "gloves": (0.0, 1.0), "harness": (0.12, 0.75), "boots": (0.78, 1.08), "ear_protection": (0.0, 0.30),
+               "face_shield": (-0.10, 0.35)}
 DEFAULT_MIN_PERSON_HEIGHT = 0.10  # pessoa menor que 10% da altura da imagem: longe demais para avaliar EPI
 MIN_STANDING_RATIO = 1.15  # altura/largura em pixels: abaixo disso não parece pessoa em pé (máquina, sombra...)
 
