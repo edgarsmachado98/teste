@@ -3,6 +3,7 @@
   python -m vigia_detector.testar_modelo --modelos ..\\modelos\\yolox_s.onnx --fonte foto.jpg
   python -m vigia_detector.testar_modelo --modelos ..\\modelos\\yolox_s.onnx --fonte C:\\fotos
   python -m vigia_detector.testar_modelo --modelos ..\\modelos\\yolox_s.onnx --fonte "rtsp://admin:SENHA@192.168.0.10:554/cam/realmonitor?channel=1&subtype=0" --quadros 10
+  (com SENHA escrito assim no endereço, o teste pergunta a senha sem mostrá-la)
 
 Para cada imagem: grava uma cópia marcada (pasta --saida), lista o que foi detectado e o tempo de análise.
 Use --comparar com um modelo .pt para ver lado a lado o motor livre (ONNX) e o da Ultralytics.
@@ -62,6 +63,17 @@ def frames_from(source: str, count: int, every: float):
     cap.release()
 
 
+def ask_password(source: str) -> str:
+    """Endereço com a palavra SENHA no lugar da senha: pergunta sem mostrar o que é digitado
+    (a senha não fica no histórico do PowerShell nem em prints). Caracteres especiais são codificados."""
+    if not source.lower().startswith("rtsp://") or ":SENHA@" not in source:
+        return source
+    import getpass
+    from urllib.parse import quote
+    password = getpass.getpass("Senha da câmera (não aparece ao digitar): ")
+    return source.replace(":SENHA@", f":{quote(password, safe='')}@", 1)
+
+
 def draw(img, detections):
     out = img.copy()
     h, w = out.shape[:2]
@@ -112,6 +124,7 @@ def main() -> None:
     p.add_argument("--comparar", default="", help="outros modelos para comparar (ex.: yolov8n.pt)")
     p.add_argument("--blocos", default="1x1", help="analisar em blocos, ex.: 2x2 (cenas abertas, pessoas pequenas)")
     a = p.parse_args()
+    a.fonte = ask_password(a.fonte)
     models = [m.strip() for m in a.modelos.split(",") if m.strip()]
     from .main import parse_tiles
     tiles = parse_tiles(a.blocos)
