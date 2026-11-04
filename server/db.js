@@ -1,0 +1,200 @@
+/* Banco de dados SQLite (módulo node:sqlite, embutido no Node 22.13+). */
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
+
+const ESQUEMA = `
+CREATE TABLE IF NOT EXISTS usuarios (
+  id            TEXT PRIMARY KEY,
+  nome          TEXT NOT NULL,
+  login         TEXT NOT NULL UNIQUE,
+  perfil        TEXT NOT NULL CHECK (perfil IN ('admin', 'operador', 'consulta')),
+  ativo         INTEGER NOT NULL DEFAULT 1,
+  senha_hash    TEXT NOT NULL,
+  tentativas    INTEGER NOT NULL DEFAULT 0,
+  bloqueado_ate INTEGER NOT NULL DEFAULT 0,
+  criado_em     TEXT NOT NULL,
+  ultimo_acesso TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sessoes (
+  token_hash TEXT PRIMARY KEY,
+  usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  criada_em  INTEGER NOT NULL,
+  expira_em  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS setores (
+  id                 TEXT PRIMARY KEY,
+  nome               TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  minimo_por_dia     INTEGER NOT NULL DEFAULT 0,
+  dias_funcionamento TEXT NOT NULL,
+  funciona_feriados  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS colaboradores (
+  id        TEXT PRIMARY KEY,
+  nome      TEXT NOT NULL,
+  matricula TEXT NOT NULL UNIQUE,
+  sexo      TEXT NOT NULL CHECK (sexo IN ('F', 'M')),
+  setor_id  TEXT NOT NULL REFERENCES setores(id),
+  jornada   TEXT NOT NULL,
+  entrada   TEXT NOT NULL,
+  rh        TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS feriados (
+  data TEXT PRIMARY KEY,
+  nome TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS configuracoes (
+  chave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS escala (
+  id            INTEGER PRIMARY KEY CHECK (id = 1),
+  inicio        TEXT NOT NULL,
+  fim           TEXT NOT NULL,
+  dados         TEXT NOT NULL,
+  gerada_por    TEXT,
+  gerada_em     TEXT NOT NULL,
+  atualizada_em TEXT NOT NULL
+);
+
+-- uma escala por escopo: '' = todos os colaboradores; senão, o código do centro de custo
+CREATE TABLE IF NOT EXISTS escalas (
+  escopo        TEXT PRIMARY KEY,
+  inicio        TEXT NOT NULL,
+  fim           TEXT NOT NULL,
+  dados         TEXT NOT NULL,
+  gerada_por    TEXT,
+  gerada_em     TEXT NOT NULL,
+  atualizada_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS auditoria (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  em            TEXT NOT NULL,
+  usuario_id    TEXT,
+  usuario_login TEXT,
+  acao          TEXT NOT NULL,
+  detalhe       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS contratos_representante (
+  id            TEXT PRIMARY KEY,
+  razao_social  TEXT NOT NULL,
+  cnpj          TEXT NOT NULL,
+  situacao      TEXT NOT NULL DEFAULT 'ativo' CHECK (situacao IN ('ativo', 'encerrado')),
+  dados         TEXT NOT NULL,
+  criado_por    TEXT,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS indices (
+  serie         TEXT NOT NULL,
+  mes           TEXT NOT NULL,
+  valor         REAL NOT NULL,
+  fonte         TEXT NOT NULL DEFAULT 'manual',
+  atualizado_em TEXT NOT NULL,
+  PRIMARY KEY (serie, mes)
+);
+
+CREATE TABLE IF NOT EXISTS distratos (
+  id            TEXT PRIMARY KEY,
+  contrato_id   TEXT NOT NULL REFERENCES contratos_representante(id),
+  representada  TEXT NOT NULL CHECK (representada IN ('cia', 'alimentos')),
+  data_distrato TEXT NOT NULL,
+  total         REAL NOT NULL DEFAULT 0,
+  dados         TEXT NOT NULL,
+  criado_por    TEXT,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL,
+  UNIQUE (contrato_id, representada)
+);
+
+CREATE TABLE IF NOT EXISTS empresas (
+  id            TEXT PRIMARY KEY,
+  razao_social  TEXT NOT NULL,
+  cnpj          TEXT NOT NULL UNIQUE,
+  dados         TEXT NOT NULL,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
+
+-- modelos (contrato, distrato, planilha de comissões; vários por tipo) e logotipo (um) de cada empresa
+CREATE TABLE IF NOT EXISTS empresas_arquivos (
+  id          TEXT PRIMARY KEY,
+  empresa_id  TEXT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+  tipo        TEXT NOT NULL,
+  nome        TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  tamanho     INTEGER NOT NULL,
+  dados       BLOB NOT NULL,
+  enviado_por TEXT,
+  enviado_em  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_empresas_arquivos ON empresas_arquivos(empresa_id);
+
+CREATE TABLE IF NOT EXISTS centros_custo (
+  codigo        TEXT PRIMARY KEY,
+  nome          TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS folha_competencias (
+  competencia   TEXT PRIMARY KEY,
+  dados         TEXT NOT NULL DEFAULT '{}',
+  criada_em     TEXT NOT NULL,
+  atualizada_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS folha_lancamentos (
+  competencia    TEXT NOT NULL REFERENCES folha_competencias(competencia) ON DELETE CASCADE,
+  colaborador_id TEXT NOT NULL REFERENCES colaboradores(id),
+  dados          TEXT NOT NULL,
+  PRIMARY KEY (competencia, colaborador_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_folha_colaborador ON folha_lancamentos(colaborador_id);
+CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_contratos_cnpj ON contratos_representante(cnpj);
+CREATE INDEX IF NOT EXISTS idx_colaboradores_setor ON colaboradores(setor_id);
+`;
+
+function abrirBanco(arquivo) {
+  if (arquivo !== ':memory:') fs.mkdirSync(path.dirname(path.resolve(arquivo)), { recursive: true });
+  const db = new DatabaseSync(arquivo);
+  db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+  if (arquivo !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
+  db.exec(ESQUEMA);
+  // bancos criados antes do módulo de custos: dados contratuais do colaborador
+  if (!db.prepare('PRAGMA table_info(colaboradores)').all().some((c) => c.name === 'rh')) {
+    db.exec("ALTER TABLE colaboradores ADD COLUMN rh TEXT NOT NULL DEFAULT '{}'");
+  }
+  // bancos anteriores à escala por centro de custo: a escala única vira a escala de "todos"
+  db.exec(`INSERT OR IGNORE INTO escalas (escopo, inicio, fim, dados, gerada_por, gerada_em, atualizada_em)
+    SELECT '', inicio, fim, dados, gerada_por, gerada_em, atualizada_em FROM escala WHERE id = 1;
+    DELETE FROM escala;`);
+
+  /** Executa fn dentro de uma transação; desfaz tudo se lançar erro. */
+  db.transacao = (fn) => {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const r = fn();
+      db.exec('COMMIT');
+      return r;
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+  };
+  return db;
+}
+
+module.exports = { abrirBanco };

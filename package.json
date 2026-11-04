@@ -1,0 +1,14 @@
+{
+  "name": "gestao-pessoal-rh",
+  "version": "4.18.3",
+  "description": "Representantes Comerciais: contratos, distratos e relatórios da representação comercial",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.js"
+  },
+  "license": "MIT"
+}
