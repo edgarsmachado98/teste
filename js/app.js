@@ -205,6 +205,13 @@
 
   // ----------------------------------------------------------------- início
 
+  const NOMES_UF = {
+    AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal',
+    ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais',
+    PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte',
+    RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
+  };
+
   function renderInicio() {
     if (!usuario) return;
     const h = new Date().getHours();
@@ -219,19 +226,25 @@
     Promise.all([api.get('/api/contratos'), api.get('/api/distratos')]).then(([contratos, distratos]) => {
       const C = window.EscalaContrato;
       const ativos = contratos.filter((c) => c.situacao !== 'encerrado');
+      // por estado: UF do endereço do representante (na falta dela, o estado de atuação do contrato)
       const porEstado = {};
+      const porAtuacao = {};
       for (const c of ativos) {
-        const uf = C.listaEstados(c.estados)[0] || 'sem estado';
+        const atuacao = C.listaEstados(c.estados)[0];
+        const uf = String(c.uf || '').toUpperCase() || atuacao || '—';
         porEstado[uf] = (porEstado[uf] || 0) + 1;
+        if (atuacao) porAtuacao[atuacao] = (porAtuacao[atuacao] || 0) + 1;
       }
-      const ordem = [...C.ESTADOS_ATUACAO.map((e) => e.uf), 'sem estado'].filter((uf) => porEstado[uf]);
-      const nomeUF = Object.fromEntries(C.ESTADOS_ATUACAO.map((e) => [e.uf, e.nome]));
-      const regioes = ordem.map((uf) => `<span class="tile-regiao"><b>${porEstado[uf]}</b> ${esc(nomeUF[uf] || 'Sem estado definido')}</span>`).join('');
+      const ordem = Object.keys(porEstado).sort((a, b) => porEstado[b] - porEstado[a] || a.localeCompare(b));
+      const regioes = ordem.map((uf) => `<span class="tile-regiao" title="${esc(NOMES_UF[uf] || 'Sem estado no cadastro')}">` +
+        `<b>${porEstado[uf]}</b> ${esc(NOMES_UF[uf] || 'Sem estado')}</span>`).join('');
+      const atuacao = Object.entries(porAtuacao).map(([uf, n]) => `${uf} ${n}`).join(' · ');
       const encerrados = contratos.length - ativos.length;
       $('#resumo-inicio').innerHTML =
         tile('Representantes ativos', String(ativos.length), encerrados ? `${encerrados} contrato(s) encerrado(s)` : 'Nenhum contrato encerrado') +
-        `<div class="tile"><span class="tile-rotulo">Por região de atuação</span>
-          <span class="tile-regioes">${regioes || '<span class="tile-detalhe">Nenhum representante ativo</span>'}</span></div>` +
+        `<div class="tile"><span class="tile-rotulo">Representantes ativos por estado</span>
+          <span class="tile-regioes">${regioes || '<span class="tile-detalhe">Nenhum representante ativo</span>'}</span>
+          ${atuacao ? `<span class="tile-detalhe">Modelo de contrato (estado de atuação): ${esc(atuacao)}</span>` : ''}</div>` +
         tile('Distratos', String(distratos.length), distratos.length
           ? `${new Set(distratos.map((d) => d.contratoId)).size} representante(s)` : 'Nenhum distrato registrado');
     }).catch(() => { /* sem acesso ou fora do ar: o painel fica sem os números */ });

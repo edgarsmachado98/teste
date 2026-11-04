@@ -1,6 +1,6 @@
 {
   "name": "gestao-pessoal-rh",
-  "version": "4.18.2",
+  "version": "4.18.3",
   "description": "Representantes Comerciais: contratos, distratos e relatórios da representação comercial",
   "private": true,
   "engines": {
