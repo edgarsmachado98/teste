@@ -87,6 +87,9 @@ def diagnose(source: str) -> str:
             code, _ = _rtsp_request(host, port, "DESCRIBE", clean, {"Accept": "application/sdp", "Authorization": auth})
     except (OSError, ValueError):
         return f"{host}:{port} respondeu, mas não como câmera RTSP – confira a porta"
+    if code == 401 and parts.path in ("", "/"):
+        return ("usuário ou senha recusados – e o endereço está sem o caminho do stream: complete-o antes de "
+                f"tentar outra senha ({HINT_PATHS}). Atenção: muitas câmeras bloqueiam após várias tentativas erradas")
     if code == 401:
         return "usuário ou senha recusados pela câmera (atenção: muitas câmeras bloqueiam após várias tentativas erradas)"
     if code in (404, 400):

@@ -51,6 +51,7 @@ def test_diagnose_messages():
     base = f"127.0.0.1:{port}"
     pw = "s3nh%40forte"  # '@' na senha precisa ir codificado no endereço
     assert "usuário ou senha recusados" in diagnose(f"rtsp://admin:errada@{base}{PATH}?channel=1&subtype=1")
+    assert "sem o caminho do stream" in diagnose(f"rtsp://admin:errada@{base}/")
     assert "exige usuário e senha" in diagnose(f"rtsp://{base}{PATH}")
     assert "caminho do stream não existe" in diagnose(f"rtsp://admin:{pw}@{base}/stream1")
     assert "Intelbras/Dahua: /cam/realmonitor" in diagnose(f"rtsp://admin:{pw}@{base}/stream1")
