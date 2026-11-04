@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Empresas já existentes no sistema, cadastradas na primeira inicialização com os modelos
- * que o CORE RH gera hoje (campos do representante em branco) e os logotipos.
+ * que o Representantes Comerciais gera hoje (campos do representante em branco) e os logotipos.
  */
 const fs = require('node:fs');
 const path = require('node:path');

@@ -1,7 +1,7 @@
 {
   "name": "gestao-pessoal-rh",
-  "version": "4.18.0",
-  "description": "CORE RH: rotinas do departamento pessoal conforme a legislação trabalhista brasileira",
+  "version": "4.18.1",
+  "description": "Representantes Comerciais: contratos, distratos e relatórios da representação comercial",
   "private": true,
   "engines": {
     "node": ">=22.13"

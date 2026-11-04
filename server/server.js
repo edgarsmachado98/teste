@@ -1,5 +1,5 @@
 /*
- * Servidor HTTP do CORE RH (sem dependências externas).
+ * Servidor HTTP do Representantes Comerciais (sem dependências externas).
  *
  *   npm start                     -> http://localhost:3000
  *
@@ -360,7 +360,7 @@ if (require.main === module) {
   });
   servidor.listen(porta, host, () => {
     const endereco = host === '0.0.0.0' ? 'localhost' : host;
-    console.log(`CORE RH — versão ${VERSAO}`);
+    console.log(`Representantes Comerciais — versão ${VERSAO}`);
     console.log(`Rodando em http://${endereco}:${porta}`);
     console.log(`Banco de dados: ${arquivo}`);
     if (copia) console.log(`Cópia de segurança: ${copia}`);

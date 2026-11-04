@@ -1,4 +1,4 @@
-/* Interface do CORE RH. Os dados ficam no servidor (API em /api). */
+/* Interface do Representantes Comerciais. Os dados ficam no servidor (API em /api). */
 (function () {
   'use strict';
 
@@ -170,14 +170,14 @@
     // título da página: módulo e, quando houver, a seção dentro dele
     const botaoModulo = $(`.modulo[data-modulo="${mod}"]`);
     const nomeModulo = botaoModulo.querySelector('.rotulo').textContent;
-    const grupo = botaoModulo.dataset.grupo || 'CORE RH';
+    const grupo = botaoModulo.dataset.grupo || 'Representantes Comerciais';
     const aba = abas.find((b) => b.dataset.aba === nome);
     $('#menu-grupo').textContent = grupo.toUpperCase();
     $('#menu-titulo-modulo').textContent = nomeModulo;
     $('#titulo-pagina').textContent = aba ? aba.textContent : nomeModulo;
     // caminho: grupo › módulo (quando a página é uma seção do módulo)
     $('#caminho-pagina').textContent = aba ? `${grupo} › ${nomeModulo}` : grupo;
-    document.title = mod === 'inicio' ? 'CORE RH' : `${$('#titulo-pagina').textContent} · CORE RH`;
+    document.title = mod === 'inicio' ? 'Representantes Comerciais' : `${$('#titulo-pagina').textContent} · Representantes Comerciais`;
     if (!manterMenu) abrirMenu(false);
     if (mod === 'inicio') renderInicio();
   }
@@ -980,7 +980,7 @@
   $('#btn-exportar-json').addEventListener('click', async () => {
     try {
       const b = await api.get('/api/backup');
-      baixar(`gestao-rh-backup-${b.exportadoEm.slice(0, 10)}.json`, JSON.stringify(b, null, 2), 'application/json');
+      baixar(`representantes-backup-${b.exportadoEm.slice(0, 10)}.json`, JSON.stringify(b, null, 2), 'application/json');
     } catch (e) {
       avisar(e.message);
     }

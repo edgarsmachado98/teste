@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title CORE RH - Atualizar
+title Representantes Comerciais - Atualizar
 rem Atualiza o sistema a partir do ZIP baixado do GitHub, sem tocar na pasta "dados" (banco de dados).
 rem Uso: de dois cliques (procura o ZIP mais recente em Downloads) ou arraste o ZIP sobre este arquivo.
 
