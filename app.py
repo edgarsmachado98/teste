@@ -25,7 +25,8 @@ carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from carteira import analysis, auth, db, portfolio, providers  # noqa: E402  (após carregar o .env)
 from carteira.auth import ErroAcesso  # noqa: E402
-from carteira.importacao import ErroImportacao, analisar_extrato, marcar_duplicados  # noqa: E402
+from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
+                                 marcar_duplicados)
 from carteira.market import Mercado, MarketDataError, modo_demo  # noqa: E402
 
 
@@ -486,18 +487,74 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
         conn.commit()
         return jsonify({"ok": True, "importados": len(itens)}), 201
 
+    # ---------- Fluxo: compras, vendas e recebidos ----------
+    @app.get("/api/fluxo")
+    def api_fluxo():
+        cid = carteira_atual()
+        hoje_ = hoje()
+        try:
+            inicio = dt.date.fromisoformat(request.args.get("inicio") or "0001-01-01").isoformat()
+            fim = dt.date.fromisoformat(request.args.get("fim") or hoje_).isoformat()
+        except ValueError:
+            return erro("Período inválido.")
+        if inicio > fim:
+            return erro("A data inicial deve ser anterior à final.")
+        return jsonify(portfolio.fluxo(listar_aportes(cid), listar_proventos(cid), inicio, fim, hoje_))
+
     # ---------- Importação de extratos da B3 ----------
+    def preco_em(ticker, data):
+        """Fechamento do ativo na data (ou no último pregão antes dela), se houver cotação."""
+        try:
+            serie, _ = mercado.historico(ticker)
+        except MarketDataError:
+            return None
+        anteriores = [c for d, c in serie if d <= data]
+        return anteriores[-1] if anteriores else None
+
     @app.post("/api/importar/b3/previa")
     def api_importar_b3_previa():
+        """Lê um ou mais extratos (Posição, Negociação, Movimentação, Eventos) e monta a prévia."""
         cid = carteira_atual("editar")
-        arquivo = request.files.get("arquivo")
-        if arquivo is None or not arquivo.filename:
+        arquivos = [a for a in request.files.getlist("arquivo") if a and a.filename]
+        if not arquivos:
             return erro("Selecione o arquivo do extrato.")
-        try:
-            previa = analisar_extrato(arquivo.read(), arquivo.filename)
-        except ErroImportacao as e:
-            return erro(str(e))
-        marcar_duplicados(previa, listar_aportes(cid), listar_proventos(cid))
+        previa = {"arquivos": [], "aportes": [], "proventos": [], "ignorados": [], "posicao": []}
+        for arq in arquivos:
+            try:
+                r = analisar_extrato(arq.read(), arq.filename)
+            except ErroImportacao as e:
+                return erro(f"{arq.filename}: {e}")
+            previa["arquivos"].append({"nome": arq.filename, "tipo": r["tipo_arquivo"]})
+            for chave in ("aportes", "proventos", "posicao"):
+                previa[chave].extend(r[chave])
+            previa["ignorados"].extend({**g, "arquivo": arq.filename} for g in r["ignorados"])
+        tipos = [a["tipo"] for a in previa["arquivos"]]
+        if "movimentacao" in tipos and "eventos" in tipos:
+            previa["aviso"] = ("Você enviou Movimentação e Eventos: os proventos podem aparecer duas vezes. "
+                               "Desmarque os de um dos dois.")
+        previa["tipo_arquivo"] = tipos[0] if len(tipos) == 1 else "varios"
+        existentes = listar_aportes(cid)
+        marcar_duplicados(previa, existentes, listar_proventos(cid))
+        previa["conciliacao"] = None
+        if previa["posicao"]:
+            conc = conciliar_posicao(previa["posicao"], existentes, previa["aportes"], hoje())
+            for item in conc["posicoes_iniciais"]:
+                if item["preco"] is None and item["classe"] != "renda_fixa":
+                    item["preco"] = preco_em(item["ticker"], item["data"])
+                    if item["preco"] is not None:
+                        item["preco_origem"] = f"cotação de {item['data']} (estimado)"
+            previa["conciliacao"] = conc
+            ativos = {a["ticker"]: a for a in listar_ativos(cid)}
+            previa["ajustes_ativos"] = [
+                {"ticker": p["ticker"], "classe": p["classe"], "nome": p["nome"],
+                 "classe_atual": ativos.get(p["ticker"], {}).get("classe"),
+                 # renda fixa e Tesouro não têm cotação online: usa o valor atualizado da B3
+                 "preco_manual": round(p["preco_atual"], 6) if p["classe"] == "renda_fixa" and p["preco_atual"] else None}
+                for p in previa["posicao"]]
+            # a classe da posição (aba do extrato) é mais confiável que a sugerida pelo ticker
+            classes = {p["ticker"]: p["classe"] for p in previa["posicao"]}
+            for a in previa["aportes"]:
+                a["classe"] = classes.get(a["ticker"], a["classe"])
         return jsonify(previa)
 
     @app.post("/api/importar/b3/confirmar")
@@ -524,6 +581,19 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
         except ValueError as e:
             return erro(f"{e} Importe um período maior (desde a primeira compra) ou registre a posição "
                         "inicial antes de importar as vendas.", 409)
+        for aj in d.get("ativos") or []:
+            ticker = str(aj.get("ticker") or "").upper().strip()
+            classe = aj.get("classe") if aj.get("classe") in portfolio.CLASSES else None
+            if not ticker or not classe:
+                continue
+            manual = aj.get("preco_manual")
+            manual = float(manual) if manual not in (None, "") else None
+            conn.execute(
+                """INSERT INTO ativos (carteira_id, ticker, nome, classe, preco_manual) VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(carteira_id, ticker) DO UPDATE SET classe = excluded.classe,
+                   nome = CASE WHEN excluded.nome != '' THEN excluded.nome ELSE ativos.nome END,
+                   preco_manual = COALESCE(excluded.preco_manual, ativos.preco_manual)""",
+                (cid, ticker, (aj.get("nome") or "")[:80], classe, manual))
         existentes = {r["ticker"] for r in listar_ativos(cid)}
         for a in validos:
             if a["ticker"] not in existentes:
@@ -541,7 +611,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
             conn.rollback()
             return erro(str(e))
         conn.commit()
-        return jsonify({"ok": True, "aportes": len(validos), "proventos": len(novos_proventos)}), 201
+        return jsonify({"ok": True, "aportes": len(validos), "proventos": len(novos_proventos),
+                        "ativos": len(d.get("ativos") or [])}), 201
 
     # ---------- Fundamentos ----------
     @app.get("/api/fundamentos/<ticker>")

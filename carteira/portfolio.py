@@ -354,3 +354,71 @@ def dividend_yield(itens, preco, hoje):
     inicio = _somar_dias(hoje, -365)
     soma = sum(float(p["valor"]) for p in itens if inicio < p["data_com"] <= hoje)
     return soma / preco
+
+
+# ---------------------------------------------------------------- Fluxo
+
+def fluxo(aportes, proventos, inicio, fim, hoje):
+    """Visão geral de compras, vendas e proventos recebidos no período [inicio, fim].
+
+    O lucro realizado de cada venda usa o preço médio do momento da venda (todas as
+    operações anteriores são consideradas, mesmo fora do período).
+    """
+    pos = defaultdict(lambda: [0.0, 0.0])  # ticker -> [quantidade, custo]
+    lancamentos = []
+    for a in sorted(aportes, key=lambda x: (x["data"], x.get("id") or 0)):
+        qtd, preco, taxas = float(a["quantidade"]), float(a["preco"]), float(a.get("taxas") or 0)
+        p = pos[a["ticker"]]
+        lucro = None
+        if a.get("tipo", "compra") == "compra":
+            p[0] += qtd
+            p[1] += qtd * preco + taxas
+            valor = qtd * preco + taxas
+        else:
+            medio = p[1] / p[0] if p[0] else 0.0
+            lucro = qtd * (preco - medio) - taxas
+            p[1] -= medio * min(qtd, p[0])
+            p[0] = max(p[0] - qtd, 0.0)
+            valor = qtd * preco - taxas
+        if inicio <= a["data"] <= fim:
+            lancamentos.append({"data": a["data"], "ticker": a["ticker"], "tipo": a.get("tipo", "compra"),
+                                "quantidade": qtd, "preco": preco, "valor": valor, "lucro": lucro,
+                                "obs": a.get("obs") or ""})
+    for p in proventos:
+        if inicio <= p["data_pagamento"] <= min(fim, hoje):
+            lancamentos.append({"data": p["data_pagamento"], "ticker": p["ticker"], "tipo": p["tipo"],
+                                "quantidade": p.get("quantidade"), "preco": p.get("valor_unitario"),
+                                "valor": float(p["valor_total"]), "lucro": None, "obs": p.get("obs") or ""})
+
+    por_mes = defaultdict(lambda: {"compras": 0.0, "vendas": 0.0, "proventos": 0.0})
+    por_ativo = defaultdict(lambda: {"compras": 0.0, "vendas": 0.0, "proventos": 0.0, "lucro_realizado": 0.0})
+    for l in lancamentos:
+        chave = "compras" if l["tipo"] == "compra" else "vendas" if l["tipo"] == "venda" else "proventos"
+        por_mes[l["data"][:7]][chave] += l["valor"]
+        por_ativo[l["ticker"]][chave] += l["valor"]
+        if l["lucro"] is not None:
+            por_ativo[l["ticker"]]["lucro_realizado"] += l["lucro"]
+
+    meses = []
+    if lancamentos:
+        a, m = int(min(por_mes)[:4]), int(min(por_mes)[5:])
+        ultimo = max(por_mes)
+        while f"{a:04d}-{m:02d}" <= ultimo:
+            chave = f"{a:04d}-{m:02d}"
+            v = por_mes.get(chave, {"compras": 0.0, "vendas": 0.0, "proventos": 0.0})
+            meses.append({"mes": chave, **v, "liquido": v["compras"] - v["vendas"]})
+            m += 1
+            if m == 13:
+                a, m = a + 1, 1
+
+    totais = {k: sum(v[k] for v in por_mes.values()) for k in ("compras", "vendas", "proventos")}
+    totais["aporte_liquido"] = totais["compras"] - totais["vendas"]
+    totais["lucro_realizado"] = sum(l["lucro"] for l in lancamentos if l["lucro"] is not None)
+    totais["operacoes"] = sum(1 for l in lancamentos if l["tipo"] in ("compra", "venda"))
+    totais["recebimentos"] = sum(1 for l in lancamentos if l["tipo"] not in ("compra", "venda"))
+    return {
+        "inicio": inicio, "fim": fim, "totais": totais, "por_mes": meses,
+        "por_ativo": sorted(({"ticker": t, **v} for t, v in por_ativo.items()),
+                            key=lambda x: -(x["compras"] + x["vendas"] + x["proventos"])),
+        "lancamentos": sorted(lancamentos, key=lambda x: (x["data"], x["ticker"]), reverse=True),
+    }

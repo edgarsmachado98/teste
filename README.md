@@ -28,7 +28,17 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
 - Painel com patrimônio, alocação atual vs. meta, alocação por classe e evolução mensal dos aportes.
 - Validação: não permite vender mais do que se possui (nem excluir um aporte que deixaria uma venda descoberta).
 
+**Fluxo financeiro**
+- Visão geral de **compras, vendas e proventos recebidos** por período (12 meses, ano, ano anterior,
+  desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,
+  gráfico mensal, resumo por ativo e extrato unificado com filtro.
+
 **Importação de extratos da B3**
+- **Patrimônio completo**: envie juntos os extratos de **Posição** + **Negociação** + **Movimentação**.
+  O sistema calcula a *posição inicial* de cada ativo (o que você já tinha antes do período dos
+  extratos), usa o valor aplicado da B3 como preço médio de Tesouro/renda fixa, sugere a cotação
+  da data para os demais (substitua pelo preço médio real), corrige a classe dos ativos pela aba do
+  extrato e mostra divergências para conferir.
 - Em *Aportes → Importar extrato da B3*, envie os extratos da Área do Investidor em Excel/CSV:
   **Negociação** (compras e vendas de ações, FIIs, ETFs, BDRs), **Eventos** (proventos) e **Movimentação** (dividendos, JCP,
   rendimentos, amortizações e Tesouro Direto). O sistema mostra uma prévia, marca o que já foi lançado
@@ -162,5 +172,6 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | GET | `/api/fundamentos/<ticker>` | indicadores, DY e proventos por ano |
 | POST | `/api/importar/b3/previa` | envia o extrato (multipart, campo `arquivo`) e recebe a prévia |
 | POST | `/api/importar/b3/confirmar` | `{"aportes": [...], "proventos": [...]}` grava os selecionados |
+| GET | `/api/fluxo?inicio=&fim=` | compras, vendas e proventos do período |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

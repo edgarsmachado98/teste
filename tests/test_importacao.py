@@ -107,7 +107,7 @@ def test_fluxo_api(novo_app):
 
     mov = enviar(c, xlsx(MOV_CAB, MOV), "mov.xlsx").get_json()
     r = c.post("/api/importar/b3/confirmar", json={"aportes": mov["aportes"], "proventos": mov["proventos"]})
-    assert r.get_json() == {"ok": True, "aportes": 1, "proventos": 3}
+    assert r.get_json() == {"ok": True, "aportes": 1, "proventos": 3, "ativos": 0}
     assert c.get("/api/proventos").get_json()["resumo"]["total"] == pytest.approx(78.1)
     classes = {a["ticker"]: a["classe"] for a in c.get("/api/ativos").get_json()}
     assert classes["TESOURO IPCA+ 2035"] == "renda_fixa"
@@ -158,3 +158,79 @@ def test_excel_da_b3_com_dimensao_errada():
             zout.writestr(info, dados)
     r = importacao.analisar_extrato(saida.getvalue(), "eventos.xlsx")
     assert r["tipo_arquivo"] == "eventos" and r["proventos"][0]["valor_total"] == 10
+
+
+POS_CAB = ["Produto", "Instituição", "Conta", "Código de Negociação", "CNPJ da Empresa", "Código ISIN / Distribuição",
+           "Tipo", "Escriturador", "Quantidade", "Quantidade Disponível", "Quantidade Indisponível", "Motivo",
+           "Preço de Fechamento", "Valor Atualizado"]
+TD_CAB = ["Produto", "Instituição", "Código ISIN", "Indexador", "Vencimento", "Quantidade", "Quantidade Disponível",
+          "Quantidade Indisponível", "Motivo", "Valor Aplicado", "Valor bruto", "Valor líquido", "Valor Atualizado"]
+
+
+def xlsx_posicao():
+    wb = openpyxl.Workbook()
+    abas = {
+        "Acoes": (POS_CAB, [["ITUB4 - ITAU UNIBANCO", "CORRETORA X", "1", "ITUB4", "", "", "PN", "", 50, 50, 0, "", 35.0, 1750.0],
+                            ["VALE3 - VALE S.A.", "CORRETORA X", "1", "VALE3", "", "", "ON", "", 10, 10, 0, "", 60.0, 600.0],
+                            ["", "", "", "", "", "", "", "", "", "", "", "Total", "", 2350.0]]),
+        "ETF": (POS_CAB, [["IVVB11 - ISHARES S&P 500", "CORRETORA X", "1", "IVVB11", "", "", "CI", "", 3, 3, 0, "", 400.0, 1200.0]]),
+        "Tesouro Direto": (TD_CAB, [["Tesouro IPCA+ 2035", "CORRETORA X", "BR", "IPCA", "15/05/2035", 1.5, 1.5, 0, "",
+                                     3000.0, 3300.0, 3250.0, 3300.0]]),
+    }
+    wb.remove(wb.active)
+    for nome, (cab, linhas) in abas.items():
+        ws = wb.create_sheet(nome)
+        ws.append(cab)
+        for l in linhas:
+            ws.append(l)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_posicao():
+    r = importacao.analisar_extrato(xlsx_posicao(), "posicao.xlsx")
+    assert r["tipo_arquivo"] == "posicao"
+    pos = {p["ticker"]: p for p in r["posicao"]}
+    assert set(pos) == {"ITUB4", "VALE3", "IVVB11", "TESOURO IPCA+ 2035"}
+    assert pos["IVVB11"]["classe"] == "etf" and pos["ITUB4"]["classe"] == "acao"
+    td = pos["TESOURO IPCA+ 2035"]
+    assert td["classe"] == "renda_fixa" and td["preco_medio"] == 2000 and td["preco_atual"] == 2200
+
+
+def test_conciliacao():
+    posicao = [{"ticker": "ITUB4", "classe": "acao", "quantidade": 50, "preco_medio": None},
+               {"ticker": "VALE3", "classe": "acao", "quantidade": 10, "preco_medio": None}]
+    novos = [{"data": "2026-03-10", "ticker": "ITUB4", "tipo": "compra", "quantidade": 20, "preco": 30},
+             {"data": "2026-03-31", "ticker": "PETR4", "tipo": "venda", "quantidade": 23, "preco": 50},
+             {"data": "2026-04-01", "ticker": "VALE3", "tipo": "compra", "quantidade": 15, "preco": 60}]
+    c = importacao.conciliar_posicao(posicao, [], novos, "2026-11-05")
+    iniciais = {i["ticker"]: i["quantidade"] for i in c["posicoes_iniciais"]}
+    assert iniciais == {"ITUB4": 30, "PETR4": 23}  # PETR4 zerado na B3, mas vendido no período
+    assert c["data_abertura"] == "2026-03-09"
+    assert [d["ticker"] for d in c["divergencias"]] == ["VALE3"]  # sistema teria 15, B3 mostra 10
+
+
+def test_importacao_completa_com_posicao(novo_app):
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=600)))
+    neg = [["10/03/2026", "Compra", "Mercado à Vista", "-", "X", "ITUB4", 20, 30.0, 600],
+           ["31/03/2026", "Venda", "Mercado à Vista", "-", "X", "PETR4", 23, 50.0, 1150]]
+    r = c.post("/api/importar/b3/previa", content_type="multipart/form-data", data={"arquivo": [
+        (io.BytesIO(xlsx_posicao()), "posicao.xlsx"), (io.BytesIO(xlsx(NEG_CAB, neg)), "negociacao.xlsx")]})
+    previa = r.get_json()
+    assert r.status_code == 200 and [a["tipo"] for a in previa["arquivos"]] == ["posicao", "negociacao"]
+    ini = {i["ticker"]: i for i in previa["conciliacao"]["posicoes_iniciais"]}
+    assert ini["ITUB4"]["quantidade"] == 30 and ini["PETR4"]["quantidade"] == 23 and ini["IVVB11"]["quantidade"] == 3
+    assert ini["PETR4"]["preco"] is not None  # estimado pela cotação da data de abertura
+    assert ini["TESOURO IPCA+ 2035"]["preco"] == 2000  # valor aplicado da B3
+
+    abertura = [{"data": i["data"], "ticker": i["ticker"], "tipo": "compra", "quantidade": i["quantidade"],
+                 "preco": i["preco"], "classe": i["classe"], "obs": "posição inicial"} for i in ini.values()]
+    r = c.post("/api/importar/b3/confirmar", json={"aportes": abertura + previa["aportes"],
+                                                    "ativos": previa["ajustes_ativos"]})
+    assert r.status_code == 201, r.get_json()
+    cart = {a["ticker"]: a for a in c.get("/api/carteira").get_json()["ativos"]}
+    assert {t: a["quantidade"] for t, a in cart.items() if a["quantidade"]} == {
+        "ITUB4": 50, "VALE3": 10, "IVVB11": 3, "TESOURO IPCA+ 2035": 1.5}
+    assert cart["IVVB11"]["classe"] == "etf"
+    assert cart["TESOURO IPCA+ 2035"]["preco_atual"] == 2200  # preço manual vindo da B3

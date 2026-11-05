@@ -61,7 +61,12 @@ def _data(v):
 
 
 def ler_planilha(conteudo, nome_arquivo):
-    """Lê .xlsx ou .csv e devolve a lista de linhas (listas de células)."""
+    """Lê .xlsx ou .csv e devolve todas as linhas (de todas as abas) em uma lista."""
+    return [linha for _, linhas in ler_abas(conteudo, nome_arquivo) for linha in linhas]
+
+
+def ler_abas(conteudo, nome_arquivo):
+    """Lê .xlsx ou .csv e devolve [(nome_da_aba, linhas)]."""
     nome = (nome_arquivo or "").lower()
     if nome.endswith((".xlsx", ".xlsm")):
         try:
@@ -78,10 +83,7 @@ def ler_planilha(conteudo, nome_arquivo):
                 wb = openpyxl.load_workbook(io.BytesIO(conteudo), data_only=True)
         except Exception as e:
             raise ErroImportacao(f"Não foi possível abrir o Excel: {e}") from e
-        linhas = []
-        for ws in wb.worksheets:
-            linhas.extend(list(r) for r in ws.iter_rows(values_only=True))
-        return linhas
+        return [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
     if nome.endswith((".csv", ".txt")):
         for codificacao in ("utf-8-sig", "latin-1"):
             try:
@@ -90,7 +92,7 @@ def ler_planilha(conteudo, nome_arquivo):
             except UnicodeDecodeError:
                 continue
         delim = ";" if texto.count(";") > texto.count(",") else ","
-        return [r for r in csv.reader(io.StringIO(texto), delimiter=delim)]
+        return [(nome, [r for r in csv.reader(io.StringIO(texto), delimiter=delim)])]
     if nome.endswith(".xls"):
         raise ErroImportacao("Formato .xls antigo não suportado. Baixe o extrato em .xlsx ou abra no Excel "
                              "e salve como .xlsx.")
@@ -145,7 +147,7 @@ def _localizar_cabecalho(linhas):
         raise ErroImportacao("A planilha está vazia ou não pôde ser lida.")
     cabecalhos = next((", ".join(str(c) for c in l if c not in (None, ""))
                        for l in linhas if sum(c not in (None, "") for c in l) >= 3), "")
-    raise ErroImportacao("Não reconheci o arquivo. Use os extratos de Negociação, Movimentação ou Eventos "
+    raise ErroImportacao("Não reconheci o arquivo. Use os extratos de Posição, Negociação, Movimentação ou Eventos "
                          "da Área do Investidor da B3, sem alterar o cabeçalho."
                          + (f" Colunas encontradas: {cabecalhos[:300]}" if cabecalhos else ""))
 
@@ -176,8 +178,10 @@ def ticker_do_produto(produto):
 
 
 def classe_provavel(ticker, origem="b3"):
-    if origem == "tesouro":
+    if origem in ("tesouro", "renda_fixa"):
         return "renda_fixa"
+    if ticker in ETFS_CONHECIDOS:
+        return "etf"
     final = re.sub(r"^[A-Z]{4}", "", ticker)
     if final == "11":
         return "fii"  # pode ser ETF ou unit: ajuste em "Ativos e metas" se necessário
@@ -288,8 +292,106 @@ def _eventos(linhas, inicio, nomes):
     return [], proventos, ignorados
 
 
+# ------------------------------------------------------------------ Posição
+# Extrato de Posição: uma aba por tipo de ativo (Ações, BDR, ETF, Fundo de Investimento,
+# Tesouro Direto, Renda Fixa...). Mostra o que existe hoje em cada instituição.
+COLUNAS_POSICAO = {
+    "codigo": ("codigo de negociacao", "codigo"),
+    "produto": ("produto",),
+    "quantidade": ("quantidade",),
+    "preco": ("preco de fechamento", "preco de fechamento (r$)", "preco atualizado", "preco unitario",
+              "pu atualizado"),
+    "valor": ("valor atualizado", "valor atualizado (r$)", "valor liquido", "valor bruto",
+              "valor atualizado curva", "valor atualizado mtm"),
+    "aplicado": ("valor aplicado", "valor aplicado (r$)"),
+    "vencimento": ("vencimento", "data de vencimento"),
+}
+CLASSE_POR_ABA = (("acao", "acao"), ("acoes", "acao"), ("bdr", "bdr"), ("etf", "etf"),
+                  ("fundo", "fii"), ("fii", "fii"), ("tesouro", "renda_fixa"), ("renda fixa", "renda_fixa"),
+                  ("coe", "renda_fixa"))
+ETFS_CONHECIDOS = {"BOVA11", "IVVB11", "SMAL11", "HASH11", "DIVO11", "XINA11", "GOLD11", "BOVV11", "SPXI11",
+                   "NASD11", "ACWI11", "EURP11", "FIND11", "MATB11", "IMAB11", "B5P211", "FIXA11", "QBTC11",
+                   "BITH11", "ETHE11", "NTNS11", "LFTS11", "PIBB11", "BRAX11", "ECOO11", "SPXB11", "WRLD11"}
+
+
+def _cabecalho_posicao(linhas):
+    for i, linha in enumerate(linhas[:30]):
+        nomes = [_norm(c) for c in linha]
+        if "data do negocio" in nomes or "entrada/saida" in nomes or any("evento" in n for n in nomes):
+            return None
+        idx = _indices_flexiveis(nomes, COLUNAS_POSICAO)
+        if "quantidade" in idx and ("codigo" in idx or "produto" in idx) and \
+                ({"preco", "valor", "aplicado"} & set(idx)):
+            return i, idx
+    return None
+
+
+def _classe_da_aba(aba, ticker, origem):
+    a = _norm(aba)
+    for chave, classe in CLASSE_POR_ABA:
+        if chave in a:
+            return classe
+    return classe_provavel(ticker, origem)
+
+
+def _posicao(abas):
+    itens, ignorados = {}, []
+    for aba, linhas in abas:
+        achado = _cabecalho_posicao(linhas)
+        if not achado:
+            continue
+        inicio, idx = achado
+        for n, linha in enumerate(linhas[inicio + 1:], start=inicio + 2):
+            cel = {k: (linha[i] if i < len(linha) else None) for k, i in idx.items()}
+            produto = str(cel.get("produto") or "").strip()
+            if not any(c not in (None, "") for c in linha) or _norm(produto).startswith("total") \
+                    or _norm(cel.get("codigo")).startswith("total"):
+                continue
+            qtd = _numero(cel.get("quantidade"))
+            codigo = str(cel.get("codigo") or "").strip().upper()
+            m = B3_TICKER.match(codigo)
+            if m:
+                ticker, origem = m.group(1), "b3"
+            else:
+                ticker, origem = ticker_do_produto(produto or codigo)
+                if origem == "outro":  # CDB, LCA, debêntures...: produto + vencimento identificam o título
+                    venc = _data(cel.get("vencimento"))
+                    ticker = re.sub(r"\s+", " ", f"{produto} {venc or ''}").strip().upper()[:60]
+                    origem = "renda_fixa"
+            if not ticker or not qtd:
+                ignorados.append({"linha": n, "descricao": f"{aba}: {produto or codigo}",
+                                  "motivo": "Sem código ou quantidade."})
+                continue
+            valor, preco, aplicado = _numero(cel.get("valor")), _numero(cel.get("preco")), _numero(cel.get("aplicado"))
+            if preco is None and valor is not None:
+                preco = valor / qtd
+            classe = _classe_da_aba(aba, ticker, origem)
+            if classe == "fii" and ticker in ETFS_CONHECIDOS:
+                classe = "etf"
+            it = itens.setdefault(ticker, {"ticker": ticker, "classe": classe, "quantidade": 0.0,
+                                           "valor_atual": 0.0, "custo_total": 0.0, "tem_custo": False,
+                                           "nome": produto.split(" - ", 1)[-1][:80] if " - " in produto else ""})
+            it["quantidade"] += qtd
+            it["valor_atual"] += valor if valor is not None else (preco or 0) * qtd
+            if aplicado is not None:
+                it["custo_total"] += aplicado
+                it["tem_custo"] = True
+    posicao = []
+    for it in itens.values():
+        it["preco_atual"] = it["valor_atual"] / it["quantidade"] if it["quantidade"] else None
+        it["preco_medio"] = it["custo_total"] / it["quantidade"] if it["tem_custo"] and it["quantidade"] else None
+        del it["custo_total"], it["tem_custo"]
+        posicao.append(it)
+    return sorted(posicao, key=lambda x: x["ticker"]), ignorados
+
+
 def analisar_extrato(conteudo, nome_arquivo):
-    linhas = ler_planilha(conteudo, nome_arquivo)
+    abas = ler_abas(conteudo, nome_arquivo)
+    if any(_cabecalho_posicao(linhas) for _, linhas in abas):
+        posicao, ignorados = _posicao(abas)
+        return {"tipo_arquivo": "posicao", "aportes": [], "proventos": [], "ignorados": ignorados,
+                "posicao": posicao}
+    linhas = [linha for _, ls in abas for linha in ls]
     tipo, inicio, nomes = _localizar_cabecalho(linhas)
     if tipo == "negociacao":
         aportes, proventos, ignorados = _negociacao(linhas, inicio, nomes)
@@ -297,7 +399,8 @@ def analisar_extrato(conteudo, nome_arquivo):
         aportes, proventos, ignorados = _eventos(linhas, inicio, nomes)
     else:
         aportes, proventos, ignorados = _movimentacao(linhas, inicio, nomes)
-    return {"tipo_arquivo": tipo, "aportes": aportes, "proventos": proventos, "ignorados": ignorados}
+    return {"tipo_arquivo": tipo, "aportes": aportes, "proventos": proventos, "ignorados": ignorados,
+            "posicao": []}
 
 
 def marcar_duplicados(previa, aportes_existentes, proventos_existentes):
@@ -326,3 +429,45 @@ def marcar_duplicados(previa, aportes_existentes, proventos_existentes):
             else:
                 item["ja_registrado"] = False
     return previa
+
+
+def _dia_anterior(data_iso):
+    return (dt.date.fromisoformat(data_iso) - dt.timedelta(days=1)).isoformat()
+
+
+def conciliar_posicao(posicao, aportes_existentes, aportes_novos, hoje):
+    """Compara a posição da B3 com o que o sistema terá após a importação.
+
+    Para cada ativo, posição inicial = quantidade na B3 - (quantidade no sistema + compras - vendas novas).
+    Se positiva, é o que você já tinha antes do período dos extratos: vira uma compra de abertura
+    no dia anterior à primeira operação. Se negativa, há eventos ou vendas que o sistema não conhece.
+    Ativos zerados na B3 mas vendidos nos extratos também recebem posição inicial.
+    """
+    saldo = {}
+    for a in list(aportes_existentes) + [a for a in aportes_novos if not a.get("ja_registrado")]:
+        sinal = 1 if a.get("tipo", "compra") == "compra" else -1
+        saldo[a["ticker"]] = saldo.get(a["ticker"], 0.0) + sinal * float(a["quantidade"])
+    todas = [a["data"] for a in list(aportes_existentes) + list(aportes_novos)]
+    data_abertura = _dia_anterior(min(todas)) if todas else hoje
+    na_b3 = {p["ticker"]: p for p in posicao}
+
+    iniciais, divergencias = [], []
+    for ticker in sorted(set(na_b3) | set(saldo)):
+        p = na_b3.get(ticker)
+        qtd_b3 = p["quantidade"] if p else 0.0
+        diferenca = round(qtd_b3 - saldo.get(ticker, 0.0), 8)
+        if abs(diferenca) < 1e-9:
+            continue
+        if diferenca > 0:
+            iniciais.append({"ticker": ticker, "classe": p["classe"] if p else classe_provavel(ticker),
+                             "quantidade": diferenca, "data": data_abertura,
+                             "preco": p.get("preco_medio") if p else None,
+                             "preco_origem": "valor aplicado na B3" if p and p.get("preco_medio") else None,
+                             "qtd_b3": qtd_b3})
+        else:
+            motivo = ("O sistema terá mais do que a B3 mostra: verifique vendas, grupamentos ou "
+                      "transferências não importados." if p is not None else
+                      "Não aparece na posição da B3. Se for um ativo fora da B3 (cripto, previdência...), ignore.")
+            divergencias.append({"ticker": ticker, "qtd_b3": qtd_b3, "qtd_sistema": saldo.get(ticker, 0.0),
+                                 "motivo": motivo})
+    return {"data_abertura": data_abertura, "posicoes_iniciais": iniciais, "divergencias": divergencias}

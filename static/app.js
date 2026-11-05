@@ -57,7 +57,7 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
   document.body.classList.remove("menu-aberto");
   window.scrollTo({ top: 0 });
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo }[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -155,6 +155,81 @@ $("#tabela-aportes").addEventListener("click", async ev => {
   catch (e) { toast(e.message, true); }
 });
 
+// ---------------- Fluxo financeiro ----------------
+let fluxoAtual = null;
+const isoData = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function periodoFluxo() {
+  const f = $("#form-fluxo"), hoje = new Date(), ano = hoje.getFullYear();
+  const p = f.periodo.value;
+  if (p === "12m") { const i = new Date(hoje); i.setFullYear(ano - 1); i.setDate(i.getDate() + 1); return [isoData(i), isoData(hoje)]; }
+  if (p === "ano") return [`${ano}-01-01`, isoData(hoje)];
+  if (p === "ano_anterior") return [`${ano - 1}-01-01`, `${ano - 1}-12-31`];
+  if (p === "tudo") return ["", isoData(hoje)];
+  return [f.inicio.value, f.fim.value || isoData(hoje)];
+}
+
+$("#form-fluxo").periodo.addEventListener("change", ev => {
+  const [i, f] = periodoFluxo();
+  if (ev.target.value !== "personalizado") { $("#form-fluxo").inicio.value = i; $("#form-fluxo").fim.value = f; carregarFluxo(); }
+});
+$("#form-fluxo").addEventListener("submit", ev => { ev.preventDefault(); carregarFluxo(); });
+["inicio", "fim"].forEach(n => $("#form-fluxo")[n].addEventListener("change", () => ($("#form-fluxo").periodo.value = "personalizado")));
+$("#filtro-fluxo").addEventListener("change", renderExtratoFluxo);
+
+async function carregarFluxo() {
+  const f = $("#form-fluxo");
+  let [inicio, fim] = periodoFluxo();
+  if (f.periodo.value !== "personalizado") { f.inicio.value = inicio; f.fim.value = fim; }
+  try { fluxoAtual = await api(`/api/fluxo?${new URLSearchParams({ inicio, fim })}`); }
+  catch (e) { return toast(e.message, true); }
+  const t = fluxoAtual.totais;
+  $("#cards-fluxo").innerHTML = [
+    ["Compras", brl.format(t.compras), ""],
+    ["Vendas", brl.format(t.vendas), ""],
+    ["Aporte líquido", brl.format(t.aporte_liquido), classeSinal(t.aporte_liquido)],
+    ["Proventos recebidos", brl.format(t.proventos), "pos"],
+    ["Lucro realizado nas vendas", brl.format(t.lucro_realizado), classeSinal(t.lucro_realizado)],
+  ].map(([r, v, c]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor ${c}">${v}</div></div>`).join("") +
+    `<p class="dica" style="grid-column:1/-1;margin:0">${t.operacoes} operação(ões) e ${t.recebimentos} recebimento(s) no período.
+     Aporte líquido = compras − vendas. O lucro realizado usa o preço médio de cada ativo no momento da venda.</p>`;
+
+  grafico("graf-fluxo", {
+    type: "bar",
+    data: { labels: fluxoAtual.por_mes.map(m => m.mes), datasets: [
+      { label: "Compras", data: fluxoAtual.por_mes.map(m => m.compras), backgroundColor: PALETA[0] },
+      { label: "Vendas", data: fluxoAtual.por_mes.map(m => m.vendas), backgroundColor: PALETA[3] },
+      { label: "Proventos recebidos", data: fluxoAtual.por_mes.map(m => m.proventos), backgroundColor: PALETA[2] },
+    ] },
+    options: { interaction: { mode: "index", intersect: false }, scales: { y: { ticks: { callback: v => brl.format(v) } } },
+      plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl.format(x.raw)}` } } } },
+  });
+
+  $("#tabela-fluxo-ativo").innerHTML = `<tr><th>Ativo</th><th>Compras</th><th>Vendas</th><th>Proventos</th><th>Lucro realizado</th></tr>` +
+    (fluxoAtual.por_ativo.length ? fluxoAtual.por_ativo.map(a => `<tr><td><strong>${esc(a.ticker)}</strong></td>
+      <td>${a.compras ? brl.format(a.compras) : "—"}</td><td>${a.vendas ? brl.format(a.vendas) : "—"}</td>
+      <td class="pos">${a.proventos ? brl.format(a.proventos) : "—"}</td>
+      <td class="${classeSinal(a.lucro_realizado)}">${a.vendas ? brl.format(a.lucro_realizado) : "—"}</td></tr>`).join("") +
+      `<tr><td><strong>Total</strong></td><td><strong>${brl.format(t.compras)}</strong></td><td><strong>${brl.format(t.vendas)}</strong></td>
+       <td class="pos"><strong>${brl.format(t.proventos)}</strong></td><td class="${classeSinal(t.lucro_realizado)}"><strong>${brl.format(t.lucro_realizado)}</strong></td></tr>`
+      : `<tr><td colspan="5">Nenhuma movimentação no período.</td></tr>`);
+  renderExtratoFluxo();
+}
+
+function renderExtratoFluxo() {
+  if (!fluxoAtual) return;
+  const filtro = $("#filtro-fluxo").value;
+  const itens = fluxoAtual.lancamentos.filter(l => !filtro || (filtro === "provento" ? !["compra", "venda"].includes(l.tipo) : l.tipo === filtro));
+  const rotulo = t => t === "compra" ? "Compra" : t === "venda" ? "Venda" : nomeTipo(t);
+  const cor = t => t === "compra" ? "" : t === "venda" ? "neg" : "pos";
+  $("#tabela-fluxo").innerHTML = `<tr><th>Data</th><th>Ativo</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Valor</th><th>Lucro na venda</th><th>Obs.</th></tr>` +
+    (itens.length ? itens.slice(0, 500).map(l => `<tr><td>${fmtData(l.data)}</td><td><strong>${esc(l.ticker)}</strong></td>
+      <td class="${cor(l.tipo)}">${esc(rotulo(l.tipo))}</td><td>${l.quantidade == null ? "—" : num.format(l.quantidade)}</td>
+      <td>${l.preco == null ? "—" : brl.format(l.preco)}</td><td class="${cor(l.tipo)}">${brl.format(l.valor)}</td>
+      <td class="${classeSinal(l.lucro)}">${l.lucro == null ? "" : brl.format(l.lucro)}</td><td>${esc(l.obs)}</td></tr>`).join("")
+      : `<tr><td colspan="8">Nenhum lançamento.</td></tr>`);
+}
+
 // ---------------- Importação B3 ----------------
 let previaB3 = null;
 
@@ -173,37 +248,76 @@ $("#form-importar-b3").addEventListener("submit", async ev => {
   renderPreviaB3();
 });
 
+const ROTULO_ARQ = { negociacao: "Negociação", movimentacao: "Movimentação", eventos: "Eventos", posicao: "Posição" };
+
 function renderPreviaB3() {
   const p = previaB3, alvo = $("#resultado-importar-b3");
   const marca = (lista, i, item) => `<input type="checkbox" data-lista="${lista}" data-idx="${i}" ${item.ja_registrado ? "disabled" : "checked"}>`;
   const status = item => item.ja_registrado ? `<span class="selo">já lançado</span>` : "novo";
-  const novos = p.aportes.filter(a => !a.ja_registrado).length + p.proventos.filter(x => !x.ja_registrado).length;
-  let html = `<p class="dica">Extrato de <strong>${({ negociacao: "Negociação", movimentacao: "Movimentação", eventos: "Eventos" })[p.tipo_arquivo]}</strong>:
-    ${p.aportes.length} operação(ões), ${p.proventos.length} provento(s), ${p.ignorados.length} linha(s) ignorada(s). ${novos} item(ns) novo(s).</p>`;
-  if (p.aportes.length) html += `<h3>Operações</h3><div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Classe</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Total</th><th>Situação</th></tr>
+  const conc = p.conciliacao;
+  const iniciais = conc ? conc.posicoes_iniciais : [];
+  const novos = p.aportes.filter(a => !a.ja_registrado).length + p.proventos.filter(x => !x.ja_registrado).length + iniciais.length;
+  let html = `<div class="resumo-importacao">
+      ${p.arquivos.map(a => `<span class="selo">${esc(ROTULO_ARQ[a.tipo] || a.tipo)}: ${esc(a.nome)}</span>`).join(" ")}
+      <p class="dica">${p.posicao.length} ativo(s) na posição · ${p.aportes.length} operação(ões) · ${p.proventos.length} provento(s) ·
+      ${p.ignorados.length} linha(s) ignorada(s) · <strong>${novos} item(ns) novo(s)</strong></p></div>`;
+  if (p.aviso) html += `<div class="aviso" style="margin:10px 0">${esc(p.aviso)}</div>`;
+
+  if (conc) {
+    html += `<h3 style="margin-top:16px">Posição inicial</h3>
+      <p class="dica">O que você já tinha antes da primeira operação dos extratos (data de abertura: <strong>${fmtData(conc.data_abertura)}</strong>),
+      calculado pela diferença entre a Posição da B3 e as operações. <strong>Informe o preço médio</strong> de cada ativo
+      (está no app da corretora ou na declaração de IR); os preços sugeridos pela cotação são apenas estimativas.</p>`;
+    html += iniciais.length ? `<div class="rolagem"><table><tr><th></th><th>Ativo</th><th>Classe</th><th>Qtd. inicial</th><th>Qtd. na B3 hoje</th><th>Preço médio (R$)</th><th>Origem do preço</th></tr>
+      ${iniciais.map((x, i) => `<tr><td><input type="checkbox" data-lista="iniciais" data-idx="${i}" checked></td>
+        <td><strong>${esc(x.ticker)}</strong></td><td>${esc(CLASSES[x.classe] || x.classe)}</td>
+        <td>${num.format(x.quantidade)}</td><td>${num.format(x.qtd_b3)}</td>
+        <td><input type="number" step="any" min="0" class="preco-inicial" data-idx="${i}" value="${x.preco == null ? "" : Number(x.preco.toFixed(4))}" placeholder="obrigatório" style="width:120px"></td>
+        <td>${x.preco_origem ? esc(x.preco_origem) : `<span class="neg">informe o preço</span>`}</td></tr>`).join("")}</table></div>`
+      : `<p class="dica">As operações dos extratos já explicam toda a posição da B3. Nenhuma posição inicial necessária.</p>`;
+    if (conc.divergencias.length) html += `<details class="dica" open style="margin-top:10px"><summary>${conc.divergencias.length} divergência(s) para conferir</summary>
+      <div class="rolagem"><table><tr><th>Ativo</th><th>Na B3</th><th>No sistema</th><th>O que verificar</th></tr>
+      ${conc.divergencias.map(d => `<tr><td><strong>${esc(d.ticker)}</strong></td><td>${num.format(d.qtd_b3)}</td><td>${num.format(d.qtd_sistema)}</td><td style="white-space:normal">${esc(d.motivo)}</td></tr>`).join("")}</table></div></details>`;
+    const mudancas = p.ajustes_ativos.filter(a => a.classe !== a.classe_atual || a.preco_manual != null);
+    if (mudancas.length) html += `<label class="check" style="margin-top:10px;display:flex;gap:6px;align-items:center">
+      <input type="checkbox" id="aplicar-ajustes" checked> Atualizar classe de ${p.ajustes_ativos.length} ativo(s) conforme a B3 e o valor atual de renda fixa/Tesouro (${mudancas.length} alteração(ões))</label>`;
+  }
+
+  if (p.aportes.length) html += `<h3 style="margin-top:16px">Operações</h3><div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Classe</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Total</th><th>Situação</th></tr>
     ${p.aportes.map((a, i) => `<tr class="${a.ja_registrado ? "desativado" : ""}"><td>${marca("aportes", i, a)}</td><td>${fmtData(a.data)}</td>
       <td><strong>${esc(a.ticker)}</strong></td><td>${esc(CLASSES[a.classe] || a.classe)}</td>
       <td class="${a.tipo === "compra" ? "pos" : "neg"}">${a.tipo === "compra" ? "Compra" : "Venda"}</td>
       <td>${num.format(a.quantidade)}</td><td>${brl.format(a.preco)}</td><td>${brl.format(a.quantidade * a.preco)}</td><td>${status(a)}</td></tr>`).join("")}</table></div>`;
-  if (p.proventos.length) html += `<h3 style="margin-top:14px">Proventos</h3><div class="rolagem"><table><tr><th></th><th>Pagamento</th><th>Ativo</th><th>Tipo</th><th>Qtd.</th><th>Valor/cota</th><th>Total</th><th>Situação</th></tr>
+  if (p.proventos.length) html += `<h3 style="margin-top:16px">Proventos</h3><div class="rolagem"><table><tr><th></th><th>Pagamento</th><th>Ativo</th><th>Tipo</th><th>Qtd.</th><th>Valor/cota</th><th>Total</th><th>Situação</th></tr>
     ${p.proventos.map((x, i) => `<tr class="${x.ja_registrado ? "desativado" : ""}"><td>${marca("proventos", i, x)}</td><td>${fmtData(x.data_pagamento)}</td>
       <td><strong>${esc(x.ticker)}</strong></td><td>${esc(nomeTipo(x.tipo))}</td><td>${x.quantidade == null ? "—" : num.format(x.quantidade)}</td>
       <td>${x.valor_unitario == null ? "—" : brl.format(x.valor_unitario)}</td><td class="pos">${brl.format(x.valor_total)}</td><td>${status(x)}</td></tr>`).join("")}</table></div>`;
   if (p.ignorados.length) html += `<details class="dica" style="margin-top:12px"><summary>${p.ignorados.length} linha(s) não importada(s)</summary>
-    <div class="rolagem"><table><tr><th>Linha</th><th>Descrição</th><th>Motivo</th></tr>${p.ignorados.map(g => `<tr><td>${g.linha}</td><td>${esc(g.descricao)}</td><td>${esc(g.motivo)}</td></tr>`).join("")}</table></div></details>`;
-  if (novos) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar selecionados</button>
-    <span class="dica">Ativos novos são criados com a classe sugerida; confira em “Ativos e metas” (tickers terminados em 11 podem ser FII, ETF ou unit).</span></div>`;
+    <div class="rolagem"><table><tr><th>Arquivo</th><th>Linha</th><th>Descrição</th><th>Motivo</th></tr>${p.ignorados.map(g => `<tr><td>${esc(g.arquivo || "")}</td><td>${g.linha}</td><td>${esc(g.descricao)}</td><td>${esc(g.motivo)}</td></tr>`).join("")}</table></div></details>`;
+  if (novos || (conc && p.ajustes_ativos.length)) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar selecionados</button>
+    <span class="dica">Confira as classes depois em “Ativos e metas” (tickers terminados em 11 podem ser FII, ETF ou unit).</span></div>`;
   alvo.innerHTML = html;
 }
 
 $("#resultado-importar-b3").addEventListener("click", async ev => {
   if (ev.target.id !== "btn-confirmar-b3") return;
-  const sel = lista => [...document.querySelectorAll(`#resultado-importar-b3 input[data-lista="${lista}"]:checked`)].map(c => previaB3[lista][c.dataset.idx]);
-  const body = { aportes: sel("aportes"), proventos: sel("proventos") };
-  if (!body.aportes.length && !body.proventos.length) return toast("Nenhum item selecionado.", true);
+  const sel = lista => [...document.querySelectorAll(`#resultado-importar-b3 input[data-lista="${lista}"]:checked`)].map(c => Number(c.dataset.idx));
+  const iniciais = [];
+  for (const i of sel("iniciais")) {
+    const x = previaB3.conciliacao.posicoes_iniciais[i];
+    const preco = parseFloat(document.querySelector(`.preco-inicial[data-idx="${i}"]`).value);
+    if (!(preco >= 0)) return toast(`Informe o preço médio de ${x.ticker} (ou desmarque a linha).`, true);
+    iniciais.push({ data: x.data, ticker: x.ticker, tipo: "compra", quantidade: x.quantidade, preco, classe: x.classe, obs: "posição inicial (B3)" });
+  }
+  const body = {
+    aportes: [...iniciais, ...sel("aportes").map(i => previaB3.aportes[i])],
+    proventos: sel("proventos").map(i => previaB3.proventos[i]),
+    ativos: $("#aplicar-ajustes")?.checked ? previaB3.ajustes_ativos : [],
+  };
+  if (!body.aportes.length && !body.proventos.length && !body.ativos.length) return toast("Nenhum item selecionado.", true);
   try {
     const r = await api("/api/importar/b3/confirmar", { method: "POST", body });
-    toast(`Importados: ${r.aportes} operação(ões) e ${r.proventos} provento(s).`);
+    toast(`Importados: ${r.aportes} operação(ões), ${r.proventos} provento(s)${r.ativos ? `, ${r.ativos} ativo(s) atualizados` : ""}.`);
     $("#resultado-importar-b3").innerHTML = "";
     $("#form-importar-b3").reset();
     carregarAportes();
@@ -513,7 +627,7 @@ function recarregarAbaAtual() {
   $("#resultado-sugestao").innerHTML = "";
   $("#resultado-estimar").innerHTML = "";
   const aba = document.querySelector("nav button.ativo")?.dataset.tab;
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos }[aba] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo }[aba] || (() => {}))();
 }
 
 $("#sel-carteira").addEventListener("change", ev => {

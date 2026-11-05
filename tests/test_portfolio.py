@@ -58,3 +58,20 @@ def test_aportes_por_mes():
                                        ap("2024-03-01", "A", 1, 60, "venda")])
     assert serie == [{"mes": "2024-01", "aporte": 150, "acumulado": 150},
                      {"mes": "2024-03", "aporte": -60, "acumulado": 90}]
+
+
+def test_fluxo():
+    aportes = [ap("2025-01-10", "A", 10, 10), ap("2025-02-10", "A", 10, 20, taxas=10),
+               ap("2025-03-05", "A", 5, 30, tipo="venda"), ap("2025-03-06", "B", 2, 50)]
+    for i, a in enumerate(aportes):
+        a["id"] = i
+    provs = [{"ticker": "A", "tipo": "dividendo", "data_pagamento": "2025-03-20", "valor_total": 7.5},
+             {"ticker": "A", "tipo": "jcp", "data_pagamento": "2025-12-20", "valor_total": 99}]  # futuro
+    f = portfolio.fluxo(aportes, provs, "2025-02-01", "2025-12-31", "2025-06-30")
+    t = f["totais"]
+    assert t["compras"] == pytest.approx(210 + 100) and t["vendas"] == 150 and t["proventos"] == 7.5
+    assert t["aporte_liquido"] == pytest.approx(160)
+    assert t["lucro_realizado"] == pytest.approx(5 * (30 - 15.5))  # preço médio inclui a compra de janeiro
+    assert [m["mes"] for m in f["por_mes"]] == ["2025-02", "2025-03"]
+    assert f["lancamentos"][0]["tipo"] == "dividendo"
+    assert {a["ticker"] for a in f["por_ativo"]} == {"A", "B"}

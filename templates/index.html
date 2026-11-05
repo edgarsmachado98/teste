@@ -22,6 +22,7 @@
     <nav aria-label="Menu principal">
       <p class="grupo-nav">Visão geral</p>
       <button data-tab="carteira" data-titulo="Patrimônio" data-sub="Resumo, alocação e evolução da carteira" class="ativo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15.5 3.7A9 9 0 0 1 20.3 8.5H15.5z"/></svg><span>Patrimônio</span></button>
+      <button data-tab="fluxo" data-titulo="Fluxo financeiro" data-sub="Visão geral de compras, vendas e proventos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 14.5h2"/></svg><span>Fluxo financeiro</span></button>
       <p class="grupo-nav">Movimentações</p>
       <button data-tab="aportes" data-titulo="Aportes" data-sub="Compras, vendas e importação de extratos da B3"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m0 0l-3-3m3 3l3-3"/><path d="M17 20V4m0 0l-3 3m3-3l3 3"/></svg><span>Aportes</span></button>
       <button data-tab="proventos" data-titulo="Proventos" data-sub="Dividendos, JCP e rendimentos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.5-.9-1.6-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2s1.2 1.7 2.8 2 2.8.9 2.8 2.1-1.2 2.1-2.8 2.1c-1.3 0-2.4-.6-2.9-1.5M12 6v1.8m0 8.4V18"/></svg><span>Proventos</span></button>
@@ -73,6 +74,34 @@
     </div>
   </section>
 
+  <section id="tab-fluxo" class="tab">
+    <div class="painel">
+      <form id="form-fluxo" class="form-linha">
+        <label>Período <select name="periodo">
+          <option value="12m" selected>Últimos 12 meses</option>
+          <option value="ano">Este ano</option>
+          <option value="ano_anterior">Ano anterior</option>
+          <option value="tudo">Desde o início</option>
+          <option value="personalizado">Personalizado</option>
+        </select></label>
+        <label>De <input type="date" name="inicio"></label>
+        <label>Até <input type="date" name="fim"></label>
+        <button type="submit">Atualizar</button>
+      </form>
+    </div>
+    <div class="cards" id="cards-fluxo"></div>
+    <div class="painel"><h3>Compras, vendas e recebidos por mês</h3><canvas id="graf-fluxo" height="90"></canvas></div>
+    <div class="painel"><h3>Por ativo</h3><div class="rolagem"><table id="tabela-fluxo-ativo"></table></div></div>
+    <div class="painel">
+      <h3 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">Extrato do período
+        <select id="filtro-fluxo" style="font-size:.85rem;font-weight:400">
+          <option value="">Todos os lançamentos</option><option value="compra">Compras</option>
+          <option value="venda">Vendas</option><option value="provento">Proventos</option>
+        </select></h3>
+      <div class="rolagem"><table id="tabela-fluxo"></table></div>
+    </div>
+  </section>
+
   <section id="tab-aportes" class="tab">
     <div class="painel requer-edicao">
       <h3>Registrar operação</h3>
@@ -91,17 +120,20 @@
     <div class="painel requer-edicao">
       <h3>Importar extrato da B3</h3>
       <form id="form-importar-b3" class="form-linha">
-        <label class="largo">Arquivo (.xlsx ou .csv) <input type="file" name="arquivo" accept=".xlsx,.csv" required></label>
+        <label class="largo">Arquivos (.xlsx ou .csv) — pode selecionar vários <input type="file" name="arquivo" accept=".xlsx,.csv" multiple required></label>
         <button type="submit">Ler arquivo</button>
       </form>
       <details class="dica">
-        <summary>Como baixar o extrato</summary>
+        <summary>Como importar todo o patrimônio</summary>
         <ol>
-          <li>Entre na Área do Investidor (investidor.b3.com.br) e abra <strong>Extratos</strong>.</li>
-          <li><strong>Negociação</strong>: compras e vendas de ações, FIIs, ETFs e BDRs. Escolha o período desde a sua primeira compra.</li>
+          <li>Entre na Área do Investidor (investidor.b3.com.br).</li>
+          <li>Em <strong>Posição</strong>, baixe em Excel: é o que você tem hoje (ações, FIIs, ETFs, Tesouro, renda fixa).</li>
+          <li>Em <strong>Extratos</strong>, baixe:</li>
+          <li><strong>Negociação</strong>: compras e vendas de ações, FIIs, ETFs e BDRs (o maior período possível).</li>
           <li><strong>Movimentação</strong>: dividendos, JCP, rendimentos e Tesouro Direto.</li>
           <li><strong>Eventos</strong>: proventos recebidos e provisionados (alternativa à Movimentação para proventos; use só um dos dois para não duplicar).</li>
-          <li>Baixe em <strong>Excel</strong> e envie aqui um arquivo de cada vez (primeiro Negociação, depois Movimentação).</li>
+          <li>Selecione <strong>todos os arquivos juntos</strong> (Ctrl+clique) e clique em “Ler arquivo”.
+            O sistema calcula a <strong>posição inicial</strong> (o que você já tinha antes do período dos extratos) comparando a Posição com as operações.</li>
         </ol>
         Taxas de corretagem não constam nesses extratos. Desdobramentos e bonificações precisam ser ajustados manualmente.
       </details>
