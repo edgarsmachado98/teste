@@ -250,14 +250,41 @@ COLUNAS_EVENTOS = {
 }
 
 
-def _indices_flexiveis(nomes, colunas):
+def _norm_cab(texto):
+    """Nome de coluna normalizado, sem datas e unidades: 'SALDO BRUTO 30/09/2026 (R$)' -> 'saldo bruto'."""
+    t = _norm(texto)
+    t = re.sub(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b|\b\d{1,2}/\d{4}\b|\(r\$\)|\br\$|\(%\)", " ", t)
+    return re.sub(r"\s+", " ", t).strip(" -:")
+
+
+def _indices_flexiveis(nomes, colunas, ultimos=()):
+    """Índice de cada coluna pelo primeiro sinônimo encontrado.
+
+    Para as chaves em `ultimos`, usa a última ocorrência (ex.: relatórios com "Saldo bruto" no
+    início e no fim do período: vale o saldo mais recente).
+    """
     idx = {}
     for chave, candidatos in colunas.items():
         for c in candidatos:
             if c in nomes:
-                idx[chave] = nomes.index(c)
+                idx[chave] = len(nomes) - 1 - nomes[::-1].index(c) if chave in ultimos else nomes.index(c)
                 break
     return idx
+
+
+def _cabecalhos_candidatos(linhas, limite=8):
+    """Linhas que parecem cabeçalhos de tabela (para a mensagem de erro)."""
+    vistos = []
+    for l in linhas:
+        textos = [str(c).strip() for c in l if c not in (None, "") and str(c).strip()]
+        if len(textos) < 3 or sum(_numero(t) is not None for t in textos) > len(textos) / 3:
+            continue
+        cab = ", ".join(textos)[:200]
+        if cab not in vistos:
+            vistos.append(cab)
+        if len(vistos) >= limite:
+            break
+    return vistos
 
 
 def _localizar_cabecalho(linhas):
@@ -273,12 +300,11 @@ def _localizar_cabecalho(linhas):
             return "eventos", i, nomes
     if not any(c not in (None, "") for l in linhas for c in l):
         raise ErroImportacao("O arquivo está vazio ou não pôde ser lido.")
-    cabecalhos = next((", ".join(str(c) for c in l if c not in (None, ""))
-                       for l in linhas if sum(c not in (None, "") for c in l) >= 3), "")
+    cabecalhos = _cabecalhos_candidatos(linhas)
     raise ErroImportacao("Não reconheci o relatório. São aceitos os extratos da B3 (Posição, Negociação, "
-                         "Movimentação, Eventos) e relatórios de posição com colunas de ativo/produto e "
-                         "quantidade ou saldo."
-                         + (f" Colunas encontradas: {cabecalhos[:300]}" if cabecalhos else ""))
+                         "Movimentação, Eventos) e relatórios de posição com uma tabela por ativo (nome do "
+                         "ativo/produto e quantidade ou saldo)."
+                         + (" Tabelas encontradas: " + " | ".join(cabecalhos) if cabecalhos else ""))
 
 
 def _registros(linhas, inicio, nomes, colunas):
@@ -450,12 +476,25 @@ ETFS_CONHECIDOS = {"BOVA11", "IVVB11", "SMAL11", "HASH11", "DIVO11", "XINA11", "
                    "BITH11", "ETHE11", "NTNS11", "LFTS11", "PIBB11", "BRAX11", "ECOO11", "SPXB11", "WRLD11"}
 
 
+# Linhas de agrupamento/subtotal comuns em relatórios de carteira (não são ativos).
+LINHAS_DE_GRUPO = {
+    "renda fixa", "renda variavel", "acoes", "acao", "fundos imobiliarios", "fundos de investimento", "fundos",
+    "fii", "fiis", "etf", "etfs", "bdr", "bdrs", "previdencia", "previdencia privada", "tesouro direto",
+    "tesouro", "multimercado", "multimercados", "caixa", "saldo em conta", "conta corrente", "cripto",
+    "criptoativos", "coe", "internacional", "exterior", "pos-fixado", "pre-fixado", "inflacao", "renda fixa pos",
+    "renda fixa pre", "renda fixa inflacao", "fundos de renda fixa", "fundos multimercado", "fundos de acoes",
+    "outros", "patrimonio", "patrimonio total", "carteira",
+}
+
+
 def _cabecalho_posicao(linhas):
     for i, linha in enumerate(linhas[:80]):
-        nomes = [_norm(c) for c in linha]
+        nomes = [_norm_cab(c) for c in linha]
         if "data do negocio" in nomes or "entrada/saida" in nomes or any("evento" in n for n in nomes):
             return None
-        idx = _indices_flexiveis(nomes, COLUNAS_POSICAO)
+        if nomes and nomes[0] in ("classe do ativo", "classe", "estrategia", "tipo de ativo", "mercado"):
+            continue  # tabela de resumo por classe, não por ativo
+        idx = _indices_flexiveis(nomes, COLUNAS_POSICAO, ultimos=("valor",))
         if ("codigo" in idx or "produto" in idx) and \
                 (("quantidade" in idx and {"preco", "valor", "aplicado", "preco_medio"} & set(idx))
                  or ("valor" in idx and "data" not in nomes and "historico" not in nomes)):
@@ -493,8 +532,9 @@ def _posicao(abas):
         for n, linha in enumerate(linhas[inicio + 1:], start=inicio + 2):
             cel = {k: (linha[i] if i < len(linha) else None) for k, i in idx.items()}
             produto = str(cel.get("produto") or "").strip()
-            if not any(c not in (None, "") for c in linha) or _norm(produto).startswith("total") \
-                    or _norm(cel.get("codigo")).startswith("total"):
+            nome_norm = _norm(produto or cel.get("codigo"))
+            if not any(c not in (None, "") for c in linha) or nome_norm.startswith(("total", "subtotal")) \
+                    or nome_norm in LINHAS_DE_GRUPO:
                 continue
             qtd = _numero(cel.get("quantidade"))
             sem_quantidade = qtd is None and "quantidade" not in idx
@@ -506,9 +546,11 @@ def _posicao(abas):
                 ticker, origem = m.group(1), "b3"
             else:
                 ticker, origem = ticker_do_produto(produto or codigo)
-                if origem == "outro":  # CDB, LCA, debêntures...: produto + vencimento identificam o título
+                if origem == "outro":  # CDB, LCA, fundos...: o nome (+ vencimento) identifica o título
                     venc = _data(cel.get("vencimento"))
-                    ticker = re.sub(r"\s+", " ", f"{produto} {venc or ''}").strip().upper()[:60]
+                    nome_titulo = produto or str(cel.get("codigo") or "").strip()
+                    ticker = re.sub(r"\s+", " ", f"{nome_titulo} {venc or ''}").strip().upper()[:60]
+                    produto = produto or nome_titulo
                     origem = "renda_fixa"
             if not ticker or not qtd:
                 ignorados.append({"linha": n, "descricao": f"{aba}: {produto or codigo}",
@@ -526,6 +568,7 @@ def _posicao(abas):
             if classe == "fii" and ticker in ETFS_CONHECIDOS:
                 classe = "etf"
             it = itens.setdefault(ticker, {"ticker": ticker, "classe": classe, "quantidade": 0.0,
+                                           "sem_quantidade": sem_quantidade,
                                            "valor_atual": 0.0, "custo_total": 0.0, "tem_custo": False,
                                            "nome": produto.split(" - ", 1)[-1][:80] if " - " in produto else ""})
             it["quantidade"] += qtd
@@ -616,11 +659,14 @@ def conciliar_posicao(posicao, aportes_existentes, aportes_novos, hoje):
         if abs(diferenca) < 1e-9:
             continue
         if diferenca > 0:
+            preco, origem = (p.get("preco_medio"), "valor aplicado informado no relatório") \
+                if p and p.get("preco_medio") else (None, None)
+            if preco is None and p and p.get("sem_quantidade"):
+                # aplicação informada só pelo saldo: sem custo no relatório, usa o saldo atual
+                preco, origem = p.get("preco_atual"), "saldo atual (custo não informado)"
             iniciais.append({"ticker": ticker, "classe": p["classe"] if p else classe_provavel(ticker),
-                             "quantidade": diferenca, "data": data_abertura,
-                             "preco": p.get("preco_medio") if p else None,
-                             "preco_origem": "valor aplicado informado no relatório" if p and p.get("preco_medio") else None,
-                             "qtd_b3": qtd_b3})
+                             "quantidade": diferenca, "data": data_abertura, "preco": preco,
+                             "preco_origem": origem, "qtd_b3": qtd_b3})
         else:
             motivo = ("O sistema terá mais do que a B3 mostra: verifique vendas, grupamentos ou "
                       "transferências não importados." if p is not None else

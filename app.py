@@ -536,8 +536,19 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
         existentes = listar_aportes(cid)
         marcar_duplicados(previa, existentes, listar_proventos(cid))
         previa["conciliacao"] = None
+        estimadas = set()
+        for p in previa["posicao"]:
+            # Relatórios só com saldo: para ativos de bolsa, estima a quantidade pela cotação atual.
+            if p.get("sem_quantidade") and p["classe"] in portfolio.CLASSES_INTEIRAS and p.get("valor_atual"):
+                cotacao, _ = mercado.preco_atual(p["ticker"])
+                if cotacao and round(p["valor_atual"] / cotacao) >= 1:
+                    p["quantidade"] = float(round(p["valor_atual"] / cotacao))
+                    p["preco_atual"], p["sem_quantidade"] = cotacao, False
+                    estimadas.add(p["ticker"])
         if previa["posicao"]:
             conc = conciliar_posicao(previa["posicao"], existentes, previa["aportes"], hoje())
+            for item in conc["posicoes_iniciais"]:
+                item["quantidade_estimada"] = item["ticker"] in estimadas
             for item in conc["posicoes_iniciais"]:
                 if item["preco"] is None and item["classe"] in portfolio.CLASSES_INTEIRAS:
                     item["preco"] = preco_em(item["ticker"], item["data"])

@@ -271,7 +271,8 @@ function renderPreviaB3() {
     html += iniciais.length ? `<div class="rolagem"><table><tr><th></th><th>Ativo</th><th>Classe</th><th>Qtd. inicial</th><th>Qtd. no relatório</th><th>Preço médio (R$)</th><th>Origem do preço</th></tr>
       ${iniciais.map((x, i) => `<tr><td><input type="checkbox" data-lista="iniciais" data-idx="${i}" checked></td>
         <td><strong>${esc(x.ticker)}</strong></td><td>${esc(CLASSES[x.classe] || x.classe)}</td>
-        <td>${num.format(x.quantidade)}</td><td>${num.format(x.qtd_b3)}</td>
+        <td><input type="number" step="any" min="0" class="qtd-inicial" data-idx="${i}" value="${x.quantidade}" style="width:100px">
+          ${x.quantidade_estimada ? `<br><small class="neg">estimada pela cotação: confira</small>` : ""}</td><td>${num.format(x.qtd_b3)}</td>
         <td><input type="number" step="any" min="0" class="preco-inicial" data-idx="${i}" value="${x.preco == null ? "" : Number(x.preco.toFixed(4))}" placeholder="obrigatório" style="width:120px"></td>
         <td>${x.preco_origem ? esc(x.preco_origem) : `<span class="neg">informe o preço</span>`}</td></tr>`).join("")}</table></div>`
       : `<p class="dica">As operações dos extratos já explicam toda a posição da B3. Nenhuma posição inicial necessária.</p>`;
@@ -306,8 +307,10 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
   for (const i of sel("iniciais")) {
     const x = previaB3.conciliacao.posicoes_iniciais[i];
     const preco = parseFloat(document.querySelector(`.preco-inicial[data-idx="${i}"]`).value);
+    const quantidade = parseFloat(document.querySelector(`.qtd-inicial[data-idx="${i}"]`).value);
+    if (!(quantidade > 0)) return toast(`Informe a quantidade de ${x.ticker} (ou desmarque a linha).`, true);
     if (!(preco >= 0)) return toast(`Informe o preço médio de ${x.ticker} (ou desmarque a linha).`, true);
-    iniciais.push({ data: x.data, ticker: x.ticker, tipo: "compra", quantidade: x.quantidade, preco, classe: x.classe, obs: "posição inicial (B3)" });
+    iniciais.push({ data: x.data, ticker: x.ticker, tipo: "compra", quantidade, preco, classe: x.classe, obs: "posição inicial (importação)" });
   }
   const body = {
     aportes: [...iniciais, ...sel("aportes").map(i => previaB3.aportes[i])],

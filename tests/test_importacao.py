@@ -139,7 +139,7 @@ def test_eventos():
 
 
 def test_erro_mostra_colunas():
-    with pytest.raises(importacao.ErroImportacao, match="Colunas encontradas: Coluna A, Coluna B, Coluna C"):
+    with pytest.raises(importacao.ErroImportacao, match="Tabelas encontradas: Coluna A, Coluna B, Coluna C"):
         importacao.analisar_extrato(xlsx(["Coluna A", "Coluna B", "Coluna C"], [[1, 2, 3]]), "x.xlsx")
 
 
@@ -283,3 +283,21 @@ def test_api_relatorio_de_banco(novo_app):
     assert ini["LCA AGRO EXEMPLO"]["preco"] == 5000 and ini["LCA AGRO EXEMPLO"]["quantidade"] == 1
     manual = {a["ticker"]: a["preco_manual"] for a in previa["ajustes_ativos"]}
     assert manual["LCA AGRO EXEMPLO"] == 5320
+
+
+def test_relatorio_de_carteira_com_datas_nas_colunas():
+    """Relatório com resumo por classe, colunas 'SALDO BRUTO <data>' (início e fim) e linhas de grupo."""
+    r = ler_fixture("relatorio_carteira.pdf")
+    pos = {p["ticker"]: p for p in r["posicao"]}
+    assert set(pos) == {"CDB BANCO EXEMPLO 110% CDI - 15/01/2028", "TESOURO SELIC 2029", "KNRI11"}
+    assert pos["TESOURO SELIC 2029"]["preco_atual"] == 10100  # saldo bruto do fim do período
+    assert pos["CDB BANCO EXEMPLO 110% CDI - 15/01/2028"]["classe"] == "renda_fixa"
+
+
+def test_api_estima_quantidade_de_ativo_de_bolsa_sem_quantidade(novo_app):
+    c = cliente_logado(novo_app(lambda t: [("2026-01-02", 100.0), ("2026-11-04", 83.0)]))
+    previa = c.post("/api/importar/b3/previa", content_type="multipart/form-data", data={"arquivo": [
+        (io.BytesIO((FIXTURES / "relatorio_carteira.pdf").read_bytes()), "relatorio.pdf")]}).get_json()
+    ini = {i["ticker"]: i for i in previa["conciliacao"]["posicoes_iniciais"]}
+    assert ini["KNRI11"]["quantidade"] == 50 and ini["KNRI11"]["quantidade_estimada"]  # 4150 / 83
+    assert ini["TESOURO SELIC 2029"]["quantidade"] == 1 and ini["TESOURO SELIC 2029"]["preco"] == 10100
