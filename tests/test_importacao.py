@@ -141,3 +141,20 @@ def test_eventos():
 def test_erro_mostra_colunas():
     with pytest.raises(importacao.ErroImportacao, match="Colunas encontradas: Coluna A, Coluna B, Coluna C"):
         importacao.analisar_extrato(xlsx(["Coluna A", "Coluna B", "Coluna C"], [[1, 2, 3]]), "x.xlsx")
+
+
+def test_excel_da_b3_com_dimensao_errada():
+    """Os arquivos da B3 declaram a dimensão da planilha como "A1"; o leitor precisa ignorar isso."""
+    import re
+    import zipfile
+    cab = ["Produto", "Pagamento", "Tipo de Evento", "Instituição", "Quantidade", "Preço unitário", "Valor líquido"]
+    original = xlsx(cab, [["BBAS3 - BANCO DO BRASIL S/A", "28/02/2025", "Dividendo", "X", 40, 0.25, 10]], False)
+    zin, saida = zipfile.ZipFile(io.BytesIO(original)), io.BytesIO()
+    with zipfile.ZipFile(saida, "w") as zout:
+        for info in zin.infolist():
+            dados = zin.read(info.filename)
+            if info.filename.endswith("sheet1.xml"):
+                dados = re.sub(rb'<dimension ref="[^"]+"/>', b'<dimension ref="A1"/>', dados)
+            zout.writestr(info, dados)
+    r = importacao.analisar_extrato(saida.getvalue(), "eventos.xlsx")
+    assert r["tipo_arquivo"] == "eventos" and r["proventos"][0]["valor_total"] == 10

@@ -69,8 +69,13 @@ def ler_planilha(conteudo, nome_arquivo):
         except ImportError as e:
             raise ErroImportacao("Instale o pacote openpyxl para ler arquivos Excel "
                                  "(pip install -r requirements.txt).") from e
+        import warnings
         try:
-            wb = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+            # Sem read_only: os arquivos gerados pela B3 trazem a dimensão da planilha errada
+            # (ex.: "A1"), e no modo read_only o openpyxl leria só a primeira célula.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # "Workbook contains no default style"
+                wb = openpyxl.load_workbook(io.BytesIO(conteudo), data_only=True)
         except Exception as e:
             raise ErroImportacao(f"Não foi possível abrir o Excel: {e}") from e
         linhas = []
@@ -136,6 +141,8 @@ def _localizar_cabecalho(linhas):
         if {"produto", "tipo", "data", "valor"} <= set(idx) and \
                 any("evento" in n or "provento" in n for n in nomes):
             return "eventos", i, nomes
+    if not any(c not in (None, "") for l in linhas for c in l):
+        raise ErroImportacao("A planilha está vazia ou não pôde ser lida.")
     cabecalhos = next((", ".join(str(c) for c in l if c not in (None, ""))
                        for l in linhas if sum(c not in (None, "") for c in l) >= 3), "")
     raise ErroImportacao("Não reconheci o arquivo. Use os extratos de Negociação, Movimentação ou Eventos "
