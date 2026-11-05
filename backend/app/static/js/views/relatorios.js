@@ -2,6 +2,7 @@
 
 import { $, $$, api, badge, can, esc, fmtDate, fmtDateTime, isoDate, scoped, toast, withToken } from "../core.js";
 import * as auditoria from "./auditoria.js";
+import * as epi from "./epi.js";
 
 const FREQ = { mensal: "Mensal (dia 1, referente ao mês anterior)", semanal: "Semanal (segunda-feira, semana anterior)",
   desligado: "Desligado" };
@@ -135,11 +136,70 @@ async function renderMeasures(box) {
   draw();
 }
 
+// ---------- EPI e uniformes ----------
+
+async function renderPPE(box) {
+  const p = presets();
+  const s = await api("/api/ppe/summary");
+  box.innerHTML = `
+    <div class="card">
+      <h3>Período das entregas</h3>
+      <form id="ppe-period" class="filters" style="margin:0;align-items:flex-end">
+        <div class="tabs" style="margin:0">${Object.entries(p).map(([k, [l]], i) =>
+          `<button type="button" class="small ${i ? "secondary" : ""}" data-preset="${k}">${l}</button>`).join("")}</div>
+        <label>De <input type="date" name="start" value="${p.mes_anterior[1]}"></label>
+        <label>Até <input type="date" name="end" value="${p.mes_anterior[2]}"></label>
+        <label>Tipo <select name="category"><option value="">EPI e uniforme</option><option value="epi">EPI</option>
+          <option value="uniforme">Uniforme</option></select></label>
+      </form>
+    </div>
+    <div class="report-cards">
+      <div class="card"><h3>Entregas de EPI e uniformes</h3>
+        <p class="hint">Planilha (CSV) de todas as entregas do período: colaborador, setor, item, CA, tamanho, quantidade, motivo,
+          troca prevista e situação da assinatura.</p>
+        <button type="button" data-ppe="deliveries">Baixar planilha (CSV)</button></div>
+      <div class="card"><h3>Estoque e estoque mínimo</h3>
+        <p class="hint">Saldo por unidade, item e tamanho, com o mínimo e os itens abaixo dele
+          (<b class="${s.stock_low ? "bad-text" : ""}">${s.stock_low} agora</b>).</p>
+        <button type="button" class="secondary" data-ppe="stock">Baixar planilha (CSV)</button>
+        <button type="button" class="secondary" data-go="estoque">Abrir estoque</button></div>
+      <div class="card"><h3>Vencimento de CA</h3>
+        <p class="hint">EPIs com CA vencido, vencendo ou sem CA no catálogo
+          (<b class="${s.ca_expired ? "bad-text" : ""}">${s.ca_expired} vencido(s)</b>, ${s.ca_expiring} vencendo em 60 dias).</p>
+        <button type="button" class="secondary" data-go="ca">Abrir relatório</button></div>
+      <div class="card"><h3>Plano de substituição por setor</h3>
+        <p class="hint">Trocas vencidas e previstas por setor e colaborador, EPI exigido não entregue e a lista de compras
+          (<b class="${s.replacements_overdue ? "bad-text" : ""}">${s.replacements_overdue} vencida(s)</b>).</p>
+        <button type="button" class="secondary" data-go="plano">Abrir plano</button></div>
+      <div class="card"><h3>Fichas de EPI</h3>
+        <p class="hint">Ficha individual (NR-6) com as entregas e as assinaturas eletrônicas, para imprimir ou salvar em PDF.
+          ${s.unsigned ? `<b class="bad-text">${s.unsigned} entrega(s) sem assinatura.</b>` : ""}</p>
+        <button type="button" class="secondary" data-go="entregas">Abrir entregas e fichas</button></div>
+    </div>`;
+  const f = $("#ppe-period", box);
+  $$("[data-preset]", box).forEach((b) => b.addEventListener("click", () => {
+    const [, start, end] = p[b.dataset.preset];
+    f.start.value = start;
+    f.end.value = end;
+    $$("[data-preset]", box).forEach((x) => x.classList.toggle("secondary", x !== b));
+  }));
+  box.querySelector("[data-ppe=deliveries]").addEventListener("click", () => {
+    const params = new URLSearchParams({ start: f.start.value, end: f.end.value });
+    if (f.category.value) params.set("category", f.category.value);
+    location.href = withToken(scoped(`/api/ppe/deliveries.csv?${params}`));
+  });
+  box.querySelector("[data-ppe=stock]").addEventListener("click", () => {
+    location.href = withToken(scoped("/api/ppe/stock.csv"));
+  });
+  $$("[data-go]", box).forEach((b) => b.addEventListener("click", () => { epi.openTab(b.dataset.go); location.hash = "#epi"; }));
+}
+
 // ---------- Container ----------
 
 const TABS = [
   { id: "relatorios", label: "Relatórios", role: "tecnico", render: renderReports },
   { id: "medidas", label: "Medidas e termos", role: "tecnico", render: renderMeasures },
+  { id: "epi", label: "EPI e uniformes", role: "tecnico", render: renderPPE },
   { id: "auditoria", label: "Auditoria", role: "admin", render: (box) => auditoria.show(box) },
 ];
 

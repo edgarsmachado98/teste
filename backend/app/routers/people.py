@@ -16,6 +16,7 @@ from ..people import (EMPLOYMENT_ALIASES, TEMPLATE_CSV, delete_photo, format_cpf
                       people_dir, save_photo, valid_cpf)
 from ..schemas import DeliveryIn, DeliveryOut, ExamIn, ExamOut, PersonDetail, PersonIn, PersonOut, TrainingIn, TrainingOut
 from ..sectors import PPE_LABELS
+from .ppe import delivery_out
 
 router = APIRouter(prefix="/api/people")
 viewer = require_role("tecnico")   # SESMT consulta
@@ -24,7 +25,8 @@ editor = require_role("gestor")    # RH/gestão edita
 
 def ppe_alert(person: Person, today: date | None = None) -> str | None:
     today = today or date.today()
-    soon = [d for d in person.deliveries if d.valid_until and d.valid_until <= today + timedelta(days=30)]
+    soon = [d for d in person.deliveries
+            if d.valid_until and not d.replaced_on and d.valid_until <= today + timedelta(days=30)]
     if not soon:
         return None
     first = min(soon, key=lambda d: d.valid_until)
@@ -100,8 +102,9 @@ def people_summary(unit_id: int | None = None, db: Session = Depends(get_db)):
         "third_party": sum(1 for p in people if p.employment == "terceiro"),
         "by_sector": sorted(({"sector": k, "count": v} for k, v in by_sector.items()), key=lambda x: -x["count"]),
         "ppe_expiring": sum(1 for p in people for d in p.deliveries
-                            if d.valid_until and today <= d.valid_until <= today + timedelta(days=30)),
-        "ppe_expired": sum(1 for p in people for d in p.deliveries if d.valid_until and d.valid_until < today),
+                            if d.valid_until and not d.replaced_on and today <= d.valid_until <= today + timedelta(days=30)),
+        "ppe_expired": sum(1 for p in people for d in p.deliveries
+                           if d.valid_until and not d.replaced_on and d.valid_until < today),
         "without_photo": sum(1 for p in people if not p.photo_file),
         "trainings_scheduled": sum(1 for p in people for t in p.trainings if t.status == "agendado"),
         **_exam_counts(people),
@@ -182,7 +185,8 @@ def get_person(person_id: int, request: Request, user: User = Depends(viewer), d
         audit.record(db, user, "pessoa_consultada", "pessoa", person.id, person.name, request)
         db.commit()
     return {**person_out(person, full_cpf=full),
-            "deliveries": [DeliveryOut.model_validate(d) for d in person.deliveries],
+            "deliveries": [delivery_out(d) for d in person.deliveries],
+            "sizes": person.sizes or {},
             "trainings": [TrainingOut.model_validate(t) for t in person.trainings],
             "exams": [exam_out(r) for r in person.exams],
             "exam_status": exams.compliance(person.exams, required_exams(person)),
@@ -273,6 +277,8 @@ def delete_delivery(person_id: int, delivery_id: int, request: Request, user: Us
     delivery = get_or_404(db, PPEDelivery, delivery_id)
     if delivery.person_id != person_id:
         raise HTTPException(404, "não encontrado")
+    if delivery.receipt_id:
+        raise HTTPException(409, "entrega com comprovante: use Estornar na guia EPI (assinada não pode ser excluída)")
     audit.record(db, user, "epi_entrega_excluida", "pessoa", person_id, delivery.item, request)
     db.delete(delivery)
     db.commit()

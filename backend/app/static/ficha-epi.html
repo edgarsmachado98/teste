@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ficha de EPI – VigIA</title>
+  <link rel="stylesheet" href="relatorio.css">
+  <style>
+    #report { max-width: 200mm; padding: 14mm 12mm; font-size: 12px; }
+    .doc-head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid var(--accent); padding-bottom: 10px; }
+    .doc-head h1 { margin: 0; font-size: 19px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; margin: 12px 0; }
+    .grid div { border-bottom: 1px solid var(--line); padding: 3px 0; }
+    .grid span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
+    .decl { border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; font-size: 11.5px; line-height: 1.5; margin: 10px 0 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid var(--line); padding: 4px 5px; text-align: left; vertical-align: middle; font-size: 11px; }
+    th { background: var(--panel-2); font-size: 10px; text-transform: uppercase; }
+    td.sig { width: 34mm; height: 13mm; text-align: center; padding: 1px; }
+    td.sig img { max-height: 12mm; max-width: 32mm; }
+    .rec { color: var(--muted); font-size: 10px; }
+    .ok { color: var(--ok); font-weight: 600; }
+    .bad { color: var(--danger); font-weight: 700; }
+    .proof { margin-top: 16px; font-size: 10.5px; }
+    .proof table td { font-size: 10px; }
+    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 9.5px; word-break: break-all; }
+    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; font-size: 11px; }
+    .sign-grid div { border-top: 1px solid #16191d; padding-top: 4px; text-align: center; }
+    .blank td { height: 9mm; }
+  </style>
+</head>
+<body>
+  <div class="toolbar no-print"><span>Ficha de controle de EPI e uniformes (NR-6). Imprima ou salve em PDF para o prontuário do colaborador.</span>
+    <span><label style="font-size:13px"><input type="checkbox" id="blank-rows"> Linhas em branco para entregas no papel</label>
+    <button id="print">Imprimir / Salvar PDF</button></span></div>
+  <article id="report"><p>Carregando…</p></article>
+  <script type="module" src="js/ficha-epi.js"></script>
+</body>
+</html>

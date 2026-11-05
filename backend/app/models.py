@@ -122,6 +122,8 @@ class Person(Base):
     photo_file: Mapped[str | None] = mapped_column(String(200), nullable=True)
     photo_consent: Mapped[bool] = mapped_column(Boolean, default=False)
     photo_consent_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Tamanhos para EPI e uniforme, ex.: {"camisa": "G", "calca": "42", "calcado": "40", "luva": "9"}
+    sizes: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)
     status: Mapped[str] = mapped_column(String(20), default="ativo")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
@@ -135,6 +137,9 @@ class Person(Base):
 
 
 class PPEDelivery(Base):
+    """EPI ou uniforme entregue a uma pessoa. `valid_until` = troca prevista; `replaced_on` = quando foi
+    substituído por uma entrega nova do mesmo item (deixa de contar nos vencimentos)."""
+
     __tablename__ = "ppe_deliveries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -143,6 +148,126 @@ class PPEDelivery(Base):
     ca: Mapped[str] = mapped_column(String(20), default="")  # certificado de aprovação
     delivered_on: Mapped[date] = mapped_column(Date)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("ppe_items.id", ondelete="SET NULL"), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(20), nullable=True, default="epi")  # epi | uniforme
+    size: Mapped[str | None] = mapped_column(String(20), nullable=True, default="")
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True, default=1)
+    reason: Mapped[str | None] = mapped_column(String(20), nullable=True, default="")
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id", ondelete="SET NULL"), nullable=True)
+    receipt_id: Mapped[int | None] = mapped_column(ForeignKey("ppe_receipts.id", ondelete="SET NULL"), nullable=True,
+                                                   index=True)
+    from_stock: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    replaced_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True, default=utcnow)
+
+    receipt: Mapped["PPEReceipt | None"] = relationship(back_populates="deliveries")
+
+
+PPE_CATEGORIES = ("epi", "uniforme")
+DELIVERY_REASONS = {
+    "primeira": "Primeira entrega / admissão",
+    "troca": "Troca periódica",
+    "desgaste": "Desgaste ou dano",
+    "perda": "Perda ou extravio",
+    "tamanho": "Troca de tamanho",
+    "outro": "Outro",
+}
+MOVE_TYPES = {"entrada": "Entrada (compra)", "saida": "Entrega", "ajuste": "Ajuste de inventário",
+              "devolucao": "Devolução", "estorno": "Estorno de entrega"}
+
+
+class PPEItem(Base):
+    """Catálogo de EPIs e uniformes (com o CA – Certificado de Aprovação – e a troca periódica)."""
+
+    __tablename__ = "ppe_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(20), default="epi")
+    ppe_type: Mapped[str] = mapped_column(String(30), default="")  # helmet, vest... (o que a câmera cobra)
+    ca: Mapped[str] = mapped_column(String(20), default="")
+    ca_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    manufacturer: Mapped[str] = mapped_column(String(120), default="")
+    sizes: Mapped[list] = mapped_column(JSON, default=list)  # ex.: ["P", "M", "G"]; vazio = tamanho único
+    replacement_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # troca periódica
+    unit_label: Mapped[str] = mapped_column(String(10), default="un")  # un, par, cx
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class PPEStock(Base):
+    """Saldo de um item (e tamanho) numa unidade, com o estoque mínimo."""
+
+    __tablename__ = "ppe_stock"
+    __table_args__ = (UniqueConstraint("unit_id", "item_id", "size"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("ppe_items.id", ondelete="CASCADE"), index=True)
+    size: Mapped[str] = mapped_column(String(20), default="")
+    quantity: Mapped[int] = mapped_column(Integer, default=0)
+    min_quantity: Mapped[int] = mapped_column(Integer, default=0)
+    location: Mapped[str] = mapped_column(String(80), default="")  # almoxarifado, armário...
+
+    item: Mapped[PPEItem] = relationship(lazy="selectin")
+    unit: Mapped[Unit] = relationship(lazy="selectin")
+
+
+class PPEMovement(Base):
+    """Histórico do estoque: entradas, entregas, ajustes e devoluções (rastreabilidade)."""
+
+    __tablename__ = "ppe_movements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("ppe_items.id", ondelete="CASCADE"), index=True)
+    size: Mapped[str] = mapped_column(String(20), default="")
+    type: Mapped[str] = mapped_column(String(20))
+    quantity: Mapped[int] = mapped_column(Integer)  # positivo entra, negativo sai
+    balance: Mapped[int] = mapped_column(Integer)  # saldo depois do movimento
+    note: Mapped[str] = mapped_column(String(300), default="")  # nota fiscal, fornecedor, motivo
+    person_id: Mapped[int | None] = mapped_column(ForeignKey("people.id", ondelete="SET NULL"), nullable=True)
+    receipt_id: Mapped[int | None] = mapped_column(ForeignKey("ppe_receipts.id", ondelete="SET NULL"), nullable=True)
+    user_name: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
+
+    item: Mapped[PPEItem] = relationship(lazy="selectin")
+
+
+SIGN_METHODS = {"tela": "Assinatura na tela", "impressa": "Ficha impressa e assinada no papel",
+                "biometria": "Biometria (leitor de digital)"}
+
+
+class PPEReceipt(Base):
+    """Comprovante de entrega (ficha de EPI – NR-6): uma ou mais peças entregues de uma vez e a confirmação
+    do colaborador. A assinatura eletrônica guarda a imagem, a foto do momento (opcional), data/hora, IP e
+    o hash SHA-256 do conteúdo – qualquer alteração posterior é detectada."""
+
+    __tablename__ = "ppe_receipts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)  # EPI-2026-0001
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), index=True)
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id", ondelete="SET NULL"), nullable=True)
+    delivered_on: Mapped[date] = mapped_column(Date)
+    method: Mapped[str] = mapped_column(String(20), default="pendente")  # tela | impressa | biometria | pendente
+    signature_file: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    photo_file: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    biometric_ref: Mapped[str] = mapped_column(String(200), default="")  # id da verificação no leitor
+    identity_check: Mapped[str] = mapped_column(String(60), default="")  # ex.: "CPF conferido"
+    signed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    user_agent: Mapped[str] = mapped_column(String(200), default="")
+    notes: Mapped[str] = mapped_column(String(500), default="")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    person: Mapped["Person"] = relationship(lazy="selectin")
+    created_by: Mapped[User | None] = relationship(lazy="selectin")
+    deliveries: Mapped[list[PPEDelivery]] = relationship(back_populates="receipt", lazy="selectin",
+                                                         order_by="PPEDelivery.id")
 
 
 TRAINING_STATUSES = ("agendado", "concluido", "cancelado")

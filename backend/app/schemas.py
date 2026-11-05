@@ -411,7 +411,8 @@ class ExamOut(ExamIn):
 
 
 class PersonDetail(PersonOut):
-    deliveries: list[DeliveryOut]
+    deliveries: list[dict]
+    sizes: dict = {}
     trainings: list[TrainingOut]
     exams: list[ExamOut] = []
     exam_status: list[dict] = []

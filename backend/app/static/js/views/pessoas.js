@@ -1,6 +1,8 @@
 // Cadastros › Pessoas: lista, cadastro com foto de identificação, EPIs entregues, treinamentos, exames (PCMSO) e importação.
 
 import { $, api, badge, can, esc, fmtDate, session, toast, withToken } from "../core.js";
+import { openDelivery, sizesText } from "../epi-ui.js";
+import { sizesDialog } from "./epi.js";
 
 const EMPLOYMENT = { clt: "CLT", terceiro: "Terceiro", temporario: "Temporário", estagiario: "Estagiário" };
 const STATUS = { ativo: ["Ativo", "good"], afastado: ["Afastado", "warn"], desligado: ["Desligado", "muted"] };
@@ -336,21 +338,32 @@ async function openPerson(id) {
     ${id !== "new" ? `
     <div class="grid-2" style="margin-top:16px">
       <div class="card">
-        <h3>EPIs entregues</h3>
+        <h3>EPIs e uniformes entregues</h3>
+        <div class="actions" style="margin-bottom:8px">
+          ${can("tecnico") && p.status !== "desligado" ? `<button type="button" id="epi-deliver">Registrar entrega</button>` : ""}
+          <a class="button secondary" href="ficha-epi.html?person=${p.id}" target="_blank">Ficha de EPI</a>
+          ${can("tecnico") ? `<button type="button" class="secondary" id="epi-sizes">Tamanhos</button>` : ""}
+        </div>
+        ${Object.keys(p.sizes || {}).length ? `<p class="hint">Tamanhos: ${esc(sizesText(p.sizes))}</p>` : ""}
         <table class="compact">
-          <tr><th>EPI</th><th>CA</th><th>Entrega</th><th>Validade</th><th></th></tr>
-          ${p.deliveries.map((d) => `<tr><td>${esc(d.item)}</td><td class="mono">${esc(d.ca)}</td><td>${fmtDate(d.delivered_on)}</td>
-            <td>${fmtDate(d.valid_until)}</td><td>${can("tecnico") ? `<button class="danger small" data-del-delivery="${d.id}">×</button>` : ""}</td></tr>`).join("")
+          <tr><th>Item</th><th>CA</th><th>Entrega</th><th>Troca prevista</th><th></th></tr>
+          ${p.deliveries.map((d) => `<tr class="${d.replaced_on ? "muted-row" : d.overdue ? "row-bad" : ""}">
+            <td>${d.quantity > 1 ? `${d.quantity}× ` : ""}${esc(d.item)}${d.size ? ` (${esc(d.size)})` : ""}
+              ${d.receipt_number ? `<div class="hint">${esc(d.receipt_number)} · ${d.signed ? "assinado" : "sem assinatura"}</div>` : ""}</td>
+            <td class="mono">${esc(d.ca)}</td><td>${fmtDate(d.delivered_on)}</td>
+            <td>${d.replaced_on ? `<span class="hint">substituído ${fmtDate(d.replaced_on)}</span>` : fmtDate(d.valid_until)}</td>
+            <td>${can("tecnico") && !d.receipt_id ? `<button class="danger small" data-del-delivery="${d.id}">×</button>` : ""}</td></tr>`).join("")
             || `<tr><td class="hint" colspan="5">Nenhuma entrega registrada.</td></tr>`}
         </table>
-        ${can("tecnico") ? `<form id="delivery-form" class="form" style="margin-top:12px">
+        ${can("tecnico") ? `<details style="margin-top:10px"><summary class="hint">Registro manual (entrega antiga, sem estoque e sem assinatura)</summary>
+        <form id="delivery-form" class="form" style="margin-top:12px">
           <label>EPI <input name="item" required list="ppe-items"></label>
           <datalist id="ppe-items">${[...p.required_ppe, ...p.delivery_ppe].map((i) => `<option value="${esc(i[0].toUpperCase() + i.slice(1))}">`).join("")}</datalist>
           <label>CA <input name="ca" class="mono"></label>
           <label>Entrega <input name="delivered_on" type="date" required></label>
           <label>Validade <input name="valid_until" type="date"></label>
-          <div class="actions"><button type="submit" class="secondary">Registrar entrega</button></div>
-        </form>` : ""}
+          <div class="actions"><button type="submit" class="secondary">Registrar</button></div>
+        </form></details>` : ""}
       </div>
       <div class="card">
         <h3>Treinamentos</h3>
@@ -448,6 +461,8 @@ async function openPerson(id) {
     await api(`/api/people/${p.id}/photo`, { method: "DELETE" });
     openPerson(p.id);
   });
+  $("#epi-deliver", root)?.addEventListener("click", async () => { if (await openDelivery({ person: p })) openPerson(p.id); });
+  $("#epi-sizes", root)?.addEventListener("click", () => sizesDialog(p, () => openPerson(p.id)));
   $("#delivery-form", root)?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const d = e.target;

@@ -44,7 +44,7 @@ export function setUnit(id) {
   session.unitId = id || null;
   try { id ? localStorage.setItem("vigia-unit", String(id)) : localStorage.removeItem("vigia-unit"); } catch { /* sem storage */ }
 }
-const UNIT_SCOPED = /^\/api\/(events|cameras|actions|rules|measures|people\/summary|dds\/sessions|reports\/(summary|events\.csv|pdf))(\?|$)/;
+const UNIT_SCOPED = /^\/api\/(events|cameras|actions|rules|measures|people\/summary|dds\/sessions|reports\/(summary|events\.csv|pdf)|ppe\/(receipts|uniforms|replacement-plan|summary|ca-report|deliveries\.csv|stock\.csv))(\?|$)/;
 /** Acrescenta ?unit_id= às consultas que têm filtro por unidade (quando uma unidade está escolhida). */
 export function scoped(path) {
   if (!session.unitId || !UNIT_SCOPED.test(path) || /[?&]unit_id=/.test(path)) return path;
