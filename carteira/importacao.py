@@ -537,9 +537,10 @@ def _posicao(abas):
                     or nome_norm in LINHAS_DE_GRUPO:
                 continue
             qtd = _numero(cel.get("quantidade"))
-            sem_quantidade = qtd is None and "quantidade" not in idx
-            if sem_quantidade and _numero(cel.get("valor")):
-                qtd = 1.0  # fundos e aplicações informados só pelo saldo: 1 unidade = saldo
+            saldo = _numero(cel.get("valor")) or _numero(cel.get("aplicado"))
+            sem_quantidade = not qtd and bool(saldo and saldo > 0)
+            if sem_quantidade:
+                qtd = 1.0  # coluna de quantidade ausente ou vazia (CDB, fundos...): 1 unidade = saldo
             codigo = str(cel.get("codigo") or "").strip().upper()
             m = B3_TICKER.match(codigo)
             if m:
@@ -553,8 +554,10 @@ def _posicao(abas):
                     produto = produto or nome_titulo
                     origem = "renda_fixa"
             if not ticker or not qtd:
-                ignorados.append({"linha": n, "descricao": f"{aba}: {produto or codigo}",
-                                  "motivo": "Sem código ou quantidade."})
+                lidos = " · ".join(str(c) for c in linha if c not in (None, ""))[:160]
+                motivo = ("Sem nome/código do ativo." if not ticker else
+                          "Sem quantidade nem saldo positivo.")
+                ignorados.append({"linha": n, "descricao": f"{aba}: {lidos}", "motivo": motivo})
                 continue
             valor, preco, aplicado = _numero(cel.get("valor")), _numero(cel.get("preco")), _numero(cel.get("aplicado"))
             preco_medio = _numero(cel.get("preco_medio"))

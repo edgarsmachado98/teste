@@ -301,3 +301,17 @@ def test_api_estima_quantidade_de_ativo_de_bolsa_sem_quantidade(novo_app):
     ini = {i["ticker"]: i for i in previa["conciliacao"]["posicoes_iniciais"]}
     assert ini["KNRI11"]["quantidade"] == 50 and ini["KNRI11"]["quantidade_estimada"]  # 4150 / 83
     assert ini["TESOURO SELIC 2029"]["quantidade"] == 1 and ini["TESOURO SELIC 2029"]["preco"] == 10100
+
+
+def test_relatorio_com_coluna_de_quantidade_vazia():
+    cab = ["ATIVO", "QUANTIDADE", "SALDO BRUTO 30/09/2025", "SALDO BRUTO 30/09/2026", "RENTABILIDADE (%)"]
+    linhas = [["CDB BANCO X 100% CDI", "", "1.000,00", "R$ 1.100,00", "10,00"],
+              ["Fundo Exemplo FIM", "-", "500,00", "550,00", "10,00"],
+              ["BBAS3", "100", "2.500,00", "2.800,00", "12,00"],
+              ["Ativo zerado", "", "0,00", "0,00", ""]]
+    r = importacao.analisar_extrato(xlsx(cab, linhas), "relatorio.xlsx")
+    pos = {p["ticker"]: p for p in r["posicao"]}
+    assert pos["CDB BANCO X 100% CDI"]["quantidade"] == 1 and pos["CDB BANCO X 100% CDI"]["preco_atual"] == 1100
+    assert pos["FUNDO EXEMPLO FIM"]["classe"] == "outro"
+    assert pos["BBAS3"]["quantidade"] == 100 and pos["BBAS3"]["preco_atual"] == 28
+    assert len(r["ignorados"]) == 1 and "saldo" in r["ignorados"][0]["motivo"]
