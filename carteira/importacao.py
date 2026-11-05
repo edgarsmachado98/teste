@@ -1,4 +1,4 @@
-"""Importação dos extratos da Área do Investidor da B3 (Excel ou CSV).
+"""Importação de extratos da B3 e relatórios de investimentos (Excel .xlsx/.xls, CSV, HTML ou PDF).
 
 Extratos suportados (menu Extratos da Área do Investidor):
 - Negociação: compras e vendas na bolsa (ações, FIIs, ETFs, BDRs).
@@ -85,20 +85,148 @@ def ler_abas(conteudo, nome_arquivo):
             raise ErroImportacao(f"Não foi possível abrir o Excel: {e}") from e
         return [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
     if nome.endswith((".csv", ".txt")):
-        for codificacao in ("utf-8-sig", "latin-1"):
-            try:
-                texto = conteudo.decode(codificacao)
-                break
-            except UnicodeDecodeError:
-                continue
+        texto = _decodificar(conteudo)
         delim = ";" if texto.count(";") > texto.count(",") else ","
         return [(nome, [r for r in csv.reader(io.StringIO(texto), delimiter=delim)])]
-    if nome.endswith(".xls"):
-        raise ErroImportacao("Formato .xls antigo não suportado. Baixe o extrato em .xlsx ou abra no Excel "
-                             "e salve como .xlsx.")
+    if nome.endswith((".xls", ".htm", ".html")):
+        inicio = conteudo[:2048].lstrip(b"\xef\xbb\xbf \r\n\t").lower()
+        if conteudo[:4] == b"PK\x03\x04":  # na verdade é .xlsx com a extensão errada
+            return ler_abas(conteudo, nome + "x")
+        if inicio.startswith(b"<") or b"<table" in inicio:
+            # Muitos bancos exportam "Excel" que é, na verdade, uma tabela HTML.
+            return _ler_html(conteudo)
+        return _ler_xls(conteudo)
     if nome.endswith(".pdf"):
-        raise ErroImportacao("Extratos em PDF não são suportados. Na Área do Investidor, baixe em Excel.")
-    raise ErroImportacao("Envie o extrato em Excel (.xlsx) ou CSV.")
+        return _ler_pdf(conteudo)
+    raise ErroImportacao("Envie o relatório em Excel (.xlsx ou .xls), CSV ou PDF.")
+
+
+def _decodificar(conteudo):
+    for codificacao in ("utf-8-sig", "latin-1"):
+        try:
+            return conteudo.decode(codificacao)
+        except UnicodeDecodeError:
+            continue
+    return conteudo.decode("utf-8", "ignore")
+
+
+def _ler_xls(conteudo):
+    """Excel 97-2003 (.xls)."""
+    try:
+        import xlrd
+    except ImportError as e:
+        raise ErroImportacao("Instale o pacote xlrd para ler arquivos .xls (pip install -r requirements.txt).") from e
+    try:
+        wb = xlrd.open_workbook(file_contents=conteudo)
+    except Exception as e:
+        raise ErroImportacao(f"Não foi possível abrir o arquivo .xls: {e}") from e
+    abas = []
+    for sh in wb.sheets():
+        linhas = []
+        for r in range(sh.nrows):
+            linha = []
+            for c in range(sh.ncols):
+                cel = sh.cell(r, c)
+                if cel.ctype == xlrd.XL_CELL_DATE:
+                    try:
+                        linha.append(xlrd.xldate.xldate_as_datetime(cel.value, wb.datemode))
+                        continue
+                    except Exception:
+                        pass
+                linha.append(cel.value)
+            linhas.append(linha)
+        abas.append((sh.name, linhas))
+    return abas
+
+
+def _ler_html(conteudo):
+    """Tabelas de um HTML (formato usado por vários bancos ao 'exportar para Excel')."""
+    from html.parser import HTMLParser
+
+    class Tabelas(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.tabelas, self.linha, self.celula = [], None, None
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "table":
+                self.tabelas.append([])
+            elif tag == "tr" and self.tabelas:
+                self.linha = []
+            elif tag in ("td", "th") and self.linha is not None:
+                self.celula = []
+
+        def handle_endtag(self, tag):
+            if tag in ("td", "th") and self.celula is not None:
+                self.linha.append(re.sub(r"\s+", " ", "".join(self.celula)).strip())
+                self.celula = None
+            elif tag == "tr" and self.linha is not None:
+                self.tabelas[-1].append(self.linha)
+                self.linha = None
+
+        def handle_data(self, data):
+            if self.celula is not None:
+                self.celula.append(data)
+
+    p = Tabelas()
+    p.feed(_decodificar(conteudo))
+    return [(f"Tabela {i + 1}", t) for i, t in enumerate(p.tabelas) if t]
+
+
+def _linhas_por_posicao(palavras, tolerancia_linha=3, distancia_coluna=7):
+    """Agrupa as palavras de uma página em linhas (mesma altura) e células (espaço largo entre palavras)."""
+    linhas = []
+    for w in sorted(palavras, key=lambda w: (round(w["top"]), w["x0"])):
+        if linhas and abs(linhas[-1][0] - w["top"]) <= tolerancia_linha:
+            linhas[-1][1].append(w)
+        else:
+            linhas.append([w["top"], [w]])
+    resultado = []
+    for _, ws in linhas:
+        ws.sort(key=lambda w: w["x0"])
+        celulas, atual, fim = [], [], None
+        for w in ws:
+            if atual and w["x0"] - fim > distancia_coluna:
+                celulas.append(" ".join(atual))
+                atual = []
+            atual.append(w["text"])
+            fim = w["x1"]
+        celulas.append(" ".join(atual))
+        resultado.append(celulas)
+    return resultado
+
+
+def _ler_pdf(conteudo):
+    """Extrai as tabelas de cada página do PDF.
+
+    Primeiro usa a detecção de tabelas do pdfplumber; se a página não tiver tabelas
+    desenhadas, divide cada linha de texto em colunas pelos espaços largos entre elas.
+    PDFs escaneados (imagem) não têm texto e não podem ser lidos.
+    """
+    try:
+        import pdfplumber
+    except ImportError as e:
+        raise ErroImportacao("Instale o pacote pdfplumber para ler PDFs (pip install -r requirements.txt).") from e
+    abas = []
+    try:
+        with pdfplumber.open(io.BytesIO(conteudo)) as pdf:
+            for n, pagina in enumerate(pdf.pages, start=1):
+                tabelas = pagina.extract_tables() or []
+                for t, tabela in enumerate(tabelas, start=1):
+                    abas.append((f"PDF página {n} tabela {t}",
+                                 [[(c or "").replace("\n", " ").strip() for c in linha] for linha in tabela]))
+                if not tabelas:  # sem tabela desenhada: monta as colunas pela posição das palavras
+                    linhas = _linhas_por_posicao(pagina.extract_words(keep_blank_chars=False, use_text_flow=False))
+                    if linhas:
+                        abas.append((f"PDF página {n} texto", linhas))
+    except ErroImportacao:
+        raise
+    except Exception as e:
+        raise ErroImportacao(f"Não foi possível ler o PDF: {e}") from e
+    if not abas:
+        raise ErroImportacao("O PDF não tem texto legível (pode ser uma imagem escaneada). "
+                             "Baixe o relatório em Excel, se possível.")
+    return abas
 
 
 COLUNAS_NEGOCIACAO = {"data": "data do negocio", "tipo": "tipo de movimentacao",
@@ -144,11 +272,12 @@ def _localizar_cabecalho(linhas):
                 any("evento" in n or "provento" in n for n in nomes):
             return "eventos", i, nomes
     if not any(c not in (None, "") for l in linhas for c in l):
-        raise ErroImportacao("A planilha está vazia ou não pôde ser lida.")
+        raise ErroImportacao("O arquivo está vazio ou não pôde ser lido.")
     cabecalhos = next((", ".join(str(c) for c in l if c not in (None, ""))
                        for l in linhas if sum(c not in (None, "") for c in l) >= 3), "")
-    raise ErroImportacao("Não reconheci o arquivo. Use os extratos de Posição, Negociação, Movimentação ou Eventos "
-                         "da Área do Investidor da B3, sem alterar o cabeçalho."
+    raise ErroImportacao("Não reconheci o relatório. São aceitos os extratos da B3 (Posição, Negociação, "
+                         "Movimentação, Eventos) e relatórios de posição com colunas de ativo/produto e "
+                         "quantidade ou saldo."
                          + (f" Colunas encontradas: {cabecalhos[:300]}" if cabecalhos else ""))
 
 
@@ -295,15 +424,22 @@ def _eventos(linhas, inicio, nomes):
 # ------------------------------------------------------------------ Posição
 # Extrato de Posição: uma aba por tipo de ativo (Ações, BDR, ETF, Fundo de Investimento,
 # Tesouro Direto, Renda Fixa...). Mostra o que existe hoje em cada instituição.
+# Os sinônimos cobrem o extrato da B3 e relatórios de posição de bancos e corretoras.
 COLUNAS_POSICAO = {
-    "codigo": ("codigo de negociacao", "codigo"),
-    "produto": ("produto",),
-    "quantidade": ("quantidade",),
+    "codigo": ("codigo de negociacao", "codigo", "ativo", "papel", "ticker", "codigo do ativo"),
+    "produto": ("produto", "descricao", "titulo", "fundo", "aplicacao", "investimento", "nome do ativo",
+                "nome", "ativo/produto"),
+    "quantidade": ("quantidade", "qtd", "qtde", "quantidade de cotas", "qtde. cotas", "qtd. cotas", "cotas",
+                   "quantidade total", "qtd total"),
     "preco": ("preco de fechamento", "preco de fechamento (r$)", "preco atualizado", "preco unitario",
-              "pu atualizado"),
+              "pu atualizado", "preco atual", "cotacao", "valor da cota", "valor cota", "preco"),
     "valor": ("valor atualizado", "valor atualizado (r$)", "valor liquido", "valor bruto",
-              "valor atualizado curva", "valor atualizado mtm"),
-    "aplicado": ("valor aplicado", "valor aplicado (r$)"),
+              "valor atualizado curva", "valor atualizado mtm", "saldo bruto", "saldo liquido", "saldo atual",
+              "saldo", "valor de mercado", "valor atual", "valor bruto atual", "valor total", "total (r$)",
+              "posicao", "saldo bruto (r$)", "saldo liquido (r$)"),
+    "aplicado": ("valor aplicado", "valor aplicado (r$)", "valor investido", "valor de aquisicao",
+                 "custo total", "total investido"),
+    "preco_medio": ("preco medio", "preco medio (r$)", "pm", "custo medio", "preco medio de compra"),
     "vencimento": ("vencimento", "data de vencimento"),
 }
 CLASSE_POR_ABA = (("acao", "acao"), ("acoes", "acao"), ("bdr", "bdr"), ("etf", "etf"),
@@ -315,15 +451,28 @@ ETFS_CONHECIDOS = {"BOVA11", "IVVB11", "SMAL11", "HASH11", "DIVO11", "XINA11", "
 
 
 def _cabecalho_posicao(linhas):
-    for i, linha in enumerate(linhas[:30]):
+    for i, linha in enumerate(linhas[:80]):
         nomes = [_norm(c) for c in linha]
         if "data do negocio" in nomes or "entrada/saida" in nomes or any("evento" in n for n in nomes):
             return None
         idx = _indices_flexiveis(nomes, COLUNAS_POSICAO)
-        if "quantidade" in idx and ("codigo" in idx or "produto" in idx) and \
-                ({"preco", "valor", "aplicado"} & set(idx)):
+        if ("codigo" in idx or "produto" in idx) and \
+                (("quantidade" in idx and {"preco", "valor", "aplicado", "preco_medio"} & set(idx))
+                 or ("valor" in idx and "data" not in nomes and "historico" not in nomes)):
             return i, idx
     return None
+
+
+def classe_por_nome(nome):
+    """Classe de produtos fora da bolsa pelo nome (relatórios de bancos)."""
+    n = _norm(nome)
+    if any(k in n for k in ("previd", "pgbl", "vgbl", "brasilprev")):
+        return "outro"
+    if any(re.search(rf"\b{k}\b", n) for k in ("fundo", "fic", "fim", "fia", "fi", "multimercado")):
+        return "outro"
+    if any(k in n for k in ("cripto", "bitcoin")):
+        return "cripto"
+    return "renda_fixa"  # CDB, LCA, LCI, Tesouro, debêntures, CRI, CRA, poupança...
 
 
 def _classe_da_aba(aba, ticker, origem):
@@ -348,6 +497,9 @@ def _posicao(abas):
                     or _norm(cel.get("codigo")).startswith("total"):
                 continue
             qtd = _numero(cel.get("quantidade"))
+            sem_quantidade = qtd is None and "quantidade" not in idx
+            if sem_quantidade and _numero(cel.get("valor")):
+                qtd = 1.0  # fundos e aplicações informados só pelo saldo: 1 unidade = saldo
             codigo = str(cel.get("codigo") or "").strip().upper()
             m = B3_TICKER.match(codigo)
             if m:
@@ -363,9 +515,14 @@ def _posicao(abas):
                                   "motivo": "Sem código ou quantidade."})
                 continue
             valor, preco, aplicado = _numero(cel.get("valor")), _numero(cel.get("preco")), _numero(cel.get("aplicado"))
+            preco_medio = _numero(cel.get("preco_medio"))
+            if aplicado is None and preco_medio is not None:
+                aplicado = preco_medio * qtd
             if preco is None and valor is not None:
                 preco = valor / qtd
             classe = _classe_da_aba(aba, ticker, origem)
+            if origem == "renda_fixa":
+                classe = classe_por_nome(produto or codigo)
             if classe == "fii" and ticker in ETFS_CONHECIDOS:
                 classe = "etf"
             it = itens.setdefault(ticker, {"ticker": ticker, "classe": classe, "quantidade": 0.0,
@@ -462,7 +619,7 @@ def conciliar_posicao(posicao, aportes_existentes, aportes_novos, hoje):
             iniciais.append({"ticker": ticker, "classe": p["classe"] if p else classe_provavel(ticker),
                              "quantidade": diferenca, "data": data_abertura,
                              "preco": p.get("preco_medio") if p else None,
-                             "preco_origem": "valor aplicado na B3" if p and p.get("preco_medio") else None,
+                             "preco_origem": "valor aplicado informado no relatório" if p and p.get("preco_medio") else None,
                              "qtd_b3": qtd_b3})
         else:
             motivo = ("O sistema terá mais do que a B3 mostra: verifique vendas, grupamentos ou "

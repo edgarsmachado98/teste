@@ -248,7 +248,7 @@ $("#form-importar-b3").addEventListener("submit", async ev => {
   renderPreviaB3();
 });
 
-const ROTULO_ARQ = { negociacao: "Negociação", movimentacao: "Movimentação", eventos: "Eventos", posicao: "Posição" };
+const ROTULO_ARQ = { negociacao: "Negociação", movimentacao: "Movimentação", eventos: "Eventos", posicao: "Posição / relatório" };
 
 function renderPreviaB3() {
   const p = previaB3, alvo = $("#resultado-importar-b3");
@@ -266,9 +266,9 @@ function renderPreviaB3() {
   if (conc) {
     html += `<h3 style="margin-top:16px">Posição inicial</h3>
       <p class="dica">O que você já tinha antes da primeira operação dos extratos (data de abertura: <strong>${fmtData(conc.data_abertura)}</strong>),
-      calculado pela diferença entre a Posição da B3 e as operações. <strong>Informe o preço médio</strong> de cada ativo
+      calculado pela diferença entre a posição informada no relatório e as operações. <strong>Informe o preço médio</strong> de cada ativo
       (está no app da corretora ou na declaração de IR); os preços sugeridos pela cotação são apenas estimativas.</p>`;
-    html += iniciais.length ? `<div class="rolagem"><table><tr><th></th><th>Ativo</th><th>Classe</th><th>Qtd. inicial</th><th>Qtd. na B3 hoje</th><th>Preço médio (R$)</th><th>Origem do preço</th></tr>
+    html += iniciais.length ? `<div class="rolagem"><table><tr><th></th><th>Ativo</th><th>Classe</th><th>Qtd. inicial</th><th>Qtd. no relatório</th><th>Preço médio (R$)</th><th>Origem do preço</th></tr>
       ${iniciais.map((x, i) => `<tr><td><input type="checkbox" data-lista="iniciais" data-idx="${i}" checked></td>
         <td><strong>${esc(x.ticker)}</strong></td><td>${esc(CLASSES[x.classe] || x.classe)}</td>
         <td>${num.format(x.quantidade)}</td><td>${num.format(x.qtd_b3)}</td>
@@ -280,7 +280,7 @@ function renderPreviaB3() {
       ${conc.divergencias.map(d => `<tr><td><strong>${esc(d.ticker)}</strong></td><td>${num.format(d.qtd_b3)}</td><td>${num.format(d.qtd_sistema)}</td><td style="white-space:normal">${esc(d.motivo)}</td></tr>`).join("")}</table></div></details>`;
     const mudancas = p.ajustes_ativos.filter(a => a.classe !== a.classe_atual || a.preco_manual != null);
     if (mudancas.length) html += `<label class="check" style="margin-top:10px;display:flex;gap:6px;align-items:center">
-      <input type="checkbox" id="aplicar-ajustes" checked> Atualizar classe de ${p.ajustes_ativos.length} ativo(s) conforme a B3 e o valor atual de renda fixa/Tesouro (${mudancas.length} alteração(ões))</label>`;
+      <input type="checkbox" id="aplicar-ajustes" checked> Atualizar classe de ${p.ajustes_ativos.length} ativo(s) e o valor atual de renda fixa, Tesouro e fundos conforme o relatório (${mudancas.length} alteração(ões))</label>`;
   }
 
   if (p.aportes.length) html += `<h3 style="margin-top:16px">Operações</h3><div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Classe</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Total</th><th>Situação</th></tr>

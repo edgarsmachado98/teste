@@ -33,6 +33,12 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,
   gráfico mensal, resumo por ativo e extrato unificado com filtro.
 
+**Importação de extratos e relatórios** (Excel .xlsx/.xls, CSV, PDF)
+- Além dos extratos da B3, aceita relatórios de posição de bancos e corretoras (ex.: extrato de
+  investimentos do Banco do Brasil) em PDF ou Excel: o sistema procura uma tabela com ativo/produto e
+  quantidade ou saldo. Fundos, previdência e aplicações informados só pelo saldo entram como 1 unidade.
+  Arquivos ".xls" que são HTML (comum em bancos) também são lidos. PDFs escaneados não são suportados.
+
 **Importação de extratos da B3**
 - **Patrimônio completo**: envie juntos os extratos de **Posição** + **Negociação** + **Movimentação**.
   O sistema calcula a *posição inicial* de cada ativo (o que você já tinha antes do período dos
@@ -136,7 +142,7 @@ python -m pytest
 app.py                 # servidor Flask e API REST
 carteira/db.py         # esquema SQLite, migração e conexão por thread
 carteira/auth.py       # usuários, carteiras e permissões
-carteira/importacao.py # leitura dos extratos da B3
+carteira/importacao.py # leitura de extratos/relatórios (xlsx, xls, csv, html, pdf)
 carteira/portfolio.py  # posições, preço médio, resumo e sugestão de aporte
 carteira/analysis.py   # indicadores técnicos e estatísticas de risco/retorno
 carteira/market.py     # cotações (Yahoo Finance), cache e série simulada

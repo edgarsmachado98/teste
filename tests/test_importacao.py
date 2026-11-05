@@ -234,3 +234,52 @@ def test_importacao_completa_com_posicao(novo_app):
         "ITUB4": 50, "VALE3": 10, "IVVB11": 3, "TESOURO IPCA+ 2035": 1.5}
     assert cart["IVVB11"]["classe"] == "etf"
     assert cart["TESOURO IPCA+ 2035"]["preco_atual"] == 2200  # preço manual vindo da B3
+
+
+FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures"
+
+
+def ler_fixture(nome):
+    return importacao.analisar_extrato((FIXTURES / nome).read_bytes(), nome)
+
+
+def test_xls_antigo():
+    r = ler_fixture("negociacao_b3.xls")
+    assert r["tipo_arquivo"] == "negociacao"
+    assert [(a["data"], a["ticker"], a["tipo"], a["quantidade"]) for a in r["aportes"]] == [
+        ("2026-01-12", "BBAS3", "compra", 100), ("2026-02-03", "BBAS3", "venda", 40)]
+
+
+def test_excel_html_de_banco_com_saldo():
+    r = ler_fixture("posicao_banco.xls")
+    pos = {p["ticker"]: p for p in r["posicao"]}
+    assert len(pos) == 4  # linha "Total" ignorada
+    cdb = pos["CDB DI BANCO EXEMPLO - VENC. 2028"]
+    assert cdb["classe"] == "renda_fixa" and cdb["quantidade"] == 1 and cdb["preco_medio"] == 10000
+    assert cdb["preco_atual"] == pytest.approx(11250.35)
+    assert pos["FUNDO EXEMPLO MULTIMERCADO FIC FIM"]["classe"] == "outro"
+    assert pos["BRASILPREV EXEMPLO PGBL"]["classe"] == "outro"
+
+
+def test_pdf_com_tabela():
+    r = ler_fixture("posicao_corretora.pdf")
+    pos = {p["ticker"]: p for p in r["posicao"]}
+    assert {t: p["quantidade"] for t, p in pos.items()} == {"PETR4": 200, "KNRI11": 15, "IVVB11": 4}
+    assert pos["PETR4"]["preco_medio"] == pytest.approx(32.10) and pos["IVVB11"]["classe"] == "etf"
+
+
+def test_pdf_so_texto():
+    r = ler_fixture("movimentacao_b3.pdf")
+    assert r["tipo_arquivo"] == "movimentacao"
+    assert [(p["ticker"], p["tipo"], p["valor_total"]) for p in r["proventos"]] == [
+        ("BBAS3", "dividendo", 30.0), ("BBAS3", "jcp", 12.0)]
+
+
+def test_api_relatorio_de_banco(novo_app):
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=300)))
+    previa = c.post("/api/importar/b3/previa", content_type="multipart/form-data", data={"arquivo": [
+        (io.BytesIO((FIXTURES / "posicao_banco.xls").read_bytes()), "posicao_banco.xls")]}).get_json()
+    ini = {i["ticker"]: i for i in previa["conciliacao"]["posicoes_iniciais"]}
+    assert ini["LCA AGRO EXEMPLO"]["preco"] == 5000 and ini["LCA AGRO EXEMPLO"]["quantidade"] == 1
+    manual = {a["ticker"]: a["preco_manual"] for a in previa["ajustes_ativos"]}
+    assert manual["LCA AGRO EXEMPLO"] == 5320

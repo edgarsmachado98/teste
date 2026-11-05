@@ -539,7 +539,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
         if previa["posicao"]:
             conc = conciliar_posicao(previa["posicao"], existentes, previa["aportes"], hoje())
             for item in conc["posicoes_iniciais"]:
-                if item["preco"] is None and item["classe"] != "renda_fixa":
+                if item["preco"] is None and item["classe"] in portfolio.CLASSES_INTEIRAS:
                     item["preco"] = preco_em(item["ticker"], item["data"])
                     if item["preco"] is not None:
                         item["preco_origem"] = f"cotação de {item['data']} (estimado)"
@@ -548,8 +548,9 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
             previa["ajustes_ativos"] = [
                 {"ticker": p["ticker"], "classe": p["classe"], "nome": p["nome"],
                  "classe_atual": ativos.get(p["ticker"], {}).get("classe"),
-                 # renda fixa e Tesouro não têm cotação online: usa o valor atualizado da B3
-                 "preco_manual": round(p["preco_atual"], 6) if p["classe"] == "renda_fixa" and p["preco_atual"] else None}
+                 # renda fixa, Tesouro, fundos e previdência não têm cotação online: usa o valor do relatório
+                 "preco_manual": round(p["preco_atual"], 6)
+                 if p["classe"] not in portfolio.CLASSES_INTEIRAS and p["preco_atual"] else None}
                 for p in previa["posicao"]]
             # a classe da posição (aba do extrato) é mais confiável que a sugerida pelo ticker
             classes = {p["ticker"]: p["classe"] for p in previa["posicao"]}

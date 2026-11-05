@@ -118,9 +118,9 @@
       <datalist id="lista-tickers"></datalist>
     </div>
     <div class="painel requer-edicao">
-      <h3>Importar extrato da B3</h3>
+      <h3>Importar extratos e relatórios de investimentos</h3>
       <form id="form-importar-b3" class="form-linha">
-        <label class="largo">Arquivos (.xlsx ou .csv) — pode selecionar vários <input type="file" name="arquivo" accept=".xlsx,.csv" multiple required></label>
+        <label class="largo">Arquivos Excel (.xlsx, .xls), CSV ou PDF — pode selecionar vários <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.pdf,.htm,.html" multiple required></label>
         <button type="submit">Ler arquivo</button>
       </form>
       <details class="dica">
@@ -135,6 +135,10 @@
           <li>Selecione <strong>todos os arquivos juntos</strong> (Ctrl+clique) e clique em “Ler arquivo”.
             O sistema calcula a <strong>posição inicial</strong> (o que você já tinha antes do período dos extratos) comparando a Posição com as operações.</li>
         </ol>
+        <p><strong>Relatórios de bancos e corretoras</strong> (ex.: extrato de investimentos do Banco do Brasil, posição da corretora)
+        também podem ser enviados em PDF ou Excel: o sistema procura uma tabela com o nome do ativo/produto e a quantidade ou o saldo.
+        Fundos, previdência e aplicações informados só pelo saldo entram como 1 unidade, com o saldo como valor atual.
+        PDFs escaneados (imagem) não podem ser lidos.</p>
         Taxas de corretagem não constam nesses extratos. Desdobramentos e bonificações precisam ser ajustados manualmente.
       </details>
       <div id="resultado-importar-b3"></div>
