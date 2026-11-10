@@ -487,3 +487,14 @@ def test_api_varios_relatorios_e_reimportacao(novo_app):
     parcial = enviar(("xp.xlsx", xp), modo="parcial")
     assert parcial["arquivos"][0]["origem"] == "XP"
     assert {i["ticker"]: i["quantidade"] for i in parcial["conciliacao"]["posicoes_iniciais"]} == {"ITUB4": 20}
+
+
+def test_movimentacao_b3_em_pdf():
+    """Extrato de Movimentação da B3 em PDF: registros em várias linhas, agrupados por data."""
+    r = ler_fixture("movimentacao_b3_layout.pdf")
+    assert r["tipo_arquivo"] == "movimentacao" and r["origem"] == "B3"
+    assert [(p["data_pagamento"], p["ticker"], p["tipo"], p["valor_total"]) for p in r["proventos"]] == [
+        ("2026-11-10", "VGHF11", "rendimento", 7.92), ("2026-11-10", "ITUB4", "jcp", 30.0),
+        ("2026-10-15", "MXRF11", "rendimento", 10.0)]
+    motivos = [g["motivo"] for g in r["ignorados"]]
+    assert sum("Negociação" in m for m in motivos) == 2 and any("Evento corporativo" in m for m in motivos)

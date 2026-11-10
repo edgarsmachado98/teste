@@ -196,6 +196,107 @@ def _linhas_por_posicao(palavras, tolerancia_linha=3, distancia_coluna=7):
     return resultado
 
 
+MESES_PT = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+            "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
+DATA_EXTENSO = re.compile(r"^(\d{1,2}) de ([a-z]+) de (\d{4})$")
+
+
+def _linhas_com_palavras(palavras, tolerancia=3):
+    linhas = []
+    for w in sorted(palavras, key=lambda w: (round(w["top"]), w["x0"])):
+        if linhas and abs(linhas[-1]["top"] - w["top"]) <= tolerancia:
+            linhas[-1]["palavras"].append(w)
+        else:
+            linhas.append({"top": w["top"], "palavras": [w]})
+    for l in linhas:
+        l["palavras"].sort(key=lambda w: w["x0"])
+        l["texto"] = " ".join(w["text"] for w in l["palavras"])
+    return linhas
+
+
+def _b3_movimentacao_pdf(pdf):
+    """Extrato de Movimentação da B3 em PDF.
+
+    Layout: registros agrupados por data ("10 de novembro de 2026"); cada registro ocupa até três
+    linhas visuais (nomes quebrados acima e abaixo da linha com quantidade, preço e valor); o
+    cabeçalho também é quebrado ("Preço / Unitário", "Valor da / Operação"). As colunas são
+    definidas pela posição horizontal dos títulos e cada linha de texto é ligada à linha de valores
+    mais próxima. Devolve linhas no mesmo formato do extrato em Excel.
+    """
+    cab = ["Entrada/Saída", "Data", "Movimentação", "Produto", "Instituição", "Quantidade",
+           "Preço unitário", "Valor da Operação"]
+    saida = [cab]
+    colunas = None
+    for pagina in pdf.pages:
+        linhas = _linhas_com_palavras(pagina.extract_words(keep_blank_chars=False, use_text_flow=False))
+        # posição das colunas pelo cabeçalho (repetido em cada grupo de data)
+        for l in linhas:
+            nomes = {_norm(w["text"]): w["x0"] for w in l["palavras"]}
+            if "movimentacao" in nomes and "produto" in nomes and "instituicao" in nomes:
+                colunas = {"mov": nomes["movimentacao"], "produto": nomes["produto"],
+                           "inst": nomes["instituicao"], "qtd": nomes.get("quantidade")}
+                acima = [x for x in linhas if 0 < l["top"] - x["top"] < 20]
+                for x in acima:
+                    for w in x["palavras"]:
+                        n = _norm(w["text"])
+                        if n == "preco":
+                            colunas["preco"] = w["x0"]
+                        if n == "valor":
+                            colunas["valor"] = w["x0"]
+                break
+        if not colunas or None in (colunas.get("qtd"), colunas.get("preco"), colunas.get("valor")):
+            continue
+        ordem = sorted(colunas.items(), key=lambda kv: kv[1])
+
+        def coluna(w):
+            nome = ordem[0][0]
+            for k, x in ordem:
+                if w["x0"] >= x - 4:
+                    nome = k
+            return nome
+
+        # segmentos: cada grupo começa numa linha de data; cabeçalhos e rodapé são ignorados
+        data_atual, segmento, segmentos = None, [], []
+        for l in linhas:
+            t = _norm(l["texto"])
+            m = DATA_EXTENSO.match(t)
+            if m and m.group(2) in MESES_PT:
+                if segmento:
+                    segmentos.append((data_atual, segmento))
+                data_atual = dt.date(int(m.group(3)), MESES_PT[m.group(2)], int(m.group(1))).isoformat()
+                segmento = []
+                continue
+            if data_atual is None or t.startswith("acesse") or re.fullmatch(r"\d+/\d+", t) or \
+                    t in ("preco valor da", "unitario operacao") or ("movimentacao" in t and "produto" in t) or \
+                    t.startswith("extrato de movimentacao"):
+                continue
+            segmento.append(l)
+        if segmento:
+            segmentos.append((data_atual, segmento))
+
+        for data, segmento in segmentos:
+            def tem_valores(l):
+                return any(coluna(w) in ("qtd", "preco", "valor") for w in l["palavras"])
+            valores = [l for l in segmento if tem_valores(l)]
+            if not valores:
+                continue
+            registros = [{"top": v["top"], "linhas": []} for v in valores]
+            for l in segmento:
+                alvo = min(registros, key=lambda r: abs(r["top"] - l["top"]))
+                alvo["linhas"].append(l)
+            for r in registros:
+                partes = {k: [] for k in ("mov", "produto", "inst", "qtd", "preco", "valor")}
+                for l in sorted(r["linhas"], key=lambda x: x["top"]):
+                    for w in l["palavras"]:
+                        partes[coluna(w)].append(w["text"])
+                txt = {k: re.sub(r"\s+", " ", " ".join(v)).strip() for k, v in partes.items()}
+                mov = txt["mov"]
+                credito = re.match(r"(rendimento|dividendo|juros sobre capital|amortizacao|restituicao)", _norm(mov))
+                saida.append(["Credito" if credito else "", data, mov, txt["produto"], txt["inst"],
+                              txt["qtd"], txt["preco"].replace("R$", "").strip(), txt["valor"].replace("R$", "").strip()])
+    return saida
+
+
 def _ler_pdf(conteudo):
     """Extrai as tabelas de cada página do PDF.
 
@@ -210,6 +311,11 @@ def _ler_pdf(conteudo):
     abas = []
     try:
         with pdfplumber.open(io.BytesIO(conteudo)) as pdf:
+            primeira = _norm(pdf.pages[0].extract_text() or "") if pdf.pages else ""
+            if "extrato de movimentacao" in primeira and "movimentacao" in primeira and "produto" in primeira:
+                linhas = _b3_movimentacao_pdf(pdf)
+                if len(linhas) > 1:
+                    return [("B3 Movimentação (PDF)", linhas)]
             for n, pagina in enumerate(pdf.pages, start=1):
                 tabelas = pagina.extract_tables() or []
                 for t, tabela in enumerate(tabelas, start=1):
