@@ -40,10 +40,16 @@ class _Historico:
 
     def __init__(self, aportes):
         self.eventos = defaultdict(list)  # ticker -> [(data, qtd, custo)] após cada operação
+        self.desdobros = defaultdict(list)  # ticker -> [(data, fator)] dos eventos corporativos
         estado = defaultdict(lambda: [0.0, 0.0])
         for a in sorted(aportes, key=lambda x: (x["data"], x.get("id") or 0)):
-            q, p, tx = float(a["quantidade"]), float(a["preco"]), float(a.get("taxas") or 0)
             e = estado[a["ticker"]]
+            if a.get("tipo") == "evento":
+                e[0] *= a["fator"]
+                self.desdobros[a["ticker"]].append((a["data"], a["fator"]))
+                self.eventos[a["ticker"]].append((a["data"], e[0], e[1]))
+                continue
+            q, p, tx = float(a["quantidade"]), float(a["preco"]), float(a.get("taxas") or 0)
             if a.get("tipo", "compra") == "compra":
                 e[0] += q
                 e[1] += q * p + tx
@@ -60,6 +66,15 @@ class _Historico:
             return 0.0, 0.0
         _, q, c = self.eventos[ticker][i - 1]
         return q, c
+
+    def fator_posterior(self, ticker, data):
+        """Produto dos fatores dos eventos depois da data: converte a quantidade da época para a
+        base atual, compatível com as cotações históricas ajustadas por desdobramentos."""
+        f = 1.0
+        for d, fator in self.desdobros.get(ticker, []):
+            if d > data:
+                f *= fator
+        return f
 
     def primeira(self, ticker):
         return self.datas[ticker][0] if self.datas.get(ticker) else None
@@ -96,7 +111,8 @@ def calcular_evolucao(aportes, proventos, series, precos_atuais, hoje):
             if t in idx_series:
                 datas, valores = idx_series[t]
                 preco = precos_atuais.get(t) if data >= hoje else _preco_em(datas, valores, data)
-                total += q * preco if preco is not None else custo  # antes do histórico: custo
+                q_ajustada = q * hist.fator_posterior(t, data)  # cotações vêm ajustadas por desdobramentos
+                total += q_ajustada * preco if preco is not None else custo  # antes do histórico: custo
             else:
                 inicio = dt.date.fromisoformat(hist.primeira(t))
                 dias = max((hoje_d - inicio).days, 1)
@@ -106,6 +122,8 @@ def calcular_evolucao(aportes, proventos, series, precos_atuais, hoje):
 
     fluxos = defaultdict(list)  # "AAAA-MM" -> [(dia, valor)] (+ compra, - venda)
     for a in aportes:
+        if a.get("tipo") == "evento":
+            continue
         valor = float(a["quantidade"]) * float(a["preco"]) + float(a.get("taxas") or 0) \
             if a.get("tipo", "compra") == "compra" else -(float(a["quantidade"]) * float(a["preco"])
                                                             - float(a.get("taxas") or 0))
@@ -115,7 +133,7 @@ def calcular_evolucao(aportes, proventos, series, precos_atuais, hoje):
         if p["data_pagamento"] <= hoje:
             rendas[p["data_pagamento"][:7]] += float(p["valor_total"])
 
-    inicio = min(a["data"] for a in aportes)
+    inicio = min(a["data"] for a in aportes if a.get("tipo") != "evento")
     meses, anterior, investido, acum = [], 0.0, 0.0, 1.0
     for ano, mes in meses_entre(inicio, hoje):
         chave = f"{ano:04d}-{mes:02d}"

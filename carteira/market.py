@@ -76,6 +76,16 @@ def proventos_simulados(ticker):
     return itens
 
 
+def eventos_simulados(ticker):
+    """Modo demonstração: uma bonificação de 10% em ITUB4 e um desdobramento 1:2 em WEGE3."""
+    t = ticker.upper()
+    if t == "ITUB4":
+        return [{"data_com": "2025-12-19", "tipo": "bonificacao", "fator": 1.1, "descricao": "BONIFICACAO 10%"}]
+    if t == "WEGE3":
+        return [{"data_com": "2026-03-16", "tipo": "desdobramento", "fator": 2.0, "descricao": "DESDOBRAMENTO 1:2"}]
+    return []
+
+
 def fundamentos_simulados(ticker):
     rng = random.Random("fund-" + ticker.upper())
     preco = serie_simulada(ticker)[-1][1]
@@ -215,6 +225,10 @@ class Mercado:
 
     def fundamentos(self, ticker, forcar=False):
         return self._consultar(ticker, "fundamentos", fundamentos_simulados, forcar)
+
+    def eventos(self, ticker, forcar=False):
+        """Eventos corporativos informados pelas fontes: (lista, fonte)."""
+        return self._consultar(ticker, "eventos", eventos_simulados, forcar)
 
     def status_fontes(self):
         return [f.status() if hasattr(f, "status") else {"nome": f.nome, "configurada": True}

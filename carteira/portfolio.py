@@ -24,6 +24,29 @@ def _trunc(x, casas=8):
     return math.floor(x * f) / f
 
 
+TIPOS_EVENTO = {"desdobramento": "Desdobramento", "grupamento": "Grupamento",
+                "bonificacao": "Bonificação", "outro": "Outro evento"}
+
+
+def com_eventos(aportes, eventos):
+    """Junta aportes e eventos corporativos numa única lista de operações.
+
+    Cada evento vira uma operação {"tipo": "evento", "fator": f}: a quantidade é multiplicada
+    por f e o custo total não muda (o preço médio se ajusta). Os eventos ficam depois das
+    compras/vendas do mesmo dia (valem para quem tinha o ativo ao fim da data com).
+    """
+    ops = list(aportes)
+    for i, e in enumerate(eventos):
+        ops.append({"id": 10 ** 15 + (e.get("id") or i), "data": e["data"], "ticker": e["ticker"],
+                    "tipo": "evento", "fator": float(e["fator"]), "evento": e["tipo"],
+                    "quantidade": 0.0, "preco": 0.0, "taxas": 0.0})
+    return ops
+
+
+def eh_evento(a):
+    return a.get("tipo") == "evento"
+
+
 def calcular_posicoes(aportes):
     """Consolida a lista de aportes (compras/vendas) em posições por ticker.
 
@@ -34,6 +57,9 @@ def calcular_posicoes(aportes):
                                "total_aportado": 0.0, "primeiro_aporte": None})
     for a in sorted(aportes, key=lambda x: (x["data"], x.get("id") or 0)):
         p = pos[a["ticker"]]
+        if eh_evento(a):
+            p["quantidade"] *= a["fator"]
+            continue
         qtd = float(a["quantidade"])
         preco = float(a["preco"])
         taxas = float(a.get("taxas") or 0)
@@ -214,6 +240,8 @@ def aportes_por_mes(aportes):
     """Série mensal de aportes líquidos e do total investido acumulado."""
     meses = defaultdict(float)
     for a in aportes:
+        if eh_evento(a):
+            continue
         sinal = 1 if a.get("tipo", "compra") == "compra" else -1
         meses[a["data"][:7]] += sinal * float(a["quantidade"]) * float(a["preco"])
     acumulado = 0.0
@@ -237,10 +265,13 @@ IR_JCP = 0.15  # JCP sofre retenção de 15% de IR na fonte
 
 
 def quantidade_na_data(aportes, ticker, data):
-    """Quantidade do ativo ao fim do dia `data` (compras - vendas até a data, inclusive)."""
+    """Quantidade do ativo ao fim do dia `data` (compras - vendas e eventos até a data, inclusive)."""
     qtd = 0.0
-    for a in aportes:
-        if a["ticker"] == ticker and a["data"] <= data:
+    for a in sorted((x for x in aportes if x["ticker"] == ticker and x["data"] <= data),
+                    key=lambda x: (x["data"], x.get("id") or 0)):
+        if eh_evento(a):
+            qtd *= a["fator"]
+        else:
             qtd += float(a["quantidade"]) * (1 if a.get("tipo", "compra") == "compra" else -1)
     return max(qtd, 0.0)
 
@@ -367,8 +398,11 @@ def fluxo(aportes, proventos, inicio, fim, hoje):
     pos = defaultdict(lambda: [0.0, 0.0])  # ticker -> [quantidade, custo]
     lancamentos = []
     for a in sorted(aportes, key=lambda x: (x["data"], x.get("id") or 0)):
-        qtd, preco, taxas = float(a["quantidade"]), float(a["preco"]), float(a.get("taxas") or 0)
         p = pos[a["ticker"]]
+        if eh_evento(a):
+            p[0] *= a["fator"]
+            continue
+        qtd, preco, taxas = float(a["quantidade"]), float(a["preco"]), float(a.get("taxas") or 0)
         lucro = None
         if a.get("tipo", "compra") == "compra":
             p[0] += qtd
@@ -487,3 +521,138 @@ def visao_por_categoria(linhas, tamanho_ranking=5):
         "total_categorias": metricas(abertas),
         "ranking": {"rentabilidade": ranking("rentabilidade_pct"), "variacao": ranking("variacao_pct")},
     }
+
+
+# ------------------------------------------------- Agenda e projeção de renda
+
+def _valor_liquido(tipo, valor):
+    return valor * (1 - IR_JCP) if tipo == "jcp" else valor
+
+
+def agenda_proventos(operacoes, proventos_fonte, registrados, hoje):
+    """Próximos recebimentos.
+
+    status:
+      a_receber   data com já passou e o pagamento é futuro (valor certo, pela quantidade na data com)
+      lancado     provento já registrado com pagamento futuro
+      anunciado   data com futura: valor pela quantidade atual, se for mantida até a data com
+    """
+    posicoes = calcular_posicoes(operacoes)
+    itens = []
+    estimados = estimar_proventos(operacoes, proventos_fonte, registrados, hoje)
+    for e in estimados:
+        if e["status"] == "a_receber" and not e["ja_registrado"]:
+            itens.append({**e, "status": "a_receber"})
+    for r in registrados:
+        if r["data_pagamento"] > hoje:
+            itens.append({"ticker": r["ticker"], "tipo": r["tipo"], "data_com": r.get("data_com"),
+                          "data_pagamento": r["data_pagamento"], "pagamento_estimado": False,
+                          "quantidade": r.get("quantidade"), "valor_unitario": r.get("valor_unitario"),
+                          "valor_total": float(r["valor_total"]), "status": "lancado"})
+    for ticker, lista in proventos_fonte.items():
+        qtd = posicoes.get(ticker, {}).get("quantidade", 0)
+        if qtd <= 0:
+            continue
+        for p in lista:
+            if p["data_com"] <= hoje:
+                continue
+            unit = _valor_liquido(p["tipo"], float(p["valor"]))
+            pagamento = p.get("data_pagamento") or _somar_dias(p["data_com"], 30)
+            itens.append({"ticker": ticker, "tipo": p["tipo"], "data_com": p["data_com"], "data_pagamento": pagamento,
+                          "pagamento_estimado": not p.get("data_pagamento"), "quantidade": qtd,
+                          "valor_unitario": unit, "valor_total": round(qtd * unit, 2), "status": "anunciado"})
+    return sorted(itens, key=lambda x: (x["data_pagamento"], x["ticker"]))
+
+
+def projecao_renda(operacoes, proventos_fonte, registrados, hoje, meses=12):
+    """Renda passiva prevista para os próximos `meses`, mês a mês.
+
+    confirmado: agenda (a receber, lançados e anunciados)
+    projetado:  repete os proventos dos últimos 12 meses (por ação/cota, mesma época do ano) com a
+                quantidade atual. Ativos sem dados nas fontes usam os proventos registrados.
+    """
+    posicoes = calcular_posicoes(operacoes)
+    agenda = agenda_proventos(operacoes, proventos_fonte, registrados, hoje)
+    inicio_mes = hoje[:7]
+    d = dt.date.fromisoformat(hoje[:7] + "-01")
+    chaves = []
+    for _ in range(meses):
+        chaves.append(d.strftime("%Y-%m"))
+        d = (d + dt.timedelta(days=32)).replace(day=1)
+    fim = chaves[-1]
+    por_mes = {m: {"mes": m, "confirmado": 0.0, "projetado": 0.0} for m in chaves}
+    por_ativo = defaultdict(lambda: {"confirmado": 0.0, "projetado": 0.0})
+    ocupados = set()
+    for a in agenda:
+        m = a["data_pagamento"][:7]
+        if inicio_mes <= m <= fim:
+            por_mes[m]["confirmado"] += a["valor_total"]
+            por_ativo[a["ticker"]]["confirmado"] += a["valor_total"]
+            ocupados.add((a["ticker"], m))
+
+    um_ano_atras = _somar_dias(hoje, -365)
+
+    def projetar(ticker, pagamento_passado, valor):
+        m = _somar_dias(pagamento_passado, 365)[:7]
+        if (ticker, m) in ocupados or not (inicio_mes <= m <= fim) or m == inicio_mes and \
+                _somar_dias(pagamento_passado, 365) <= hoje:
+            return
+        por_mes[m]["projetado"] += valor
+        por_ativo[ticker]["projetado"] += valor
+
+    com_fonte = set()
+    for ticker, lista in proventos_fonte.items():
+        qtd = posicoes.get(ticker, {}).get("quantidade", 0)
+        if qtd <= 0 or not lista:
+            continue
+        com_fonte.add(ticker)
+        for p in lista:
+            if um_ano_atras < p["data_com"] <= hoje:
+                pagamento = p.get("data_pagamento") or _somar_dias(p["data_com"], 30)
+                projetar(ticker, pagamento, qtd * _valor_liquido(p["tipo"], float(p["valor"])))
+    for r in registrados:
+        t = r["ticker"]
+        qtd = posicoes.get(t, {}).get("quantidade", 0)
+        if t in com_fonte or qtd <= 0 or not (um_ano_atras < r["data_pagamento"] <= hoje):
+            continue
+        qtd_epoca = r.get("quantidade") or quantidade_na_data(operacoes, t, r.get("data_com") or r["data_pagamento"])
+        valor = float(r["valor_total"]) * (qtd / qtd_epoca if qtd_epoca else 1)
+        projetar(t, r["data_pagamento"], valor)
+
+    lista_meses = [{**v, "total": v["confirmado"] + v["projetado"]} for v in por_mes.values()]
+    total = sum(m["total"] for m in lista_meses)
+    return {
+        "meses": lista_meses,
+        "agenda": agenda,
+        "total_12m": total,
+        "media_mensal": total / meses,
+        "confirmado": sum(m["confirmado"] for m in lista_meses),
+        "por_ativo": sorted(({"ticker": t, **v, "total": v["confirmado"] + v["projetado"]}
+                             for t, v in por_ativo.items()), key=lambda x: -x["total"]),
+    }
+
+
+def numero_magico(linhas, proventos_fonte, registrados, operacoes, hoje):
+    """Para cada FII: quantas cotas fazem o rendimento mensal comprar uma cota nova."""
+    um_ano_atras = _somar_dias(hoje, -365)
+    out = []
+    for l in linhas:
+        if l["classe"] != "fii" or l["quantidade"] <= 0 or not l.get("preco_atual"):
+            continue
+        t = l["ticker"]
+        por_cota = sum(float(p["valor"]) for p in proventos_fonte.get(t, []) if um_ano_atras < p["data_com"] <= hoje)
+        if not por_cota:  # sem fonte: proventos registrados divididos pela quantidade da época
+            for r in registrados:
+                if r["ticker"] == t and um_ano_atras < r["data_pagamento"] <= hoje:
+                    q = r.get("quantidade") or quantidade_na_data(operacoes, t, r.get("data_com") or r["data_pagamento"])
+                    por_cota += float(r["valor_total"]) / q if q else 0
+        mensal = por_cota / 12
+        if mensal <= 0:
+            continue
+        necessarias = math.ceil(l["preco_atual"] / mensal)
+        out.append({"ticker": t, "preco": l["preco_atual"], "rendimento_mensal_cota": mensal,
+                    "cotas_necessarias": necessarias, "cotas_atuais": l["quantidade"],
+                    "faltam": max(necessarias - l["quantidade"], 0),
+                    "progresso_pct": min(l["quantidade"] / necessarias * 100, 100),
+                    "investimento_faltante": max(necessarias - l["quantidade"], 0) * l["preco_atual"]})
+    return sorted(out, key=lambda x: -x["progresso_pct"])

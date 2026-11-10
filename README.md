@@ -60,6 +60,19 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
 **Cópia de segurança**: automática, uma vez por dia, com o servidor no ar (`CARTEIRA_BACKUP_DIR` para
 apontar para o OneDrive/Google Drive); o administrador pode fazer ou baixar uma cópia em *Acessos e conta*.
 
+**Agenda e projeção de renda passiva** (página *Proventos*)
+- Agenda: proventos **a receber** (data com já passou), **lançados** e **anunciados** (data com futura,
+  pela quantidade atual).
+- Renda prevista para os próximos 12 meses: confirmado + projetado (repete os proventos dos últimos
+  12 meses por ação/cota com a quantidade atual), com **meta de renda mensal** e progresso.
+- **Número mágico** dos FIIs: cotas necessárias para o rendimento mensal comprar uma cota nova.
+
+**Eventos corporativos** (página *Aportes*)
+- Desdobramentos, grupamentos e bonificações detectados nas fontes (brapi e Yahoo) são propostos com
+  a posição antes/depois; um clique aplica. Também é possível registrar manualmente.
+- Eventos multiplicam a quantidade sem mudar o custo; valem em posições, vendas, proventos,
+  evolução (compatível com cotações ajustadas) e importação.
+
 **Fluxo financeiro**
 - Visão geral de **compras, vendas e proventos recebidos** por período (12 meses, ano, ano anterior,
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,
@@ -219,5 +232,8 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | GET | `/api/renda-fixa` | títulos de renda fixa com IR/IOF e vencimentos |
 | GET | `/api/evolucao` | evolução mensal, rentabilidade e referências |
 | GET/POST | `/api/backup` | cópias de segurança (administrador); `/api/backup/baixar` baixa uma cópia |
+| GET | `/api/proventos/agenda` | agenda, projeção 12 meses, número mágico e meta |
+| GET/POST/DELETE | `/api/eventos[/<id>]` | eventos corporativos; `/api/eventos/sugeridos` lista os detectados |
+| PUT | `/api/carteiras/<id>/meta-renda` | meta de renda passiva mensal |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

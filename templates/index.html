@@ -228,6 +228,30 @@
       <div id="resultado-importar-b3"></div>
     </div>
     <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Eventos corporativos</h3>
+          <p class="dica" style="margin:0">Desdobramentos, grupamentos e bonificações mudam a quantidade sem mudar o valor investido.
+            O sistema procura os eventos dos seus ativos nas fontes e propõe o ajuste.</p></div>
+        <button type="button" class="secundario btn-pequeno" id="btn-verificar-eventos">Verificar agora</button>
+      </div>
+      <div id="eventos-sugeridos"></div>
+      <div class="rolagem"><table id="tabela-eventos"></table></div>
+      <details class="requer-edicao" style="margin-top:12px">
+        <summary class="dica">Registrar evento manualmente</summary>
+        <form id="form-evento" class="form-linha" style="margin-top:10px">
+          <label>Ticker <input name="ticker" list="lista-tickers" required></label>
+          <label>Data com <input type="date" name="data" required></label>
+          <label>Tipo <select name="tipo">
+            <option value="desdobramento">Desdobramento</option><option value="grupamento">Grupamento</option>
+            <option value="bonificacao">Bonificação</option><option value="outro">Outro</option></select></label>
+          <label>Fator <input type="number" name="fator" step="any" min="0" required placeholder="ex.: 2"></label>
+          <button type="submit">Registrar</button>
+        </form>
+        <p class="dica">Fator = quantidade nova por ação antiga. Desdobramento 1:2 → <strong>2</strong>; grupamento 10:1 → <strong>0,1</strong>;
+          bonificação de 10% → <strong>1,1</strong>.</p>
+      </details>
+    </div>
+    <div class="painel">
       <h3>Histórico</h3>
       <div class="rolagem"><table id="tabela-aportes"></table></div>
     </div>
@@ -235,6 +259,34 @@
 
   <section id="tab-proventos" class="tab">
     <div class="cards" id="cards-proventos"></div>
+
+    <div class="painel painel-destaque">
+      <div class="cabecalho-painel">
+        <div><h3>Renda passiva prevista: próximos 12 meses</h3>
+          <p class="dica" style="margin:0"><strong>Confirmado</strong>: a receber e anunciado pelas empresas.
+            <strong>Projetado</strong>: repete os proventos dos últimos 12 meses com a quantidade atual (estimativa).</p></div>
+        <form id="form-meta-renda" class="form-linha requer-edicao">
+          <label>Meta de renda mensal (R$) <input type="number" name="valor" step="any" min="0" style="width:130px"></label>
+          <button type="submit" class="btn-pequeno">Salvar meta</button>
+        </form>
+      </div>
+      <div class="cards compacto" id="cards-renda"></div>
+      <canvas id="graf-projecao" height="80"></canvas>
+      <p class="dica" id="aviso-agenda"></p>
+    </div>
+
+    <div class="grade2">
+      <div class="painel">
+        <h3>Agenda de proventos</h3>
+        <div id="agenda-proventos"></div>
+      </div>
+      <div class="painel">
+        <h3>Número mágico dos FIIs</h3>
+        <p class="dica" style="margin-top:0">Quantas cotas fazem o rendimento de um mês comprar uma cota nova.</p>
+        <div class="rolagem"><table id="tabela-magico"></table></div>
+      </div>
+    </div>
+
     <div class="painel"><h3>Proventos recebidos por mês</h3><canvas id="graf-proventos" height="90"></canvas></div>
     <div class="painel">
       <h3>Buscar proventos nas fontes</h3>

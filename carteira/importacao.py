@@ -647,10 +647,14 @@ def conciliar_posicao(posicao, aportes_existentes, aportes_novos, hoje):
     Ativos zerados na B3 mas vendidos nos extratos também recebem posição inicial.
     """
     saldo = {}
-    for a in list(aportes_existentes) + [a for a in aportes_novos if not a.get("ja_registrado")]:
+    ops = list(aportes_existentes) + [a for a in aportes_novos if not a.get("ja_registrado")]
+    for a in sorted(ops, key=lambda x: (x["data"], x.get("id") or 0)):
+        if a.get("tipo") == "evento":
+            saldo[a["ticker"]] = saldo.get(a["ticker"], 0.0) * a["fator"]
+            continue
         sinal = 1 if a.get("tipo", "compra") == "compra" else -1
         saldo[a["ticker"]] = saldo.get(a["ticker"], 0.0) + sinal * float(a["quantidade"])
-    todas = [a["data"] for a in list(aportes_existentes) + list(aportes_novos)]
+    todas = [a["data"] for a in list(aportes_existentes) + list(aportes_novos) if a.get("tipo") != "evento"]
     data_abertura = _dia_anterior(min(todas)) if todas else hoje
     na_b3 = {p["ticker"]: p for p in posicao}
 

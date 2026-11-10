@@ -76,6 +76,17 @@ CREATE TABLE IF NOT EXISTS proventos (
     obs            TEXT
 );
 
+-- Eventos corporativos: a quantidade é multiplicada por `fator` ao fim da data com, sem alterar o custo.
+CREATE TABLE IF NOT EXISTS eventos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    ticker      TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    tipo        TEXT NOT NULL CHECK (tipo IN ('desdobramento', 'grupamento', 'bonificacao', 'outro')),
+    fator       REAL NOT NULL CHECK (fator > 0),
+    obs         TEXT
+);
+
 -- Cache de respostas das fontes (proventos por ação, fundamentos) em JSON.
 CREATE TABLE IF NOT EXISTS cache_dados (
     ticker     TEXT NOT NULL,
@@ -194,6 +205,7 @@ COLUNAS_NOVAS = [
     ("ativos", "taxa", "REAL"),                 # % do CDI/Selic, taxa real (IPCA+) ou taxa prefixada, ao ano
     ("ativos", "vencimento", "TEXT"),
     ("ativos", "isento_ir", "INTEGER NOT NULL DEFAULT 0"),  # LCI, LCA, CRI, CRA, debêntures incentivadas
+    ("carteiras", "meta_renda_mensal", "REAL"),  # meta de renda passiva (R$/mês)
 ]
 
 

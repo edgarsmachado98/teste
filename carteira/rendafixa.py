@@ -146,6 +146,10 @@ def lotes_peps(aportes):
     """Lotes em aberto (data, quantidade, preço unitário) após os resgates, do mais antigo ao mais novo."""
     lotes = []
     for a in sorted(aportes, key=lambda x: (x["data"], x.get("id") or 0)):
+        if a.get("tipo") == "evento":
+            for lote in lotes:  # desdobramento/grupamento de cotas: muda a quantidade, mantém o custo
+                lote[1], lote[2] = lote[1] * a["fator"], lote[2] / a["fator"]
+            continue
         q = float(a["quantidade"])
         if a.get("tipo", "compra") == "compra":
             unit = (q * float(a["preco"]) + float(a.get("taxas") or 0)) / q

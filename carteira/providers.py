@@ -59,6 +59,37 @@ def tipo_provento(rotulo):
     return "dividendo"
 
 
+def fator_evento(tipo, valor):
+    """Converte o fator informado pela fonte no multiplicador da quantidade.
+
+    Desdobramento 1:2 -> 2; grupamento 10:1 -> 0,1; bonificação de 10% -> 1,1.
+    As fontes não são consistentes (fator x percentual), por isso as faixas abaixo.
+    """
+    f = float(valor)
+    if f <= 0:
+        raise ValueError("fator inválido")
+    if tipo == "grupamento":
+        return f if f < 1 else 1 / f
+    if tipo == "bonificacao":
+        if f >= 2:          # informado em % (ex.: 10 -> 10%)
+            return 1 + f / 100
+        if f < 1:           # informado como fração (ex.: 0,1 -> 10%)
+            return 1 + f
+        return f            # já é o multiplicador (ex.: 1,1)
+    return f if f >= 1 else 1 / f  # desdobramento
+
+
+def tipo_evento(rotulo):
+    r = (rotulo or "").upper()
+    if "DESDOB" in r or "SPLIT" in r:
+        return "desdobramento"
+    if "GRUP" in r or "INPLIT" in r:
+        return "grupamento"
+    if "BONIF" in r:
+        return "bonificacao"
+    return None
+
+
 def _num(v):
     """Aceita número ou dict no formato do Yahoo/brapi ({"raw": 1.2, "fmt": "1,2"})."""
     if isinstance(v, dict):
@@ -96,6 +127,10 @@ class Fonte:
     def fundamentos(self, ticker):
         """Dict com indicadores normalizados (ver CAMPOS_FUNDAMENTOS)."""
         raise FonteIndisponivel(f"{self.nome} não fornece fundamentos")
+
+    def eventos(self, ticker):
+        """Eventos corporativos: [{data_com, tipo, fator, descricao}] (fator multiplica a quantidade)."""
+        raise FonteIndisponivel(f"{self.nome} não fornece eventos corporativos")
 
     def status(self):
         return {"nome": self.nome, "descricao": self.descricao, "site": self.site,
@@ -153,6 +188,26 @@ class Brapi(Fonte):
                           "valor": valor, "tipo": tipo_provento(d.get("label"))})
         if not itens and "dividendsData" not in r:
             raise FonteIndisponivel("brapi não retornou dados de proventos (verifique o plano)")
+        return itens
+
+    def eventos(self, ticker):
+        r = self._resultado(ticker, {"dividends": "true"})
+        dados = r.get("dividendsData") or {}
+        if "stockDividends" not in dados:
+            raise FonteIndisponivel("brapi não retornou eventos corporativos (verifique o plano)")
+        itens = []
+        for e in dados.get("stockDividends") or []:
+            tipo = tipo_evento(e.get("label"))
+            data_com = e.get("lastDatePrior") or e.get("approvedOn")
+            fator = _num(e.get("factor"))
+            if not tipo or not data_com or not fator:
+                continue
+            try:
+                multiplicador = fator_evento(tipo, fator)
+            except ValueError:
+                continue
+            itens.append({"data_com": _data_iso(data_com), "tipo": tipo, "fator": multiplicador,
+                          "descricao": e.get("label") or ""})
         return itens
 
     def fundamentos(self, ticker):
@@ -295,6 +350,28 @@ class Yahoo(Fonte):
             com = ex - dt.timedelta(days=3 if ex.weekday() == 0 else 1)
             itens.append({"data_com": com.isoformat(), "data_pagamento": None,
                           "valor": float(ev["amount"]), "tipo": "dividendo"})
+        return sorted(itens, key=lambda x: x["data_com"])
+
+    def eventos(self, ticker):
+        """Desdobramentos e grupamentos (o Yahoo não distingue bonificação de desdobramento)."""
+        resp = requests.get(self.URL.format(symbol=self.simbolo(ticker)),
+                            params={"range": "5y", "interval": "1mo", "events": "split"},
+                            headers={"User-Agent": "Mozilla/5.0"}, timeout=TIMEOUT)
+        resp.raise_for_status()
+        dados = resp.json()["chart"]
+        if dados.get("error") or not dados.get("result"):
+            raise FonteIndisponivel(f"Yahoo não encontrou {ticker}")
+        itens = []
+        for ev in ((dados["result"][0].get("events") or {}).get("splits") or {}).values():
+            num, den = float(ev.get("numerator") or 0), float(ev.get("denominator") or 0)
+            if not num or not den:
+                continue
+            ex = dt.date.fromisoformat(_data_iso(ev["date"]))
+            com = ex - dt.timedelta(days=3 if ex.weekday() == 0 else 1)
+            fator = num / den
+            itens.append({"data_com": com.isoformat(), "fator": fator,
+                          "tipo": "desdobramento" if fator > 1 else "grupamento",
+                          "descricao": ev.get("splitRatio") or f"{num:g}:{den:g}"})
         return sorted(itens, key=lambda x: x["data_com"])
 
 

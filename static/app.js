@@ -200,6 +200,111 @@ $("#tabela-rf").addEventListener("click", async ev => {
   else { const f = $("#form-ativo"); f.reset(); f.ticker.value = t; f.classe.value = "renda_fixa"; atualizarCamposRF(); }
 });
 
+// ---------------- Agenda e projeção de renda ----------------
+const MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const ROTULO_STATUS = { a_receber: "a receber", lancado: "lançado", anunciado: "anunciado" };
+
+async function carregarAgenda() {
+  let r;
+  try { r = await api("/api/proventos/agenda"); } catch (e) { return toast(e.message, true); }
+  const meta = r.meta_mensal;
+  const progresso = meta ? Math.min(r.media_mensal / meta * 100, 100) : null;
+  $("#cards-renda").innerHTML = [
+    ["Previsto em 12 meses", brl.format(r.total_12m)],
+    ["Média mensal prevista", brl.format(r.media_mensal)],
+    ["Já confirmado", brl.format(r.confirmado)],
+  ].map(([rot, v]) => `<div class="card"><div class="rotulo">${rot}</div><div class="valor">${v}</div></div>`).join("") +
+    `<div class="card"><div class="rotulo">Meta de renda mensal</div><div class="valor">${meta ? brl.format(meta) : "—"}</div>
+      ${meta ? `<div class="progresso"><span style="width:${progresso}%"></span></div><small class="dica">${pct(r.media_mensal / meta * 100, 0)} da meta</small>`
+        : `<small class="dica">defina ao lado</small>`}</div>`;
+  const f = $("#form-meta-renda");
+  f.classList.toggle("oculto", carteiraAtual === FAMILIA);
+  if (document.activeElement !== f.valor) f.valor.value = meta ?? "";
+  grafico("graf-projecao", {
+    type: "bar",
+    data: { labels: r.meses.map(m => `${MESES_CURTOS[+m.mes.slice(5) - 1]}/${m.mes.slice(2, 4)}`), datasets: [
+      { label: "Confirmado", data: r.meses.map(m => m.confirmado), backgroundColor: PALETA[2], stack: "r" },
+      { label: "Projetado", data: r.meses.map(m => m.projetado), backgroundColor: "rgba(47,91,234,.45)", stack: "r" },
+      ...(meta ? [{ type: "line", label: "Meta", data: r.meses.map(() => meta), borderColor: PALETA[1], borderDash: [5, 4], pointRadius: 0, borderWidth: 2 }] : []),
+    ] },
+    options: { scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => brl.format(v) } } },
+      plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl.format(x.raw)}` } } } },
+  });
+  $("#aviso-agenda").textContent = Object.keys(r.falhas || {}).length
+    ? `Sem dados de proventos nas fontes para: ${Object.keys(r.falhas).join(", ")} (a projeção desses usa os proventos registrados).` : "";
+
+  const porMes = {};
+  for (const a of r.agenda) (porMes[a.data_pagamento.slice(0, 7)] ||= []).push(a);
+  $("#agenda-proventos").innerHTML = r.agenda.length ? Object.entries(porMes).map(([mes, itens]) =>
+    `<div class="agenda-mes">${MESES_LONGOS[+mes.slice(5) - 1]} de ${mes.slice(0, 4)} · ${brl.format(itens.reduce((s, i) => s + i.valor_total, 0))}</div>
+     <ol class="lista-agenda">${itens.map(a => `<li>
+       <span class="dia">${a.data_pagamento.slice(8)}<small>${MESES_CURTOS[+a.data_pagamento.slice(5, 7) - 1]}</small></span>
+       <span><strong>${esc(a.ticker)}</strong> <span class="status ${a.status}">${ROTULO_STATUS[a.status]}</span>
+         <small>${esc(nomeTipo(a.tipo))}${a.data_com ? ` · data com ${fmtData(a.data_com)}` : ""}${a.pagamento_estimado ? " · pagamento estimado" : ""}
+         ${a.quantidade ? ` · ${num.format(a.quantidade)} × ${brl.format(a.valor_unitario)}` : ""}</small></span>
+       <span class="valor-rank pos">${brl.format(a.valor_total)}</span></li>`).join("")}</ol>`).join("")
+    : `<p class="dica">Nenhum provento a receber ou anunciado para os seus ativos.</p>`;
+
+  $("#tabela-magico").innerHTML = r.numero_magico.length
+    ? `<tr><th>FII</th><th>Cotas</th><th>Número mágico</th><th>Progresso</th><th>Faltam</th></tr>` + r.numero_magico.map(m => `<tr>
+        <td><strong>${esc(m.ticker)}</strong><small class="var-sub">${brl.format(m.rendimento_mensal_cota)}/cota/mês · cota ${brl.format(m.preco)}</small></td>
+        <td>${num.format(m.cotas_atuais)}</td><td>${num.format(m.cotas_necessarias)}</td>
+        <td><div class="peso"><div class="barra"><span style="width:${m.progresso_pct}%"></span></div>${pct(m.progresso_pct, 0)}</div></td>
+        <td>${m.faltam ? `${num.format(m.faltam)} cotas<small class="var-sub">${brl.format(m.investimento_faltante)}</small>` : `<span class="pos">atingido</span>`}</td></tr>`).join("")
+    : `<tr><td>Nenhum FII com histórico de rendimentos.</td></tr>`;
+}
+
+$("#form-meta-renda").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  try {
+    await api(`/api/carteiras/${carteiraAtual}/meta-renda`, { method: "PUT", body: { valor: ev.target.valor.value } });
+    toast("Meta de renda salva."); carregarAgenda();
+  } catch (e) { toast(e.message, true); }
+});
+
+// ---------------- Eventos corporativos ----------------
+const ROTULO_EVENTO = { desdobramento: "Desdobramento", grupamento: "Grupamento", bonificacao: "Bonificação", outro: "Outro evento" };
+const descreverFator = f => f >= 1 ? `1 → ${num.format(Number(f.toFixed(6)))}` : `${num.format(Number((1 / f).toFixed(6)))} → 1`;
+let eventosSugeridos = [];
+
+async function carregarEventos(atualizar = false) {
+  try {
+    const [reg, sug] = await Promise.all([api("/api/eventos"), api(`/api/eventos/sugeridos?atualizar=${atualizar ? 1 : 0}`)]);
+    eventosSugeridos = sug.itens;
+    $("#eventos-sugeridos").innerHTML = sug.itens.map((e, i) => `<div class="sugestao-evento">
+        <span class="texto"><strong>${esc(e.ticker)}: ${ROTULO_EVENTO[e.tipo]} ${descreverFator(e.fator)}</strong>
+          <small>Data com ${fmtData(e.data)} · sua posição: ${num.format(e.quantidade_antes)} → ${num.format(e.quantidade_depois)} · fonte: ${esc(e.fonte)}</small></span>
+        <button type="button" class="btn btn-pequeno requer-edicao" data-aplicar-evento="${i}">Aplicar</button></div>`).join("");
+    $("#tabela-eventos").innerHTML = reg.itens.length
+      ? `<tr><th>Data com</th><th>Ativo</th><th>Evento</th><th>Fator</th><th>Obs.</th><th></th></tr>` + reg.itens.map(e => `<tr>
+          <td>${fmtData(e.data)}</td><td><strong>${esc(e.ticker)}</strong></td><td>${ROTULO_EVENTO[e.tipo]}</td><td>${descreverFator(e.fator)}</td>
+          <td>${esc(e.obs)}</td><td><button class="link requer-edicao" data-remover-evento="${e.id}">excluir</button></td></tr>`).join("")
+      : (sug.itens.length ? "" : `<tr><td class="dica">Nenhum evento registrado ou pendente.</td></tr>`);
+  } catch (e) { toast(e.message, true); }
+}
+
+$("#btn-verificar-eventos").addEventListener("click", () => carregarEventos(true));
+$("#eventos-sugeridos").addEventListener("click", async ev => {
+  const i = ev.target.dataset.aplicarEvento;
+  if (i === undefined) return;
+  const e = eventosSugeridos[i];
+  try {
+    await api("/api/eventos", { method: "POST", body: { ticker: e.ticker, data: e.data, tipo: e.tipo, fator: e.fator, obs: `fonte: ${e.fonte}` } });
+    toast(`${ROTULO_EVENTO[e.tipo]} de ${e.ticker} aplicado.`); carregarEventos();
+  } catch (err) { toast(err.message, true); }
+});
+$("#tabela-eventos").addEventListener("click", async ev => {
+  const id = ev.target.dataset.removerEvento;
+  if (!id || !confirm("Excluir este evento? A quantidade volta a ser a de antes.")) return;
+  try { await api(`/api/eventos/${id}`, { method: "DELETE" }); toast("Evento excluído."); carregarEventos(); }
+  catch (e) { toast(e.message, true); }
+});
+$("#form-evento").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  try { await api("/api/eventos", { method: "POST", body: formDados(ev.target) }); toast("Evento registrado."); ev.target.reset(); carregarEventos(); }
+  catch (e) { toast(e.message, true); }
+});
+
 // ---------------- Rentabilidade ----------------
 const MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -350,6 +455,7 @@ $("#criterio-ranking").addEventListener("change", renderRanking);
 
 // ---------------- Aportes ----------------
 async function carregarAportes() {
+  carregarEventos();
   try {
     const [aportes, ativos] = await Promise.all([api("/api/aportes"), api("/api/ativos")]);
     $("#lista-tickers").innerHTML = ativos.map(a => `<option value="${esc(a.ticker)}">${esc(a.nome)}</option>`).join("");
@@ -728,6 +834,7 @@ const nomeTipo = t => TIPOS_PROVENTO[t] || t;
 const COR_TIPO = { dividendo: PALETA[0], jcp: PALETA[1], rendimento: PALETA[2], amortizacao: PALETA[4], outro: PALETA[8] };
 
 async function carregarProventos() {
+  carregarAgenda();
   let r;
   try { r = await api("/api/proventos"); } catch (e) { return toast(e.message, true); }
   const s = r.resumo;

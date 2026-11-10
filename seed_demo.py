@@ -7,7 +7,7 @@ Usuários criados:
 import sys
 
 from app import create_app
-from carteira.market import modo_demo, serie_simulada
+from carteira.market import eventos_simulados, modo_demo, serie_simulada
 
 SENHA = "demo12345"
 
@@ -59,7 +59,15 @@ def preco_na_data(ticker, data, padrao):
         return padrao
     serie = dict(serie_simulada(ticker))
     datas = [d for d in sorted(serie) if d <= data]
-    return serie[datas[-1]] if datas else padrao
+    if not datas:
+        return padrao
+    # a série simulada é "ajustada" por desdobramentos/bonificações, como as das fontes reais;
+    # o preço pago na época é o ajustado multiplicado pelos fatores dos eventos posteriores
+    fator = 1.0
+    for e in eventos_simulados(ticker):
+        if e["data_com"] >= data:
+            fator *= e["fator"]
+    return round(serie[datas[-1]] * fator, 2)
 
 
 def popular(c, dados):
@@ -69,6 +77,10 @@ def popular(c, dados):
     for d, t, q, p in dados["aportes"]:
         c.post("/api/aportes", json={"data": d, "ticker": t, "quantidade": q,
                                      "preco": preco_na_data(t, d, p)})
+    # registra os eventos corporativos detectados (desdobramentos, bonificações)
+    for e in c.get("/api/eventos/sugeridos").get_json()["itens"]:
+        c.post("/api/eventos", json={"ticker": e["ticker"], "data": e["data"], "tipo": e["tipo"],
+                                     "fator": e["fator"], "obs": "exemplo"})
     est = c.get("/api/proventos/estimar").get_json()
     recebidos = [i for i in est["itens"] if i["status"] == "recebido" and not i["ja_registrado"]]
     if recebidos:

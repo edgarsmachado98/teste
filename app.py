@@ -326,6 +326,14 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         f, ids = filtro_carteiras(cids)
         return db.rows(conn.execute(f"SELECT * FROM aportes WHERE {f} ORDER BY data DESC, id DESC", ids))
 
+    def listar_eventos(cids):
+        f, ids = filtro_carteiras(cids)
+        return db.rows(conn.execute(f"SELECT * FROM eventos WHERE {f} ORDER BY data DESC, id DESC", ids))
+
+    def listar_operacoes(cids):
+        """Aportes + eventos corporativos: base de todos os cálculos de posição."""
+        return portfolio.com_eventos(listar_aportes(cids), listar_eventos(cids))
+
     def configs_renda_fixa(ativos):
         cfg = {}
         for a in ativos:
@@ -418,7 +426,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
 
     def montar_resumo(cid):
         ativos = listar_ativos(cid)
-        aportes = listar_aportes(cid)
+        aportes = listar_operacoes(cid)
         precos, fontes, anteriores, _ = cotacoes(ativos, aportes)
         resumo = portfolio.resumo_carteira(ativos, aportes, precos)
         for l in resumo["ativos"]:
@@ -510,7 +518,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             return erro("Data, quantidade, preço e taxas devem ser válidos.")
         if not ticker or tipo not in ("compra", "venda") or qtd <= 0 or preco < 0 or taxas < 0:
             return erro("Dados do aporte inválidos.")
-        aportes = listar_aportes(cid) + [{"id": 10**12, "data": data, "ticker": ticker, "tipo": tipo,
+        aportes = listar_operacoes(cid) + [{"id": 10**12, "data": data, "ticker": ticker, "tipo": tipo,
                                        "quantidade": qtd, "preco": preco, "taxas": taxas}]
         try:
             portfolio.calcular_posicoes(aportes)
@@ -530,7 +538,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     @app.delete("/api/aportes/<int:aid>")
     def api_remover_aporte(aid):
         cid = carteira_atual("editar")
-        restantes = [a for a in listar_aportes(cid) if a["id"] != aid]
+        restantes = [a for a in listar_operacoes(cid) if a["id"] != aid]
         try:
             portfolio.calcular_posicoes(restantes)
         except ValueError as e:
@@ -571,7 +579,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     @app.get("/api/renda-fixa")
     def api_renda_fixa():
         cids = carteiras_leitura()
-        ativos, aportes = listar_ativos(cids), listar_aportes(cids)
+        ativos, aportes = listar_ativos(cids), listar_operacoes(cids)
         hoje_ = hoje()
         posicoes = portfolio.calcular_posicoes(aportes)
         cfg = configs_renda_fixa(ativos)
@@ -620,7 +628,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     @app.get("/api/evolucao")
     def api_evolucao():
         cids = carteiras_leitura()
-        aportes = listar_aportes(cids)
+        aportes = listar_operacoes(cids)
         hoje_ = hoje()
         precos, _, _, series = cotacoes(listar_ativos(cids), aportes, com_series=True)
         ev = evolucao.calcular_evolucao(aportes, listar_proventos(cids), series, precos, hoje_)
@@ -694,7 +702,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     def api_estimar_proventos():
         """Busca proventos por ação nas fontes e calcula quanto você recebeu/receberá."""
         cid = carteiras_leitura()
-        aportes = listar_aportes(cid)
+        aportes = listar_operacoes(cid)
         forcar = request.args.get("atualizar") == "1"
         por_ticker, fontes, falhas = {}, {}, {}
         for t in sorted({a["ticker"] for a in aportes}):
@@ -730,7 +738,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             return erro("Período inválido.")
         if inicio > fim:
             return erro("A data inicial deve ser anterior à final.")
-        return jsonify(portfolio.fluxo(listar_aportes(cid), listar_proventos(cid), inicio, fim, hoje_))
+        return jsonify(portfolio.fluxo(listar_operacoes(cid), listar_proventos(cid), inicio, fim, hoje_))
 
     # ---------- Importação de extratos da B3 ----------
     def preco_em(ticker, data):
@@ -764,8 +772,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             previa["aviso"] = ("Você enviou Movimentação e Eventos: os proventos podem aparecer duas vezes. "
                                "Desmarque os de um dos dois.")
         previa["tipo_arquivo"] = tipos[0] if len(tipos) == 1 else "varios"
-        existentes = listar_aportes(cid)
-        marcar_duplicados(previa, existentes, listar_proventos(cid))
+        existentes = listar_operacoes(cid)
+        marcar_duplicados(previa, listar_aportes(cid), listar_proventos(cid))
         previa["conciliacao"] = None
         estimadas = set()
         for p in previa["posicao"]:
@@ -820,7 +828,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                 return erro(f"Operação inválida: {item['ticker']} em {item['data']}.")
             validos.append(item)
         try:
-            portfolio.calcular_posicoes(listar_aportes(cid) + validos)
+            portfolio.calcular_posicoes(listar_operacoes(cid) + validos)
         except ValueError as e:
             return erro(f"{e} Importe um período maior (desde a primeira compra) ou registre a posição "
                         "inicial antes de importar as vendas.", 409)
@@ -856,6 +864,107 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         conn.commit()
         return jsonify({"ok": True, "aportes": len(validos), "proventos": len(novos_proventos),
                         "ativos": len(d.get("ativos") or [])}), 201
+
+    # ---------- Eventos corporativos ----------
+    @app.get("/api/eventos")
+    def api_eventos():
+        return jsonify({"itens": listar_eventos(carteiras_leitura()), "tipos": portfolio.TIPOS_EVENTO})
+
+    @app.post("/api/eventos")
+    def api_criar_evento():
+        cid = carteira_atual("editar")
+        d = request.get_json(silent=True) or {}
+        ticker = (d.get("ticker") or "").upper().strip()
+        tipo = d.get("tipo") or "desdobramento"
+        try:
+            data = dt.date.fromisoformat(d.get("data") or "").isoformat()
+            fator = float(str(d.get("fator")).replace(",", "."))
+        except (TypeError, ValueError):
+            return erro("Data e fator do evento devem ser válidos.")
+        if not ticker or tipo not in portfolio.TIPOS_EVENTO or fator <= 0:
+            return erro("Ticker, tipo e fator (maior que zero) são obrigatórios.")
+        duplicado = conn.execute("SELECT 1 FROM eventos WHERE carteira_id = ? AND ticker = ? AND data = ? AND tipo = ?",
+                                 (cid, ticker, data, tipo)).fetchone()
+        if duplicado:
+            return erro("Este evento já está registrado.", 409)
+        cur = conn.execute("INSERT INTO eventos (carteira_id, ticker, data, tipo, fator, obs) VALUES (?,?,?,?,?,?)",
+                           (cid, ticker, data, tipo, fator, d.get("obs") or ""))
+        conn.commit()
+        return jsonify({"ok": True, "id": cur.lastrowid}), 201
+
+    @app.delete("/api/eventos/<int:eid>")
+    def api_remover_evento(eid):
+        cid = carteira_atual("editar")
+        restantes = portfolio.com_eventos(listar_aportes(cid), [e for e in listar_eventos(cid) if e["id"] != eid])
+        try:
+            portfolio.calcular_posicoes(restantes)
+        except ValueError as e:
+            return erro("Remover este evento deixaria uma venda maior que a posição: " + str(e), 409)
+        conn.execute("DELETE FROM eventos WHERE id = ? AND carteira_id = ?", (eid, cid))
+        conn.commit()
+        return jsonify({"ok": True})
+
+    @app.get("/api/eventos/sugeridos")
+    def api_eventos_sugeridos():
+        """Eventos informados pelas fontes que afetam a carteira e ainda não foram registrados."""
+        cid = carteiras_leitura()
+        ops, hoje_ = listar_operacoes(cid), hoje()
+        registrados = {(e["ticker"], e["data"], e["tipo"]) for e in listar_eventos(cid)}
+        primeiro = {}
+        for a in ops:
+            if a.get("tipo") != "evento":
+                primeiro[a["ticker"]] = min(primeiro.get(a["ticker"], a["data"]), a["data"])
+        itens, falhas = [], {}
+        for t in sorted(primeiro):
+            try:
+                eventos, fonte = mercado.eventos(t, request.args.get("atualizar") == "1")
+            except MarketDataError as e:
+                falhas[t] = str(e)
+                continue
+            for e in eventos:
+                if not (primeiro[t] <= e["data_com"] <= hoje_) or (t, e["data_com"], e["tipo"]) in registrados:
+                    continue
+                qtd = portfolio.quantidade_na_data(ops, t, e["data_com"])
+                if qtd <= 0:
+                    continue
+                itens.append({"ticker": t, "data": e["data_com"], "tipo": e["tipo"], "fator": e["fator"],
+                              "descricao": e.get("descricao") or "", "fonte": fonte,
+                              "quantidade_antes": qtd, "quantidade_depois": qtd * e["fator"]})
+        return jsonify({"itens": sorted(itens, key=lambda x: x["data"], reverse=True), "falhas": falhas})
+
+    # ---------- Agenda e projeção de renda ----------
+    @app.get("/api/proventos/agenda")
+    def api_agenda():
+        cids = carteiras_leitura()
+        ops, hoje_ = listar_operacoes(cids), hoje()
+        registrados = listar_proventos(cids)
+        resumo = montar_resumo(cids)
+        fonte_por_ticker, falhas = {}, {}
+        for t in sorted({l["ticker"] for l in resumo["ativos"] if l["quantidade"] > 0}):
+            try:
+                fonte_por_ticker[t], _ = mercado.proventos(t)
+            except MarketDataError as e:
+                falhas[t] = str(e)
+        proj = portfolio.projecao_renda(ops, fonte_por_ticker, registrados, hoje_)
+        proj["numero_magico"] = portfolio.numero_magico(resumo["ativos"], fonte_por_ticker, registrados, ops, hoje_)
+        metas = [r["meta_renda_mensal"] for r in conn.execute(
+            f"SELECT meta_renda_mensal FROM carteiras WHERE id IN ({','.join('?' * len(cids))})", cids)]
+        proj["meta_mensal"] = sum(m for m in metas if m) or None
+        proj["falhas"] = falhas
+        return jsonify(proj)
+
+    @app.put("/api/carteiras/<int:cid>/meta-renda")
+    def api_meta_renda(cid):
+        if not auth.permissoes(conn, g.usuario, cid)["editar"]:
+            raise ErroAcesso("Você não pode alterar esta carteira.", 403)
+        d = request.get_json(silent=True) or {}
+        try:
+            valor = float(d["valor"]) if d.get("valor") not in (None, "") else None
+        except (TypeError, ValueError):
+            return erro("Valor inválido.")
+        conn.execute("UPDATE carteiras SET meta_renda_mensal = ? WHERE id = ?", (valor, cid))
+        conn.commit()
+        return jsonify({"ok": True})
 
     # ---------- Fundamentos ----------
     @app.get("/api/fundamentos/<ticker>")
