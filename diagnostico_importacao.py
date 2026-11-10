@@ -53,7 +53,7 @@ def main():
         return 0
     print(f"Tipo: {r['tipo_arquivo']} · posição: {len(r['posicao'])} · operações: {len(r['aportes'])} · "
           f"proventos: {len(r['proventos'])} · ignoradas: {len(r['ignorados'])}")
-    for p in r["posicao"][:20]:
+    for p in r["posicao"]:
         print(f"  ativo: {mascarar(p['ticker'], True)} · classe {p['classe']} · qtd {mascarar(p['quantidade'], mostrar)}")
     for g in r["ignorados"][:15]:
         print(f"  ignorada (linha {g['linha']}): {g['motivo']} -> {mascarar(g['descricao'], mostrar)}")

@@ -648,6 +648,7 @@ def _posicao(abas):
             if not ticker or not qtd:
                 lidos = " · ".join(str(c) for c in linha if c not in (None, ""))[:160]
                 motivo = ("Sem nome/código do ativo." if not ticker else
+                          "Saldo zerado no fim do período (vendido ou resgatado)." if saldo == 0 else
                           "Sem quantidade nem saldo positivo.")
                 ignorados.append({"linha": n, "descricao": f"{aba}: {lidos}", "motivo": motivo})
                 continue
