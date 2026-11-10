@@ -28,6 +28,13 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
 - Painel com patrimônio, alocação atual vs. meta, alocação por classe e evolução mensal dos aportes.
 - Validação: não permite vender mais do que se possui (nem excluir um aporte que deixaria uma venda descoberta).
 
+**Cotações ao longo do dia**
+- Durante o pregão (dias úteis, 10h às 18h, horário de Brasília) as cotações valem por 15 minutos
+  (`CARTEIRA_INTERVALO_COTACOES`); fora dele, vale o fechamento (buscado uma vez após as 18h).
+- Com o servidor no ar, as cotações são atualizadas em segundo plano; o Patrimônio mostra se a bolsa
+  está aberta e o horário das cotações, tem o botão "Atualizar cotações" e se atualiza sozinho durante
+  o pregão. A brapi acrescenta a cotação do momento ao histórico diário.
+
 **Painel inicial (Patrimônio)**
 - **Visão geral por categoria** (Ação, FII, ETF, Renda Fixa...): valor total, % na carteira, variação do
   dia e rentabilidade (valorização + proventos recebidos sobre o valor investido). Clique na categoria
@@ -285,5 +292,6 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | POST/DELETE | `/api/alertas-preco[/<id>]` | alertas de preço |
 | GET | `/api/alertas` | alertas atuais; `POST /api/alertas/teste-telegram` testa o Telegram |
 | GET | `/api/importacoes` | arquivos já importados |
+| POST | `/api/cotacoes/atualizar` | busca agora as cotações da carteira e da lista de acompanhamento |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

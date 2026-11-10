@@ -34,7 +34,7 @@ from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
                                  marcar_duplicados, mesclar_posicoes)
-from carteira.market import Mercado, MarketDataError, modo_demo  # noqa: E402
+from carteira.market import Mercado, MarketDataError, agora_brasilia, em_pregao, intervalo_pregao, modo_demo  # noqa: E402
 
 
 def chave_secreta(db_path):
@@ -609,6 +609,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             l["yoc_pct"] = p.get("yoc_pct")
         resumo["proventos"] = {k: prov[k] for k in ("total", "ult_12m", "media_mensal_12m", "yoc_pct", "dy_pct")}
         resumo.update(portfolio.visao_por_categoria(resumo["ativos"]))
+        tickers_mercado = [l["ticker"] for l in resumo["ativos"] if l.get("fonte_preco") not in (None, "manual", "curva", "tesouro")]
+        resumo["cotacoes_em"] = mercado.atualizado_em(tickers_mercado)
+        resumo["em_pregao"] = em_pregao()
+        resumo["intervalo_minutos"] = intervalo_pregao()
         resumo["por_carteira"] = []
         if len(cid) > 1:  # visão da família: quanto cada carteira representa
             nomes = {c["id"]: c for c in auth.carteiras_do_usuario(conn, g.usuario)}
@@ -670,6 +674,39 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                                                                                 if i["liquido"] is None),
                        "sem_configuracao": sum(1 for i in itens if not i["indexador"])},
         })
+
+    # ---------- Atualização das cotações ----------
+    def tickers_de_mercado(cids=None):
+        """Tickers com cotação de mercado: ativos das carteiras (ou de todas) e listas de acompanhamento."""
+        if cids:
+            f, ids = filtro_carteiras(cids)
+            ativos = conn.execute(f"SELECT ticker, classe, preco_manual, indexador FROM ativos WHERE {f}", ids).fetchall()
+            extras = conn.execute(f"SELECT ticker FROM acompanhamento WHERE {f}", ids).fetchall()
+        else:
+            ativos = conn.execute("SELECT ticker, classe, preco_manual, indexador FROM ativos").fetchall()
+            extras = conn.execute("SELECT ticker FROM acompanhamento").fetchall()
+        tickers = {a["ticker"] for a in ativos if not a["preco_manual"] and not a["indexador"]
+                   and a["classe"] in ("acao", "fii", "etf", "bdr", "cripto", "exterior")}
+        return sorted(tickers | {e["ticker"] for e in extras})
+
+    def atualizar_cotacoes(tickers, forcar=False):
+        ok, falhas = 0, {}
+        for t in tickers:
+            try:
+                mercado.historico(t, forcar=forcar)
+                ok += 1
+            except MarketDataError as e:
+                falhas[t] = str(e)
+        return ok, falhas
+
+    @app.post("/api/cotacoes/atualizar")
+    def api_atualizar_cotacoes():
+        cids = carteiras_leitura()
+        ok, falhas = atualizar_cotacoes(tickers_de_mercado(cids), forcar=True)
+        return jsonify({"ok": True, "atualizados": ok, "falhas": falhas,
+                        "em": agora_brasilia().isoformat(timespec="minutes")})
+
+    app.config["atualizar_cotacoes"] = lambda: atualizar_cotacoes(tickers_de_mercado())
 
     # ---------- Evolução e rentabilidade ----------
     @app.get("/api/evolucao")
@@ -1474,10 +1511,36 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     return app
 
 
+def cotacoes_automaticas(app):
+    """Enquanto o servidor estiver no ar, atualiza as cotações durante o pregão (e uma vez após o fechamento)."""
+    import threading
+    import time
+
+    def laco():
+        fechamento_feito = None
+        while True:
+            try:
+                agora = agora_brasilia()
+                depois_do_fechamento = agora.hour >= 18 and fechamento_feito != agora.date()
+                if em_pregao() or depois_do_fechamento:
+                    with app.app_context():
+                        app.config["atualizar_cotacoes"]()
+                        app.config["conn"].close()
+                    if depois_do_fechamento and not em_pregao():
+                        fechamento_feito = agora.date()
+            except Exception as e:  # nunca derruba o servidor
+                print(f"[cotacoes] falhou: {e}")
+            time.sleep(intervalo_pregao() * 60)
+
+    threading.Thread(target=laco, name="cotacoes", daemon=True).start()
+
+
 if __name__ == "__main__":
     aplicacao = create_app()
     if os.environ.get("CARTEIRA_BACKUP", "1") != "0":
         backup.iniciar_automatico(aplicacao.config["conn"].path)
     notificacoes.iniciar_automatico(aplicacao)
+    if os.environ.get("CARTEIRA_ATUALIZACAO_AUTOMATICA", "1") != "0":
+        cotacoes_automaticas(aplicacao)
     aplicacao.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
                   debug=os.environ.get("FLASK_DEBUG") == "1")

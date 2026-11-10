@@ -90,6 +90,10 @@
     {% if demo %}<div class="aviso">Modo demonstração: as cotações exibidas são <strong>simuladas</strong>.</div>{% endif %}
 <main>
   <section id="tab-carteira" class="tab visivel">
+    <div class="barra-cotacoes">
+      <span id="info-cotacoes" class="dica"></span>
+      <button type="button" class="secundario btn-pequeno" id="btn-atualizar-cotacoes">Atualizar cotações</button>
+    </div>
     <div class="cards" id="cards-resumo"></div>
 
     <div class="painel painel-destaque">

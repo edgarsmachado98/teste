@@ -103,6 +103,22 @@ def fundamentos_simulados(ticker):
     }
 
 
+def agora_brasilia():
+    """Hora de Brasília (UTC-3; o Brasil não tem horário de verão desde 2019), sem fuso no objeto."""
+    return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=3)).replace(tzinfo=None)
+
+
+def intervalo_pregao():
+    return max(int(os.environ.get("CARTEIRA_INTERVALO_COTACOES") or 15), 1)
+
+
+def em_pregao(momento=None):
+    """Dia útil entre 10h e 18h10 (horário de Brasília): pregão regular da B3 e o leilão de fechamento."""
+    from carteira.rendafixa import dia_util
+    momento = momento or agora_brasilia()
+    return dia_util(momento.date()) and dt.time(10, 0) <= momento.time() <= dt.time(18, 10)
+
+
 def modo_demo():
     return os.environ.get("CARTEIRA_DEMO", "").lower() in {"1", "true", "sim"}
 
@@ -128,9 +144,26 @@ class Mercado:
         self.fontes = list(fontes)
 
     def _cache_valido(self, ticker):
+        """Cotações em cache valem até o fim do dia; durante o pregão, por INTERVALO_PREGAO minutos."""
         row = self.conn.execute(
-            "SELECT atualizado FROM precos_meta WHERE ticker = ?", (ticker,)).fetchone()
-        return row is not None and row["atualizado"] == dt.date.today().isoformat()
+            "SELECT atualizado, atualizado_em FROM precos_meta WHERE ticker = ?", (ticker,)).fetchone()
+        if row is None or row["atualizado"] != dt.date.today().isoformat():
+            return False
+        if not em_pregao() or not row["atualizado_em"]:
+            # fora do pregão: vale se foi buscada depois do fechamento (ou antes da abertura de hoje)
+            return not row["atualizado_em"] or not em_pregao(dt.datetime.fromisoformat(row["atualizado_em"])) \
+                or agora_brasilia().hour < 10
+        idade = agora_brasilia() - dt.datetime.fromisoformat(row["atualizado_em"])
+        return idade < dt.timedelta(minutes=intervalo_pregao())
+
+    def atualizado_em(self, tickers):
+        """Data e hora da busca mais recente entre os tickers (para mostrar na tela)."""
+        if not tickers:
+            return None
+        marcas = "?" * len(tickers)
+        row = self.conn.execute(f"SELECT MAX(atualizado_em) AS m FROM precos_meta WHERE ticker IN ({','.join(marcas)})",
+                                list(tickers)).fetchone()
+        return row["m"] if row else None
 
     def _salvar(self, ticker, serie, fonte):
         self.conn.execute("DELETE FROM precos WHERE ticker = ?", (ticker,))
@@ -138,8 +171,8 @@ class Mercado:
             "INSERT INTO precos (ticker, data, fechamento, fonte) VALUES (?, ?, ?, ?)",
             [(ticker, d, c, fonte) for d, c in serie])
         self.conn.execute(
-            "INSERT OR REPLACE INTO precos_meta (ticker, atualizado, fonte) VALUES (?, ?, ?)",
-            (ticker, dt.date.today().isoformat(), fonte))
+            "INSERT OR REPLACE INTO precos_meta (ticker, atualizado, fonte, atualizado_em) VALUES (?, ?, ?, ?)",
+            (ticker, dt.date.today().isoformat(), fonte, agora_brasilia().isoformat(timespec="seconds")))
         self.conn.commit()
 
     def _do_cache(self, ticker):

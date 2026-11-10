@@ -256,9 +256,11 @@ class Brapi(Fonte):
             serie = _normalizar(
                 (_data_iso(p.get("date")), _primeiro(p, "adjustedClose", "close"))
                 for p in r.get("historicalDataPrice") or [])
-            if not serie and r.get("regularMarketPrice") is not None:
+            if r.get("regularMarketPrice") is not None:
+                # cotação do momento (durante o pregão o histórico diário ainda não tem o dia de hoje)
                 hoje = _data_iso(r.get("regularMarketTime") or dt.date.today().isoformat())
-                serie = [(hoje, float(r["regularMarketPrice"]))]
+                if not serie or serie[-1][0] <= hoje:
+                    serie = _normalizar(list(serie) + [(hoje, float(r["regularMarketPrice"]))])
             if serie:
                 return serie
             ultimo_erro = "resposta sem histórico"

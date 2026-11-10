@@ -250,7 +250,8 @@ COLUNAS_NOVAS = [
     ("ativos", "vencimento", "TEXT"),
     ("ativos", "isento_ir", "INTEGER NOT NULL DEFAULT 0"),  # LCI, LCA, CRI, CRA, debêntures incentivadas
     ("carteiras", "meta_renda_mensal", "REAL"),  # meta de renda passiva (R$/mês)
-    ("ativos", "setor", "TEXT"),                # setor econômico (preenchido pelas fontes ou manualmente)
+    ("ativos", "setor", "TEXT"),
+    ("precos_meta", "atualizado_em", "TEXT"),   # data e hora da última busca de cotações                # setor econômico (preenchido pelas fontes ou manualmente)
 ]
 
 

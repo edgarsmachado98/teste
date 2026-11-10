@@ -81,6 +81,9 @@ async function carregarCarteira() {
   ].map(([r, v]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div></div>`).join("");
 
   carteiraResumo = c;
+  const quando = c.cotacoes_em ? `${fmtData(c.cotacoes_em.slice(0, 10))} às ${c.cotacoes_em.slice(11, 16)}` : "—";
+  $("#info-cotacoes").innerHTML = `<span class="ponto-pregao ${c.em_pregao ? "aberto" : ""}"></span>` +
+    (c.em_pregao ? `Bolsa aberta · cotações de ${quando} (atualizam a cada ${c.intervalo_minutos} min)` : `Bolsa fechada · cotações de ${quando}`);
   coresClasse = Object.fromEntries(c.categorias.map((cat, i) => [cat.classe, PALETA[i % PALETA.length]]));
   renderCategorias();
   renderRanking();
@@ -625,6 +628,24 @@ function renderTabelaRentabilidade(ev) {
   }
   $("#tabela-rentabilidade").innerHTML = html;
 }
+
+$("#btn-atualizar-cotacoes").addEventListener("click", async ev => {
+  const b = ev.target;
+  b.disabled = true; b.textContent = "Atualizando…";
+  try {
+    const r = await api("/api/cotacoes/atualizar", { method: "POST" });
+    const falhas = Object.keys(r.falhas || {});
+    toast(`${r.atualizados} cotação(ões) atualizada(s)${falhas.length ? `; sem dados para ${falhas.join(", ")}` : ""}.`, falhas.length > 0);
+    recarregarAbaAtual();
+  } catch (e) { toast(e.message, true); }
+  b.disabled = false; b.textContent = "Atualizar cotações";
+});
+
+// Durante o pregão, a página aberta se atualiza sozinha (só o Patrimônio, e se estiver visível).
+setInterval(() => {
+  const aba = document.querySelector("nav button.ativo")?.dataset.tab;
+  if (document.visibilityState === "visible" && aba === "carteira" && carteiraResumo?.em_pregao) recarregarAbaAtual();
+}, 5 * 60 * 1000);
 
 // ---------------- Visão geral por categoria e classificação ----------------
 let carteiraResumo = null;

@@ -364,3 +364,7 @@ a.btn.secundario { background: var(--painel); color: var(--texto); border: 1px s
 .modo-importacao label.check { padding: 0; align-items: flex-start; color: var(--texto); font-size: .86rem; }
 .selo.aviso-reimport { background: rgba(214, 69, 61, .12); color: var(--neg); }
 .modo-importacao input[type=radio] { width: auto !important; margin-top: 3px; }
+.barra-cotacoes { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: -6px 0 10px; flex-wrap: wrap; }
+.barra-cotacoes .dica { margin: 0; }
+.ponto-pregao { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--suave); }
+.ponto-pregao.aberto { background: var(--pos); box-shadow: 0 0 0 3px rgba(15, 157, 99, .18); }
