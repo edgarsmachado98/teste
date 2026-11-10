@@ -1,6 +1,7 @@
 """Servidor web: gestão de aportes e análise de mercado."""
 import bisect
 import datetime as dt
+import hashlib
 from collections import defaultdict
 import io
 import os
@@ -32,7 +33,7 @@ from carteira import backup, notificacoes  # noqa: E402
 from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
-                                 marcar_duplicados)
+                                 marcar_duplicados, mesclar_posicoes)
 from carteira.market import Mercado, MarketDataError, modo_demo  # noqa: E402
 
 
@@ -802,16 +803,29 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         arquivos = [a for a in request.files.getlist("arquivo") if a and a.filename]
         if not arquivos:
             return erro("Selecione o arquivo do extrato.")
-        previa = {"arquivos": [], "aportes": [], "proventos": [], "ignorados": [], "posicao": []}
+        modo = request.form.get("modo") or "completa"  # completa | parcial (soma ao que já existe)
+        previa = {"arquivos": [], "aportes": [], "proventos": [], "ignorados": [], "posicao": [], "modo": modo}
+        por_arquivo, vistos = [], set()
         for arq in arquivos:
+            conteudo = arq.read()
+            digest = hashlib.sha256(conteudo).hexdigest()
+            if digest in vistos:
+                continue  # o mesmo arquivo selecionado duas vezes
+            vistos.add(digest)
             try:
-                r = analisar_extrato(arq.read(), arq.filename)
+                r = analisar_extrato(conteudo, arq.filename)
             except ErroImportacao as e:
                 return erro(f"{arq.filename}: {e}")
-            previa["arquivos"].append({"nome": arq.filename, "tipo": r["tipo_arquivo"]})
-            for chave in ("aportes", "proventos", "posicao"):
-                previa[chave].extend(r[chave])
+            anterior = conn.execute("SELECT importado_em FROM importacoes WHERE carteira_id = ? AND hash = ?",
+                                    (cid, digest)).fetchone()
+            previa["arquivos"].append({"nome": arq.filename, "tipo": r["tipo_arquivo"], "origem": r["origem"],
+                                       "hash": digest, "ja_importado": anterior["importado_em"] if anterior else None})
+            for chave in ("aportes", "proventos"):
+                previa[chave].extend({**x, "origem": r["origem"]} for x in r[chave])
+            if r["posicao"]:
+                por_arquivo.append((arq.filename, r["origem"], r["posicao"]))
             previa["ignorados"].extend({**g, "arquivo": arq.filename} for g in r["ignorados"])
+        previa["posicao"], previa["conflitos"] = mesclar_posicoes(por_arquivo)
         tipos = [a["tipo"] for a in previa["arquivos"]]
         if "movimentacao" in tipos and "eventos" in tipos:
             previa["aviso"] = ("Você enviou Movimentação e Eventos: os proventos podem aparecer duas vezes. "
@@ -842,7 +856,9 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                     p["preco_atual"], p["sem_quantidade"] = pu, False
                     estimadas.add(p["ticker"])
         if previa["posicao"]:
-            conc = conciliar_posicao(previa["posicao"], existentes, previa["aportes"], hoje())
+            # parcial: o relatório mostra só uma instituição; a posição dele soma ao que já existe
+            base = [] if modo == "parcial" else existentes
+            conc = conciliar_posicao(previa["posicao"], base, previa["aportes"], hoje())
             for item in conc["posicoes_iniciais"]:
                 item["quantidade_estimada"] = item["ticker"] in estimadas
             for item in conc["posicoes_iniciais"]:
@@ -866,6 +882,12 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             for a in previa["aportes"]:
                 a["classe"] = classes.get(a["ticker"], a["classe"])
         return jsonify(previa)
+
+    @app.get("/api/importacoes")
+    def api_importacoes():
+        f, ids = filtro_carteiras(carteiras_leitura())
+        return jsonify(db.rows(conn.execute(
+            f"SELECT nome, origem, tipo, importado_em FROM importacoes WHERE {f} ORDER BY importado_em DESC LIMIT 50", ids)))
 
     @app.post("/api/importar/b3/confirmar")
     def api_importar_b3_confirmar():
@@ -925,6 +947,12 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         except ValueError as e:
             conn.rollback()
             return erro(str(e))
+        agora = dt.datetime.now().isoformat(timespec="minutes")
+        for a in d.get("arquivos") or []:
+            if a.get("hash"):
+                conn.execute("""INSERT OR IGNORE INTO importacoes (carteira_id, hash, nome, origem, tipo, importado_em)
+                                VALUES (?, ?, ?, ?, ?, ?)""",
+                             (cid, a["hash"], (a.get("nome") or "")[:200], a.get("origem"), a.get("tipo"), agora))
         conn.commit()
         return jsonify({"ok": True, "aportes": len(validos), "proventos": len(novos_proventos),
                         "ativos": len(d.get("ativos") or [])}), 201

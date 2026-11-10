@@ -109,6 +109,16 @@ HTTPS do Tailscale).
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,
   gráfico mensal, resumo por ativo e extrato unificado com filtro.
 
+**Vários relatórios sem conflito**
+- Cada arquivo tem a origem identificada (B3, Banco do Brasil, XP, Itaú, Nubank, Inter, BTG...).
+- Ações, FIIs, ETFs, BDRs e Tesouro Direto: quando a posição da B3 é enviada, ela prevalece (reúne
+  todas as corretoras) e os relatórios das instituições não duplicam esses ativos; o preço médio
+  informado pelo banco é aproveitado quando a B3 não traz o custo.
+- Fundos, poupança, previdência etc. vêm do relatório da instituição; o mesmo ativo em instituições
+  diferentes (sem a B3) é somado; dois arquivos da mesma instituição contam uma vez.
+- Modo "só uma instituição": soma a posição do relatório ao que já está no sistema (importar uma
+  corretora de cada vez). Aviso quando um arquivo já foi importado e histórico de importações.
+
 **Importação de extratos e relatórios** (Excel .xlsx/.xls, CSV, PDF)
 - Além dos extratos da B3, aceita relatórios de posição de bancos e corretoras (ex.: extrato de
   investimentos do Banco do Brasil) em PDF ou Excel: o sistema procura uma tabela com ativo/produto e
@@ -274,5 +284,6 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | GET/POST/DELETE | `/api/acompanhamento[/<id>]` | lista de acompanhamento |
 | POST/DELETE | `/api/alertas-preco[/<id>]` | alertas de preço |
 | GET | `/api/alertas` | alertas atuais; `POST /api/alertas/teste-telegram` testa o Telegram |
+| GET | `/api/importacoes` | arquivos já importados |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

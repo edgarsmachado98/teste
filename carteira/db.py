@@ -119,6 +119,18 @@ CREATE TABLE IF NOT EXISTS alertas_enviados (
     enviado_em TEXT NOT NULL
 );
 
+-- Arquivos já importados em cada carteira (para avisar sobre reimportação).
+CREATE TABLE IF NOT EXISTS importacoes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id  INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    hash         TEXT NOT NULL,
+    nome         TEXT NOT NULL,
+    origem       TEXT,
+    tipo         TEXT,
+    importado_em TEXT NOT NULL,
+    UNIQUE (carteira_id, hash)
+);
+
 -- Cache de respostas das fontes (proventos por ação, fundamentos) em JSON.
 CREATE TABLE IF NOT EXISTS cache_dados (
     ticker     TEXT NOT NULL,

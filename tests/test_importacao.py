@@ -405,3 +405,85 @@ def test_api_relatorio_bb_estima_quantidades(tmp_path, monkeypatch):
     assert r.status_code == 201, r.get_json()
     ativos = {a["ticker"]: a for a in c.get("/api/ativos").get_json()}
     assert ativos["TESOURO IPCA+ 2035"]["indexador"] == "tesouro" and ativos["IVVB11"]["classe"] == "etf"
+
+
+def test_identificar_origem():
+    from carteira.importacao import identificar_origem
+    assert identificar_origem([], "negociacao") == "B3"
+    assert identificar_origem([("Pág", [["RELATÓRIO"], ["bb.com.br/investimentos"]])], "posicao") == "Banco do Brasil"
+    assert identificar_origem([("x", [["XP Investimentos CCTVM"]])], "posicao") == "XP"
+    assert identificar_origem([("Acoes", [POS_CAB])], "posicao") == "B3"
+    assert identificar_origem([("x", [["Histórico de posições"]])], "posicao") == "Outra instituição"  # "rico" não engana
+
+
+def item(t, classe, q, v, **kw):
+    return {"ticker": t, "classe": classe, "quantidade": q, "valor_atual": v, "preco_atual": v / q, "preco_medio": None, **kw}
+
+
+def test_mesclar_posicoes():
+    from carteira.importacao import mesclar_posicoes
+    b3 = ("posicao_b3.xlsx", "B3", [item("PETR4", "acao", 100, 3800), item("TESOURO IPCA+ 2035", "renda_fixa", 1, 2200, tesouro=True)])
+    bb = ("bb.pdf", "Banco do Brasil", [item("PETR4", "acao", 1, 3800, sem_quantidade=True),
+                                        item("TESOURO IPCA+ 2035", "renda_fixa", 1, 2200, tesouro=True),
+                                        item("POUPANCA OURO", "renda_fixa", 1, 500)])
+    xp = ("xp.pdf", "XP", [item("PETR4", "acao", 50, 1900), item("FUNDO XP", "outro", 1, 1000)])
+    pos, conf = mesclar_posicoes([b3, bb])
+    p = {i["ticker"]: i for i in pos}
+    assert p["PETR4"]["quantidade"] == 100 and p["PETR4"]["origem"] == "B3"
+    assert "POUPANCA OURO" in p and p["POUPANCA OURO"]["origem"] == "Banco do Brasil"
+    assert {c["ticker"] for c in conf} == {"PETR4", "TESOURO IPCA+ 2035"}
+
+    pos, conf = mesclar_posicoes([("bb2.pdf", "Banco do Brasil", [item("PETR4", "acao", 100, 3800)]), xp])
+    p = {i["ticker"]: i for i in pos}
+    assert p["PETR4"]["quantidade"] == 150 and p["PETR4"]["valor_atual"] == 5700  # instituições diferentes: soma
+    assert conf[0]["acao"] == "somado"
+
+    pos, conf = mesclar_posicoes([bb, ("bb_copia.pdf", "Banco do Brasil", bb[2])])
+    assert {i["ticker"]: i["quantidade"] for i in pos}["POUPANCA OURO"] == 1 and len(conf) == 3
+
+
+def xlsx_relatorio(instituicao, linhas):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append([f"Relatório de posição - {instituicao}"])
+    ws.append(["Ativo", "Quantidade", "Preço médio", "Saldo atual"])
+    for l in linhas:
+        ws.append(l)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_api_varios_relatorios_e_reimportacao(novo_app):
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=300)))
+    b3 = xlsx_posicao()  # ITUB4 50, VALE3 10, IVVB11 3, Tesouro IPCA+ 2035
+    bb = xlsx_relatorio("Banco do Brasil", [["ITUB4", 50, 30, 1750], ["FUNDO BB RF REFERENCIADO DI", "", "", 8000]])
+    enviar = lambda *arqs, modo="completa": c.post(  # noqa: E731
+        "/api/importar/b3/previa", content_type="multipart/form-data",
+        data={"arquivo": [(io.BytesIO(conteudo), nome) for nome, conteudo in arqs], "modo": modo}).get_json()
+    previa = enviar(("posicao_b3.xlsx", b3), ("bb.xlsx", bb))
+    assert [a["origem"] for a in previa["arquivos"]] == ["B3", "Banco do Brasil"]
+    pos = {p["ticker"]: p for p in previa["posicao"]}
+    assert pos["ITUB4"]["quantidade"] == 50 and pos["ITUB4"]["origem"] == "B3"  # não duplicou
+    assert pos["FUNDO BB RF REFERENCIADO DI"]["origem"] == "Banco do Brasil"
+    assert any(x["ticker"] == "ITUB4" for x in previa["conflitos"])
+    ini_itub = next(i for i in previa["conciliacao"]["posicoes_iniciais"] if i["ticker"] == "ITUB4")
+    assert ini_itub["preco"] == 30  # preço médio do BB aproveitado para a posição da B3
+
+    ini = previa["conciliacao"]["posicoes_iniciais"]
+    abertura = [{"data": i["data"], "ticker": i["ticker"], "tipo": "compra", "quantidade": i["quantidade"],
+                 "preco": i["preco"] or 10, "classe": i["classe"]} for i in ini]
+    r = c.post("/api/importar/b3/confirmar", json={"aportes": abertura, "arquivos": previa["arquivos"]})
+    assert r.status_code == 201
+    de_novo = enviar(("posicao_b3.xlsx", b3))
+    assert de_novo["arquivos"][0]["ja_importado"]  # aviso de arquivo já importado
+    assert de_novo["conciliacao"]["posicoes_iniciais"] == []  # e nada a acrescentar
+    assert c.get("/api/importacoes").get_json()[0]["origem"] in ("B3", "Banco do Brasil")
+
+    # outra corretora, importada depois: "parcial" soma ao que já existe
+    xp = xlsx_relatorio("XP Investimentos", [["ITUB4", 20, 31, 700]])
+    completa = enviar(("xp.xlsx", xp))
+    assert "ITUB4" in {d["ticker"] for d in completa["conciliacao"]["divergencias"]}  # completa: parece que sobra
+    parcial = enviar(("xp.xlsx", xp), modo="parcial")
+    assert parcial["arquivos"][0]["origem"] == "XP"
+    assert {i["ticker"]: i["quantidade"] for i in parcial["conciliacao"]["posicoes_iniciais"]} == {"ITUB4": 20}

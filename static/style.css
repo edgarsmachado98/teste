@@ -357,3 +357,10 @@ a.btn.secundario { background: var(--painel); color: var(--texto); border: 1px s
 .acoes-topo { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .tabela-compacta th, .tabela-compacta td { padding: 8px 7px; font-size: .84rem; }
 .tabela-compacta .form-alerta input { width: 64px !important; }
+
+.modo-importacao { flex-basis: 100%; border: 1px solid var(--borda); border-radius: 10px; padding: 8px 12px; margin: 0;
+  display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: .86rem; }
+.modo-importacao legend { font-size: .78rem; color: var(--suave); padding: 0 4px; }
+.modo-importacao label.check { padding: 0; align-items: flex-start; color: var(--texto); font-size: .86rem; }
+.selo.aviso-reimport { background: rgba(214, 69, 61, .12); color: var(--neg); }
+.modo-importacao input[type=radio] { width: auto !important; margin-top: 3px; }

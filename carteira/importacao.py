@@ -683,12 +683,115 @@ def _posicao(abas):
     return sorted(posicao, key=lambda x: x["ticker"]), ignorados
 
 
+# Instituições reconhecidas pelo texto do relatório (palavras inteiras, sem acento, minúsculas).
+INSTITUICOES = (
+    (r"area do investidor|b3 s\.?a|brasil, bolsa, balcao", "B3"),
+    (r"bb\.com\.br|banco do brasil|bb investimentos", "Banco do Brasil"),
+    (r"xp investimentos|\bxpi\b", "XP"),
+    (r"\bitau\b|itau unibanco|ion itau", "Itaú"),
+    (r"nubank|nu invest|\bnu financeira\b", "Nubank"),
+    (r"banco inter\b|inter dtvm|inter invest", "Inter"),
+    (r"\bbtg\b", "BTG Pactual"),
+    (r"\brico investimentos\b|\brico\.com", "Rico"),
+    (r"\bclear corretora\b|\bclear\.com", "Clear"),
+    (r"\bbradesco\b|\bagora investimentos\b", "Bradesco"),
+    (r"\bsantander\b", "Santander"),
+    (r"caixa economica|\bcaixa\.gov", "Caixa"),
+    (r"\bc6 bank\b|\bc6 ctvm\b", "C6"),
+    (r"\bavenue\b", "Avenue"),
+    (r"\bgenial investimentos\b", "Genial"),
+    (r"\btoro investimentos\b", "Toro"),
+    (r"\bwarren\b", "Warren"),
+    (r"\bmercado pago\b", "Mercado Pago"),
+    (r"\bpicpay\b", "PicPay"),
+    (r"\bsicredi\b", "Sicredi"),
+    (r"\bsicoob\b", "Sicoob"),
+)
+ABAS_B3 = {"acoes", "bdr", "etf", "fundo de investimento", "tesouro direto", "renda fixa", "opcoes"}
+
+
+def identificar_origem(abas, tipo, nome_arquivo=""):
+    """Instituição que gerou o relatório (B3, Banco do Brasil, XP...) ou 'Outra instituição'."""
+    if tipo in ("negociacao", "movimentacao", "eventos"):
+        return "B3"
+    if {_norm(a) for a, _ in abas} & ABAS_B3 and any(
+            "codigo de negociacao" in [_norm(c) for c in l] for _, ls in abas for l in ls[:5]):
+        return "B3"
+    texto = _norm(nome_arquivo) + " " + " ".join(
+        _norm(c) for _, ls in abas for l in ls[:60] for c in l if c not in (None, ""))
+    for padrao, nome in INSTITUICOES:
+        if re.search(padrao, texto):
+            return nome
+    return "Outra instituição"
+
+
+# Ativos custodiados na B3: quando há a posição da B3, ela prevalece sobre os relatórios de bancos.
+CLASSES_B3 = {"acao", "fii", "etf", "bdr"}
+
+
+def eh_ativo_b3(item):
+    return item["classe"] in CLASSES_B3 or item.get("tesouro") or item["ticker"].startswith("TESOURO")
+
+
+def mesclar_posicoes(por_arquivo):
+    """Junta as posições de vários relatórios sem contar o mesmo ativo duas vezes.
+
+    por_arquivo: [(nome do arquivo, origem, [itens de posição])]
+    Regras:
+      - Ações, FIIs, ETFs, BDRs e Tesouro Direto: se houver posição da B3 (que reúne todas as
+        corretoras), ela prevalece e os relatórios de bancos/corretoras não somam de novo.
+      - Mesmo ativo em relatórios de instituições diferentes (sem a B3): soma, pois cada uma guarda
+        uma parte.
+      - Mesmo ativo em dois arquivos da mesma instituição: conta uma vez só (arquivo repetido ou
+        relatórios de datas diferentes; vale o primeiro).
+    Retorna (posição, conflitos resolvidos).
+    """
+    tem_b3 = {it["ticker"] for _, origem, itens in por_arquivo if origem == "B3" for it in itens}
+    mesclado, conflitos, custo_de_outros = {}, [], {}
+    for nome, origem, itens in por_arquivo:
+        for it in itens:
+            t = it["ticker"]
+            it = {**it, "origem": origem, "arquivo": nome}
+            if origem != "B3" and t in tem_b3 and eh_ativo_b3(it):
+                conflitos.append({"ticker": t, "acao": "usada a posição da B3",
+                                  "detalhe": f"{origem} ({nome}) também informa este ativo: não somado."})
+                if it.get("preco_medio"):
+                    custo_de_outros.setdefault(t, (it["preco_medio"], it["quantidade"], origem))
+                continue
+            atual = mesclado.get(t)
+            if not atual:
+                mesclado[t] = it
+                continue
+            if atual["origem"] == origem:
+                conflitos.append({"ticker": t, "acao": "considerado uma vez",
+                                  "detalhe": f"aparece em dois arquivos de {origem} ({atual['arquivo']} e {nome})."})
+                continue
+            total_q = atual["quantidade"] + it["quantidade"]
+            total_v = (atual.get("valor_atual") or 0) + (it.get("valor_atual") or 0)
+            custo = ((atual.get("preco_medio") or 0) * atual["quantidade"] + (it.get("preco_medio") or 0) * it["quantidade"])
+            mesclado[t] = {**atual, "quantidade": total_q, "valor_atual": total_v,
+                           "preco_atual": total_v / total_q if total_q else atual.get("preco_atual"),
+                           "preco_medio": custo / total_q if total_q and atual.get("preco_medio") and it.get("preco_medio") else None,
+                           "sem_quantidade": atual.get("sem_quantidade") or it.get("sem_quantidade"),
+                           "origem": f"{atual['origem']} + {origem}"}
+            conflitos.append({"ticker": t, "acao": "somado",
+                              "detalhe": f"posições em instituições diferentes ({atual['origem']} e {origem})."})
+    # A B3 não informa o custo das ações: aproveita o preço médio do banco/corretora, se a quantidade bate.
+    for t, (pm, qtd, origem) in custo_de_outros.items():
+        b3 = mesclado.get(t)
+        if b3 and not b3.get("preco_medio") and abs(b3["quantidade"] - qtd) < 1e-6:
+            b3["preco_medio"] = pm
+            conflitos.append({"ticker": t, "acao": "preço médio aproveitado", "detalhe": f"custo informado por {origem}."})
+    return sorted(mesclado.values(), key=lambda x: x["ticker"]), conflitos
+
+
 def analisar_extrato(conteudo, nome_arquivo):
     abas = ler_abas(conteudo, nome_arquivo)
     if any(_cabecalho_posicao(linhas) for _, linhas in abas):
         posicao, ignorados = _posicao(abas)
+        origem = identificar_origem(abas, "posicao", nome_arquivo)
         return {"tipo_arquivo": "posicao", "aportes": [], "proventos": [], "ignorados": ignorados,
-                "posicao": posicao}
+                "posicao": posicao, "origem": origem}
     linhas = [linha for _, ls in abas for linha in ls]
     tipo, inicio, nomes = _localizar_cabecalho(linhas)
     if tipo == "negociacao":
@@ -698,7 +801,7 @@ def analisar_extrato(conteudo, nome_arquivo):
     else:
         aportes, proventos, ignorados = _movimentacao(linhas, inicio, nomes)
     return {"tipo_arquivo": tipo, "aportes": aportes, "proventos": proventos, "ignorados": ignorados,
-            "posicao": []}
+            "posicao": [], "origem": identificar_origem(abas, tipo, nome_arquivo)}
 
 
 def marcar_duplicados(previa, aportes_existentes, proventos_existentes):

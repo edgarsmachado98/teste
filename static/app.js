@@ -702,8 +702,20 @@ function renderRanking() {
 $("#criterio-ranking").addEventListener("change", renderRanking);
 
 // ---------------- Aportes ----------------
+async function carregarHistoricoImportacoes() {
+  try {
+    const lista = await api("/api/importacoes");
+    $("#historico-importacoes div").innerHTML = lista.length
+      ? `<table><tr><th>Arquivo</th><th>Origem</th><th>Tipo</th><th>Importado em</th></tr>${lista.map(i => `<tr><td>${esc(i.nome)}</td>
+          <td>${esc(i.origem || "")}</td><td>${esc(ROTULO_ARQ[i.tipo] || i.tipo || "")}</td>
+          <td>${fmtData(i.importado_em.slice(0, 10))} ${i.importado_em.slice(11)}</td></tr>`).join("")}</table>`
+      : `<p class="dica">Nenhuma importação registrada.</p>`;
+  } catch (e) { /* ignora */ }
+}
+
 async function carregarAportes() {
   carregarEventos();
+  carregarHistoricoImportacoes();
   try {
     const [aportes, ativos] = await Promise.all([api("/api/aportes"), api("/api/ativos")]);
     $("#lista-tickers").innerHTML = ativos.map(a => `<option value="${esc(a.ticker)}">${esc(a.nome)}</option>`).join("");
@@ -839,12 +851,17 @@ function renderPreviaB3() {
   const status = item => item.ja_registrado ? `<span class="selo">já lançado</span>` : "novo";
   const conc = p.conciliacao;
   const iniciais = conc ? conc.posicoes_iniciais : [];
+  const origemPos = Object.fromEntries((p.posicao || []).map(x => [x.ticker, x.origem]));
   const novos = p.aportes.filter(a => !a.ja_registrado).length + p.proventos.filter(x => !x.ja_registrado).length + iniciais.length;
   let html = `<div class="resumo-importacao">
-      ${p.arquivos.map(a => `<span class="selo">${esc(ROTULO_ARQ[a.tipo] || a.tipo)}: ${esc(a.nome)}</span>`).join(" ")}
+      ${p.arquivos.map(a => `<span class="selo">${esc(a.origem || "")} · ${esc(ROTULO_ARQ[a.tipo] || a.tipo)}: ${esc(a.nome)}</span>${
+        a.ja_importado ? ` <span class="selo aviso-reimport">já importado em ${fmtData(a.ja_importado.slice(0, 10))}</span>` : ""}`).join(" ")}
       <p class="dica">${p.posicao.length} ativo(s) na posição · ${p.aportes.length} operação(ões) · ${p.proventos.length} provento(s) ·
       ${p.ignorados.length} linha(s) ignorada(s) · <strong>${novos} item(ns) novo(s)</strong></p></div>`;
   if (p.aviso) html += `<div class="aviso" style="margin:10px 0">${esc(p.aviso)}</div>`;
+  if (p.modo === "parcial") html += `<p class="dica"><strong>Modo “só uma instituição”:</strong> a posição destes relatórios será <strong>somada</strong> ao que já está no sistema.</p>`;
+  if (p.conflitos && p.conflitos.length) html += `<details class="dica" style="margin:8px 0"><summary>${p.conflitos.length} ativo(s) em mais de um relatório: resolvido(s) sem duplicar</summary>
+    <ul style="margin:6px 0;padding-left:18px">${p.conflitos.map(c => `<li><strong>${esc(c.ticker)}</strong>: ${esc(c.acao)}: ${esc(c.detalhe)}</li>`).join("")}</ul></details>`;
 
   if (conc) {
     html += `<h3 style="margin-top:16px">Posição inicial</h3>
@@ -853,7 +870,7 @@ function renderPreviaB3() {
       (está no app da corretora ou na declaração de IR); os preços sugeridos pela cotação são apenas estimativas.</p>`;
     html += iniciais.length ? `<div class="rolagem"><table><tr><th></th><th>Ativo</th><th>Classe</th><th>Qtd. inicial</th><th>Qtd. no relatório</th><th>Preço médio (R$)</th><th>Origem do preço</th></tr>
       ${iniciais.map((x, i) => `<tr><td><input type="checkbox" data-lista="iniciais" data-idx="${i}" checked></td>
-        <td><strong>${esc(x.ticker)}</strong></td><td>${esc(CLASSES[x.classe] || x.classe)}</td>
+        <td><strong>${esc(x.ticker)}</strong><small class="var-sub">${esc(origemPos[x.ticker] || "")}</small></td><td>${esc(CLASSES[x.classe] || x.classe)}</td>
         <td><input type="number" step="any" min="0" class="qtd-inicial" data-idx="${i}" value="${x.quantidade}" style="width:100px">
           ${x.quantidade_estimada ? `<br><small class="neg">estimada pela cotação: confira</small>` : ""}</td><td>${num.format(x.qtd_b3)}</td>
         <td><input type="number" step="any" min="0" class="preco-inicial" data-idx="${i}" value="${x.preco == null ? "" : Number(x.preco.toFixed(4))}" placeholder="obrigatório" style="width:120px"></td>
@@ -900,6 +917,7 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
     aportes: [...iniciais, ...sel("aportes").map(i => previaB3.aportes[i])],
     proventos: sel("proventos").map(i => previaB3.proventos[i]),
     ativos: $("#aplicar-ajustes")?.checked ? previaB3.ajustes_ativos : [],
+    arquivos: previaB3.arquivos,
   };
   if (!body.aportes.length && !body.proventos.length && !body.ativos.length) return toast("Nenhum item selecionado.", true);
   try {
@@ -908,6 +926,7 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
     $("#resultado-importar-b3").innerHTML = "";
     $("#form-importar-b3").reset();
     carregarAportes();
+    carregarHistoricoImportacoes();
   } catch (e) { toast(e.message, true); }
 });
 

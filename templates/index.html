@@ -302,8 +302,16 @@
     <div class="painel requer-edicao">
       <h3>Importar extratos e relatórios de investimentos</h3>
       <form id="form-importar-b3" class="form-linha">
-        <label class="largo">Arquivos Excel (.xlsx, .xls), CSV ou PDF — pode selecionar vários <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.pdf,.htm,.html" multiple required></label>
-        <button type="submit">Ler arquivo</button>
+        <label class="largo">Arquivos Excel (.xlsx, .xls), CSV ou PDF — pode selecionar vários (B3, bancos, corretoras)
+          <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.pdf,.htm,.html" multiple required></label>
+        <button type="submit">Ler arquivos</button>
+        <fieldset class="modo-importacao">
+          <legend>Os relatórios de posição desta importação mostram:</legend>
+          <label class="check"><input type="radio" name="modo" value="completa" checked>
+            <span><strong>Toda a minha posição</strong> (B3 e/ou todas as instituições de uma vez)</span></label>
+          <label class="check"><input type="radio" name="modo" value="parcial">
+            <span><strong>Só uma instituição</strong>: somar ao que já está no sistema (ex.: importar a XP depois do BB)</span></label>
+        </fieldset>
       </form>
       <details class="dica">
         <summary>Como importar todo o patrimônio</summary>
@@ -317,6 +325,12 @@
           <li>Selecione <strong>todos os arquivos juntos</strong> (Ctrl+clique) e clique em “Ler arquivo”.
             O sistema calcula a <strong>posição inicial</strong> (o que você já tinha antes do período dos extratos) comparando a Posição com as operações.</li>
         </ol>
+        <p><strong>Vários relatórios juntos:</strong> o sistema identifica a origem de cada arquivo (B3, Banco do Brasil, XP,
+        Itaú, Nubank...). Ações, FIIs, ETFs, BDRs e Tesouro Direto aparecem na posição da B3 de todas as corretoras: quando ela
+        é enviada, vale a B3 e os relatórios das instituições não duplicam esses ativos. O que só existe no banco (fundos,
+        poupança, previdência) vem do relatório da instituição. Sem a B3, o mesmo ativo em instituições diferentes é somado.
+        CDB/LCA podem aparecer com nomes diferentes na B3 e no banco: confira se não ficaram duplicados.
+        <br><strong>Combinação recomendada:</strong> Posição + Negociação + Movimentação da B3 e o relatório de cada banco ou corretora.</p>
         <p><strong>Relatórios de bancos e corretoras</strong> (ex.: extrato de investimentos do Banco do Brasil, posição da corretora)
         também podem ser enviados em PDF ou Excel: o sistema procura uma tabela com o nome do ativo/produto e a quantidade ou o saldo.
         Fundos, previdência e aplicações informados só pelo saldo entram como 1 unidade, com o saldo como valor atual.
@@ -324,6 +338,7 @@
         Taxas de corretagem não constam nesses extratos. Desdobramentos e bonificações precisam ser ajustados manualmente.
       </details>
       <div id="resultado-importar-b3"></div>
+      <details class="dica" id="historico-importacoes" style="margin-top:10px"><summary>Importações anteriores</summary><div></div></details>
     </div>
     <div class="painel">
       <div class="cabecalho-painel">
