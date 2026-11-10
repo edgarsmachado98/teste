@@ -15,6 +15,8 @@ import threading
 import time
 
 PREFIXO = "carteira-"
+PREFIXO_IMPORTACAO = "antes-importacao-"
+MANTER_IMPORTACAO = 20
 
 
 def pasta_padrao(db_path):
@@ -41,8 +43,18 @@ def fazer_backup(db_path, pasta=None, manter=None, nome=None):
     return destino
 
 
-def listar(pasta):
-    arquivos = sorted(glob.glob(os.path.join(pasta, f"{PREFIXO}*.db")), reverse=True)
+def antes_de_importar(db_path, pasta=None):
+    """Cópia feita imediatamente antes de gravar uma importação (mantém as 20 mais recentes)."""
+    pasta = pasta or pasta_padrao(db_path)
+    nome = f"{PREFIXO_IMPORTACAO}{dt.datetime.now().strftime('%Y-%m-%d-%H%M%S')}.db"
+    destino = fazer_backup(db_path, pasta, manter=10 ** 6, nome=nome)
+    for antigo in listar(pasta, PREFIXO_IMPORTACAO)[MANTER_IMPORTACAO:]:
+        os.remove(antigo["caminho"])
+    return destino
+
+
+def listar(pasta, prefixo=PREFIXO):
+    arquivos = sorted(glob.glob(os.path.join(pasta, f"{prefixo}*.db")), reverse=True)
     return [{"nome": os.path.basename(a), "caminho": a, "tamanho": os.path.getsize(a),
              "modificado": dt.datetime.fromtimestamp(os.path.getmtime(a)).isoformat(timespec="minutes")}
             for a in arquivos]

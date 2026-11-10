@@ -107,7 +107,8 @@ def test_fluxo_api(novo_app):
 
     mov = enviar(c, xlsx(MOV_CAB, MOV), "mov.xlsx").get_json()
     r = c.post("/api/importar/b3/confirmar", json={"aportes": mov["aportes"], "proventos": mov["proventos"]})
-    assert r.get_json() == {"ok": True, "aportes": 1, "proventos": 3, "ativos": 0}
+    assert {k: r.get_json()[k] for k in ("ok", "aportes", "proventos", "ativos")} == \
+        {"ok": True, "aportes": 1, "proventos": 3, "ativos": 0}
     assert c.get("/api/proventos").get_json()["resumo"]["total"] == pytest.approx(78.1)
     classes = {a["ticker"]: a["classe"] for a in c.get("/api/ativos").get_json()}
     assert classes["TESOURO IPCA+ 2035"] == "renda_fixa"
@@ -498,3 +499,18 @@ def test_movimentacao_b3_em_pdf():
         ("2026-10-15", "MXRF11", "rendimento", 10.0)]
     motivos = [g["motivo"] for g in r["ignorados"]]
     assert sum("Negociação" in m for m in motivos) == 2 and any("Evento corporativo" in m for m in motivos)
+
+
+def test_copia_de_seguranca_antes_da_importacao(novo_app, tmp_path, monkeypatch):
+    import sqlite3
+    monkeypatch.setenv("CARTEIRA_BACKUP_DIR", str(tmp_path / "copias"))
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=300)))
+    c.post("/api/aportes", json={"data": "2025-01-02", "ticker": "PETR4", "quantidade": 10, "preco": 30})
+    r = c.post("/api/importar/b3/confirmar", json={"aportes": [
+        {"data": "2025-02-03", "ticker": "VALE3", "tipo": "compra", "quantidade": 5, "preco": 60}]})
+    assert r.status_code == 201
+    nome = r.get_json()["copia_seguranca"]
+    assert nome.startswith("antes-importacao-")
+    copia = sqlite3.connect(tmp_path / "copias" / nome)
+    assert [t for (t,) in copia.execute("SELECT ticker FROM aportes")] == ["PETR4"]  # estado de antes
+    assert any(x["nome"] == nome for x in c.get("/api/backup").get_json()["copias"])

@@ -922,7 +922,8 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
   if (!body.aportes.length && !body.proventos.length && !body.ativos.length) return toast("Nenhum item selecionado.", true);
   try {
     const r = await api("/api/importar/b3/confirmar", { method: "POST", body });
-    toast(`Importados: ${r.aportes} operação(ões), ${r.proventos} provento(s)${r.ativos ? `, ${r.ativos} ativo(s) atualizados` : ""}.`);
+    toast(`Importados: ${r.aportes} operação(ões), ${r.proventos} provento(s)${r.ativos ? `, ${r.ativos} ativo(s) atualizados` : ""}. ` +
+      `Cópia de segurança feita antes: ${r.copia_seguranca}.`);
     $("#resultado-importar-b3").innerHTML = "";
     $("#form-importar-b3").reset();
     carregarAportes();

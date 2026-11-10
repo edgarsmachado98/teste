@@ -264,8 +264,9 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     def api_backup():
         exigir_admin()
         pasta = backup.pasta_padrao(conn.path)
-        return jsonify({"pasta": pasta, "copias": [{k: c[k] for k in ("nome", "tamanho", "modificado")}
-                                                   for c in backup.listar(pasta)]})
+        copias = backup.listar(pasta) + backup.listar(pasta, backup.PREFIXO_IMPORTACAO)
+        copias.sort(key=lambda c: c["modificado"], reverse=True)
+        return jsonify({"pasta": pasta, "copias": [{k: c[k] for k in ("nome", "tamanho", "modificado")} for c in copias]})
 
     @app.post("/api/backup")
     def api_fazer_backup():
@@ -893,6 +894,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     def api_importar_b3_confirmar():
         cid = carteira_atual("editar")
         d = request.get_json(silent=True) or {}
+        try:  # cópia de segurança do banco antes de gravar a importação
+            copia = backup.antes_de_importar(conn.path)
+        except Exception as e:
+            return erro(f"Importação cancelada: não foi possível fazer a cópia de segurança antes ({e}).", 500)
         novos_aportes, novos_proventos = d.get("aportes") or [], d.get("proventos") or []
         validos = []
         for a in novos_aportes:
@@ -954,7 +959,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                                 VALUES (?, ?, ?, ?, ?, ?)""",
                              (cid, a["hash"], (a.get("nome") or "")[:200], a.get("origem"), a.get("tipo"), agora))
         conn.commit()
-        return jsonify({"ok": True, "aportes": len(validos), "proventos": len(novos_proventos),
+        return jsonify({"ok": True, "copia_seguranca": os.path.basename(copia),
+                        "aportes": len(validos), "proventos": len(novos_proventos),
                         "ativos": len(d.get("ativos") or [])}), 201
 
     # ---------- Eventos corporativos ----------
