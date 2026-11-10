@@ -38,8 +38,8 @@ def main():
         print(f"\n=== {nome}: {len(linhas)} linha(s) ===")
         achado = importacao._cabecalho_posicao(linhas)
         if achado:
-            i, idx, largura = achado
-            print(f"[cabeçalho de posição na linha {i + 1}, {largura} colunas: {idx}]")
+            i, idx, nomes = achado
+            print(f"[cabeçalho de posição na linha {i + 1}, {len(nomes)} colunas: {idx}]")
         for n, linha in enumerate(linhas[:45], start=1):
             celulas = [mascarar(c, mostrar) for c in linha]
             print(f"{n:>3} ({len(celulas)} col.) | " + " | ".join(celulas))

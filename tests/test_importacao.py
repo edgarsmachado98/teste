@@ -328,3 +328,80 @@ def test_realinhar_linhas_de_pdf_com_colunas_desencontradas():
     assert pos["CDB BANCO EXEMPLO 110% CDI"]["preco_atual"] == 16700
     assert pos["PETR4"]["quantidade"] == 100 and pos["PETR4"]["valor_atual"] == 3850
     assert pos["LCA AGRO"]["preco_atual"] == 5320
+
+
+CAB_BB = ["ATIVO", "", "SALDO BRUTO 30/10/2025", "ENTRADAS", "SAÍDAS", "SALDO BRUTO 31/10/2026",
+          "PROVISÃO IR/IOF", "SALDO LÍQUIDO 31/10/2026", "PARTICIPAÇÃO"]
+CAB_BB_EXTRA = CAB_BB[:6] + [""] + CAB_BB[6:]
+
+
+def abas_relatorio_bb():
+    """Estrutura do 'Portfólio de Investimentos' do Banco do Brasil (cabeçalho ATIVO mesclado)."""
+    return [
+        ("PDF página 3 tabela 1", [["CLASSE DO ATIVO", "", "SALDO BRUTO 30/10/2025", "ENTRADAS", "SAÍDAS",
+                                    "SALDO BRUTO 31/10/2026", "PROVISÃO IR/IOF", "SALDO LÍQUIDO 31/10/2026", "RENTABILIDADE (%)"],
+                                   ["", "RENDA FIXA PÓS CDI", "R$ 0,00", "R$ 500,00", "R$ 0,00", "R$ 520,00", "R$ 3,00", "R$ 517,00", "4,00%"]]),
+        ("PDF página 4 tabela 1", [CAB_BB,
+                                   ["", "POUPANCA OURO", "R$ 1,00", "R$ 0,00", "R$ 0,00", "R$ 1,05", "R$ 0,00", "R$ 1,05", "0,01%"],
+                                   ["", "LFT-010329", "R$ 0,00", "R$ 500,00", "R$ 0,00", "R$ 520,00", "R$ 3,00", "R$ 517,00", "1,00%"]]),
+        ("PDF página 4 tabela 2", [CAB_BB,
+                                   ["", "NTNB PRINC-150535", "R$ 2.000,00", "R$ 0,00", "R$ 0,00", "R$ 2.200,00", "R$ 30,00", "R$ 2.170,00", "5,00%"]]),
+        ("PDF página 4 tabela 3", [CAB_BB_EXTRA,
+                                   ["", "PETR4 - PETROBRAS", "R$ 3.000,00", "R$ 0,00", "R$ 0,00", "R$ 3.800,00", "", "R$ 0,00", "R$ 3.800,00", "8,00%"],
+                                   ["", "XPML11 - FII XP MALL", "R$ 0,00", "R$ 1.000,00", "R$ 50,00", "", "R$ 1.100,00", "R$ 0,00", "R$ 1.100,00", "2,00%"]]),
+        ("PDF página 5 tabela 2", [CAB_BB,
+                                   ["", "ACOES BOLSA AMERICAN", "R$ 3.000,00", "R$ 0,00", "R$ 0,00", "R$ 3.300,00", "R$ 60,00", "R$ 3.240,00", "7,00%"],
+                                   ["", "IVVB11 - ISHARE SP500", "R$ 0,00", "R$ 1.000,00", "R$ 0,00", "R$ 1.050,00", "R$ 0,00", "R$ 1.050,00", "2,00%"]]),
+        ("PDF página 5 tabela 3", [["PRAZO EM DIAS", "", "TOTAL BRUTO", "BRUTO BLOQUEADO", "BRUTO DISPONÍVEL",
+                                    "LÍQUIDO DISPONÍVEL", "PARTICIPAÇÃO (%)"],
+                                   ["", "De 0 a 0", "R$ 12.000,00", "R$ 0,00", "R$ 12.000,00", "R$ 11.900,00", "100,00%"]]),
+    ]
+
+
+def test_relatorio_banco_do_brasil():
+    from carteira.importacao import _posicao
+    posicao, ignorados = _posicao(abas_relatorio_bb())
+    pos = {p["ticker"]: p for p in posicao}
+    assert set(pos) == {"POUPANCA OURO", "TESOURO SELIC 2029", "TESOURO IPCA+ 2035", "PETR4", "XPML11",
+                        "ACOES BOLSA AMERICAN", "IVVB11"}
+    assert ignorados == []
+    assert pos["TESOURO SELIC 2029"]["vencimento"] == "2029-03-01" and pos["TESOURO SELIC 2029"]["tesouro"]
+    assert pos["TESOURO IPCA+ 2035"]["valor_atual"] == 2200 and pos["TESOURO IPCA+ 2035"]["classe"] == "renda_fixa"
+    assert pos["PETR4"]["classe"] == "acao" and pos["PETR4"]["valor_atual"] == 3800 and pos["PETR4"]["nome"] == "PETROBRAS"
+    assert pos["XPML11"]["valor_atual"] == 1100  # saldo na coluna vizinha sem cabeçalho
+    assert pos["ACOES BOLSA AMERICAN"]["classe"] == "exterior"
+    assert pos["IVVB11"]["classe"] == "etf"
+
+
+def test_api_relatorio_bb_estima_quantidades(tmp_path, monkeypatch):
+    import datetime as dt
+    from app import create_app
+    from carteira import importacao as imp
+
+    hoje_iso, hoje = dt.date.today().isoformat(), dt.date.today().strftime("%d/%m/%Y")
+    csv_t = ("Tipo Titulo;Data Vencimento;Data Base;Taxa Compra Manha;Taxa Venda Manha;PU Compra Manha;PU Venda Manha;PU Base Manha\n"
+             f"Tesouro IPCA+;15/05/2035;{hoje};7;7;2250,00;2200,00;2199,00\n"
+             f"Tesouro Selic;01/03/2029;{hoje};0;0;17400,00;520,00;519,00\n")
+    cotacoes = {"PETR4": 38.0, "XPML11": 110.0, "IVVB11": 350.0}
+    app = create_app(str(tmp_path / "t.db"), lambda t: [("2026-01-02", 1.0), (hoje_iso, cotacoes[t])],
+                     secret_key="x", fonte_bcb=lambda *a: [], fonte_tesouro=lambda: csv_t)
+    c = cliente_logado(app)
+    monkeypatch.setattr(imp, "ler_abas", lambda conteudo, nome: abas_relatorio_bb())
+    previa = c.post("/api/importar/b3/previa", content_type="multipart/form-data",
+                    data={"arquivo": [(io.BytesIO(b"%PDF"), "relatorio_bb.pdf")]}).get_json()
+    ini = {i["ticker"]: i for i in previa["conciliacao"]["posicoes_iniciais"]}
+    assert ini["PETR4"]["quantidade"] == 100 and ini["PETR4"]["quantidade_estimada"]  # 3.800 / 38
+    assert ini["XPML11"]["quantidade"] == 10
+    assert ini["TESOURO IPCA+ 2035"]["quantidade"] == 1 and ini["TESOURO IPCA+ 2035"]["preco"] == 2200
+    assert ini["POUPANCA OURO"]["preco"] == pytest.approx(1.05)
+    assert ini["ACOES BOLSA AMERICAN"]["classe"] == "exterior"
+    ajustes = {a["ticker"]: a for a in previa["ajustes_ativos"]}
+    assert ajustes["TESOURO IPCA+ 2035"]["indexador"] == "tesouro"
+    assert ajustes["TESOURO SELIC 2029"]["vencimento"] == "2029-03-01"
+
+    abertura = [{"data": i["data"], "ticker": t, "tipo": "compra", "quantidade": i["quantidade"],
+                 "preco": i["preco"], "classe": i["classe"]} for t, i in ini.items()]
+    r = c.post("/api/importar/b3/confirmar", json={"aportes": abertura, "ativos": previa["ajustes_ativos"]})
+    assert r.status_code == 201, r.get_json()
+    ativos = {a["ticker"]: a for a in c.get("/api/ativos").get_json()}
+    assert ativos["TESOURO IPCA+ 2035"]["indexador"] == "tesouro" and ativos["IVVB11"]["classe"] == "etf"

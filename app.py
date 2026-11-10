@@ -829,6 +829,18 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                     p["quantidade"] = float(round(p["valor_atual"] / cotacao))
                     p["preco_atual"], p["sem_quantidade"] = cotacao, False
                     estimadas.add(p["ticker"])
+        # Tesouro informado só pelo saldo: quantidade de títulos pelo preço oficial do dia
+        tesouros = {p["ticker"]: (p["ticker"], p.get("vencimento")) for p in previa["posicao"]
+                    if p.get("tesouro") and p.get("sem_quantidade") and p.get("valor_atual")}
+        if tesouros:
+            pus, _, _ = tesouro.precos(tesouros, demo=modo_demo())
+            for p in previa["posicao"]:
+                serie_pu = pus.get(p["ticker"])
+                if serie_pu:
+                    pu = serie_pu[-1][1]
+                    p["quantidade"] = round(p["valor_atual"] / pu, 2)
+                    p["preco_atual"], p["sem_quantidade"] = pu, False
+                    estimadas.add(p["ticker"])
         if previa["posicao"]:
             conc = conciliar_posicao(previa["posicao"], existentes, previa["aportes"], hoje())
             for item in conc["posicoes_iniciais"]:
@@ -843,6 +855,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             previa["ajustes_ativos"] = [
                 {"ticker": p["ticker"], "classe": p["classe"], "nome": p["nome"],
                  "classe_atual": ativos.get(p["ticker"], {}).get("classe"),
+                 "indexador": "tesouro" if p.get("tesouro") and not p.get("sem_quantidade") else None,
+                 "vencimento": p.get("vencimento"),
                  # renda fixa, Tesouro, fundos e previdência não têm cotação online: usa o valor do relatório
                  "preco_manual": round(p["preco_atual"], 6)
                  if p["classe"] not in portfolio.CLASSES_INTEIRAS and p["preco_atual"] else None}
@@ -884,12 +898,17 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                 continue
             manual = aj.get("preco_manual")
             manual = float(manual) if manual not in (None, "") else None
+            indexador = aj.get("indexador") if aj.get("indexador") in rendafixa.INDEXADORES else None
+            vencimento = aj.get("vencimento") or None
             conn.execute(
-                """INSERT INTO ativos (carteira_id, ticker, nome, classe, preco_manual) VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO ativos (carteira_id, ticker, nome, classe, preco_manual, indexador, vencimento)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(carteira_id, ticker) DO UPDATE SET classe = excluded.classe,
                    nome = CASE WHEN excluded.nome != '' THEN excluded.nome ELSE ativos.nome END,
-                   preco_manual = COALESCE(excluded.preco_manual, ativos.preco_manual)""",
-                (cid, ticker, (aj.get("nome") or "")[:80], classe, manual))
+                   preco_manual = COALESCE(excluded.preco_manual, ativos.preco_manual),
+                   indexador = COALESCE(excluded.indexador, ativos.indexador),
+                   vencimento = COALESCE(excluded.vencimento, ativos.vencimento)""",
+                (cid, ticker, (aj.get("nome") or "")[:80], classe, manual, indexador, vencimento))
         existentes = {r["ticker"] for r in listar_ativos(cid)}
         for a in validos:
             if a["ticker"] not in existentes:

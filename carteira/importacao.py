@@ -499,13 +499,19 @@ def _cabecalho_posicao(linhas):
         if ("codigo" in idx or "produto" in idx) and \
                 (("quantidade" in idx and {"preco", "valor", "aplicado", "preco_medio"} & set(idx))
                  or ("valor" in idx and "data" not in nomes and "historico" not in nomes)):
-            return i, idx, len(nomes)
+            return i, idx, nomes
     return None
 
 
 def classe_por_nome(nome):
     """Classe de produtos fora da bolsa pelo nome (relatórios de bancos)."""
     n = _norm(nome)
+    if any(k in n for k in ("bolsa americ", "global", "exterior", "internac", "s&p", "nasdaq", "eua", "usa")):
+        return "exterior"
+    if re.search(r"\b(acoes|acao|ibovespa|dividendos|small caps?)\b", n):
+        return "outro"  # fundo de ações
+    if "poupan" in n:
+        return "renda_fixa"
     if any(k in n for k in ("previd", "pgbl", "vgbl", "brasilprev")):
         return "outro"
     if any(re.search(rf"\b{k}\b", n) for k in ("fundo", "fic", "fim", "fia", "fi", "multimercado")):
@@ -513,6 +519,58 @@ def classe_por_nome(nome):
     if any(k in n for k in ("cripto", "bitcoin")):
         return "cripto"
     return "renda_fixa"  # CDB, LCA, LCI, Tesouro, debêntures, CRI, CRA, poupança...
+
+
+def _celula(linha, i, nomes_cab):
+    """Valor da coluna i; se vazio, tenta as colunas vizinhas sem cabeçalho (células mescladas no PDF)."""
+    v = linha[i] if i < len(linha) else None
+    if v in (None, "") or not str(v).strip():
+        for j in (i + 1, i - 1):
+            if 0 <= j < len(linha) and 0 <= j < len(nomes_cab) and not nomes_cab[j] and \
+                    linha[j] not in (None, "") and str(linha[j]).strip():
+                return linha[j]
+    return v
+
+
+def _nome_na_linha(linha, inicio):
+    """Primeiro texto (não numérico) a partir da coluna do nome: cabeçalho "ATIVO" mesclado sobre 2 colunas."""
+    for c in linha[inicio:]:
+        t = str(c or "").strip()
+        if t and _numero(t) is None and t not in ("R$", "-"):
+            return t
+    return None
+
+
+# Nomes técnicos dos títulos públicos usados por bancos (ex.: relatório do Banco do Brasil).
+TITULOS_PUBLICOS = (
+    (r"^NTN-?B\s*PRINC", "TESOURO IPCA+"),
+    (r"^NTN-?B\b", "TESOURO IPCA+ COM JUROS SEMESTRAIS"),
+    (r"^NTN-?F\b", "TESOURO PREFIXADO COM JUROS SEMESTRAIS"),
+    (r"^LTN\b", "TESOURO PREFIXADO"),
+    (r"^LFT\b", "TESOURO SELIC"),
+)
+
+
+def titulo_tesouro_bb(nome):
+    """'LFT-010329' -> ('TESOURO SELIC 2029', 'TESOURO SELIC 2029', '2029-03-01'); 'NTNB PRINC-150535' -> IPCA+ 2035."""
+    n = re.sub(r"\s+", " ", str(nome or "")).strip().upper()
+    for padrao, tipo in TITULOS_PUBLICOS:
+        if re.match(padrao, n):
+            m = re.search(r"(\d{6})\s*$", n)
+            if not m:
+                return None
+            d = m.group(1)
+            for formato in ("%d%m%y", "%y%m%d", "%Y%m"):
+                try:
+                    data = dt.datetime.strptime(d, formato).date()
+                    break
+                except ValueError:
+                    continue
+            else:
+                return None
+            ticker = f"{tipo} {data.year}"
+            return ticker, ticker, data.isoformat()
+    return None
 
 
 def _realinhar(linha, largura, col_nome, sempre=False):
@@ -552,12 +610,19 @@ def _posicao(abas):
         achado = _cabecalho_posicao(linhas)
         if not achado:
             continue
-        inicio, idx, largura = achado
+        inicio, idx, nomes_cab = achado
+        largura = len(nomes_cab)
         col_nome = idx.get("codigo", idx.get("produto", 0))
         for n, linha in enumerate(linhas[inicio + 1:], start=inicio + 2):
             # PDF lido como texto: colunas montadas pela posição das palavras, sempre reorganiza
             linha = _realinhar(linha, largura, col_nome, sempre="texto" in aba)
-            cel = {k: (linha[i] if i < len(linha) else None) for k, i in idx.items()}
+            cel = {k: _celula(linha, i, nomes_cab) for k, i in idx.items()}
+            for chave in ("codigo", "produto"):
+                if chave in idx and not str(cel.get(chave) or "").strip():
+                    cel[chave] = _nome_na_linha(linha, idx[chave])
+            titulo = titulo_tesouro_bb(cel.get("codigo") or cel.get("produto"))
+            if titulo:  # LFT-010329 -> TESOURO SELIC 2029
+                cel["codigo"], cel["produto"], cel["vencimento"] = titulo
             produto = str(cel.get("produto") or "").strip()
             nome_norm = _norm(produto or cel.get("codigo"))
             if not any(c not in (None, "") for c in linha) or nome_norm.startswith(("total", "subtotal")) \
@@ -597,10 +662,12 @@ def _posicao(abas):
                 classe = classe_por_nome(produto or codigo)
             if classe == "fii" and ticker in ETFS_CONHECIDOS:
                 classe = "etf"
+            texto_nome = produto or str(cel.get("codigo") or "")
             it = itens.setdefault(ticker, {"ticker": ticker, "classe": classe, "quantidade": 0.0,
-                                           "sem_quantidade": sem_quantidade,
+                                           "sem_quantidade": sem_quantidade, "tesouro": origem == "tesouro",
+                                           "vencimento": _data(cel.get("vencimento")),
                                            "valor_atual": 0.0, "custo_total": 0.0, "tem_custo": False,
-                                           "nome": produto.split(" - ", 1)[-1][:80] if " - " in produto else ""})
+                                           "nome": texto_nome.split(" - ", 1)[-1].strip()[:80] if " - " in texto_nome else ""})
             it["quantidade"] += qtd
             it["valor_atual"] += valor if valor is not None else (preco or 0) * qtd
             if aplicado is not None:
@@ -698,6 +765,8 @@ def conciliar_posicao(posicao, aportes_existentes, aportes_novos, hoje):
             if preco is None and p and p.get("sem_quantidade"):
                 # aplicação informada só pelo saldo: sem custo no relatório, usa o saldo atual
                 preco, origem = p.get("preco_atual"), "saldo atual (custo não informado)"
+            elif preco is None and p and p.get("classe") not in ("acao", "fii", "etf", "bdr") and p.get("preco_atual"):
+                preco, origem = p["preco_atual"], "valor atual (custo não informado)"
             iniciais.append({"ticker": ticker, "classe": p["classe"] if p else classe_provavel(ticker),
                              "quantidade": diferenca, "data": data_abertura, "preco": preco,
                              "preco_origem": origem, "qtd_b3": qtd_b3})
