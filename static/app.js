@@ -876,7 +876,8 @@ function renderPreviaB3() {
     ${p.proventos.map((x, i) => `<tr class="${x.ja_registrado ? "desativado" : ""}"><td>${marca("proventos", i, x)}</td><td>${fmtData(x.data_pagamento)}</td>
       <td><strong>${esc(x.ticker)}</strong></td><td>${esc(nomeTipo(x.tipo))}</td><td>${x.quantidade == null ? "—" : num.format(x.quantidade)}</td>
       <td>${x.valor_unitario == null ? "—" : brl.format(x.valor_unitario)}</td><td class="pos">${brl.format(x.valor_total)}</td><td>${status(x)}</td></tr>`).join("")}</table></div>`;
-  if (p.ignorados.length) html += `<details class="dica" style="margin-top:12px"><summary>${p.ignorados.length} linha(s) não importada(s)</summary>
+  const nadaLido = !p.posicao.length && !p.aportes.length && !p.proventos.length;
+  if (p.ignorados.length) html += `<details class="dica" style="margin-top:12px" ${nadaLido ? "open" : ""}><summary>${p.ignorados.length} linha(s) não importada(s)${nadaLido ? ": veja abaixo o que foi lido de cada linha" : ""}</summary>
     <div class="rolagem"><table><tr><th>Arquivo</th><th>Linha</th><th>Descrição</th><th>Motivo</th></tr>${p.ignorados.map(g => `<tr><td>${esc(g.arquivo || "")}</td><td>${g.linha}</td><td>${esc(g.descricao)}</td><td>${esc(g.motivo)}</td></tr>`).join("")}</table></div></details>`;
   if (novos || (conc && p.ajustes_ativos.length)) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar selecionados</button>
     <span class="dica">Confira as classes depois em “Ativos e metas” (tickers terminados em 11 podem ser FII, ETF ou unit).</span></div>`;

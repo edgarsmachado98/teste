@@ -315,3 +315,16 @@ def test_relatorio_com_coluna_de_quantidade_vazia():
     assert pos["FUNDO EXEMPLO FIM"]["classe"] == "outro"
     assert pos["BBAS3"]["quantidade"] == 100 and pos["BBAS3"]["preco_atual"] == 28
     assert len(r["ignorados"]) == 1 and "saldo" in r["ignorados"][0]["motivo"]
+
+
+def test_realinhar_linhas_de_pdf_com_colunas_desencontradas():
+    from carteira.importacao import _posicao
+    cab = ["ATIVO", "QUANTIDADE", "SALDO BRUTO 30/09/2025", "ENTRADAS", "SALDO BRUTO 30/09/2026", "RENTABILIDADE (%)"]
+    linhas = [cab,
+              ["CDB BANCO", "EXEMPLO 110% CDI", "15.000,00", "0,00", "16.700,00", "11,33"],   # nome partido, sem quantidade
+              ["PETR4", "100", "3.000,00", "R$", "0,00", "3.850,00", "28,33"],               # "R$" solto
+              ["LCA AGRO", "5.000,00", "5.320,00", "6,40"]]                                 # colunas vazias sumiram
+    pos = {p["ticker"]: p for p in _posicao([("PDF página 1 texto", linhas)])[0]}
+    assert pos["CDB BANCO EXEMPLO 110% CDI"]["preco_atual"] == 16700
+    assert pos["PETR4"]["quantidade"] == 100 and pos["PETR4"]["valor_atual"] == 3850
+    assert pos["LCA AGRO"]["preco_atual"] == 5320

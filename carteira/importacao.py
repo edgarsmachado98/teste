@@ -488,6 +488,7 @@ LINHAS_DE_GRUPO = {
 
 
 def _cabecalho_posicao(linhas):
+    """Linha do cabeçalho de uma tabela de posição: (índice, colunas, largura) ou None."""
     for i, linha in enumerate(linhas[:80]):
         nomes = [_norm_cab(c) for c in linha]
         if "data do negocio" in nomes or "entrada/saida" in nomes or any("evento" in n for n in nomes):
@@ -498,7 +499,7 @@ def _cabecalho_posicao(linhas):
         if ("codigo" in idx or "produto" in idx) and \
                 (("quantidade" in idx and {"preco", "valor", "aplicado", "preco_medio"} & set(idx))
                  or ("valor" in idx and "data" not in nomes and "historico" not in nomes)):
-            return i, idx
+            return i, idx, len(nomes)
     return None
 
 
@@ -512,6 +513,29 @@ def classe_por_nome(nome):
     if any(k in n for k in ("cripto", "bitcoin")):
         return "cripto"
     return "renda_fixa"  # CDB, LCA, LCI, Tesouro, debêntures, CRI, CRA, poupança...
+
+
+def _realinhar(linha, largura, col_nome, sempre=False):
+    """Ajusta linhas de PDF com número de colunas diferente do cabeçalho.
+
+    Em PDFs sem tabela desenhada, um nome com espaços largos vira várias células e colunas vazias
+    somem. Os textos à esquerda formam o nome do ativo e os números são encaixados nas colunas
+    do cabeçalho da direita para a esquerda (onde ficam os valores nesses relatórios).
+    """
+    if len(linha) == largura and not sempre:
+        return linha
+    celulas = [str(c).strip() for c in linha if c not in (None, "") and str(c).strip() not in ("R$", "%", "-")]
+    nome = []
+    while celulas and _numero(celulas[0]) is None:
+        nome.append(celulas.pop(0))
+    if not nome or not celulas:
+        return linha
+    nova = [None] * largura
+    nova[col_nome] = " ".join(nome)
+    colunas = [i for i in range(largura) if i > col_nome]
+    for i, valor in zip(colunas[-len(celulas):] if len(celulas) <= len(colunas) else colunas, celulas[-len(colunas):]):
+        nova[i] = valor
+    return nova
 
 
 def _classe_da_aba(aba, ticker, origem):
@@ -528,8 +552,11 @@ def _posicao(abas):
         achado = _cabecalho_posicao(linhas)
         if not achado:
             continue
-        inicio, idx = achado
+        inicio, idx, largura = achado
+        col_nome = idx.get("codigo", idx.get("produto", 0))
         for n, linha in enumerate(linhas[inicio + 1:], start=inicio + 2):
+            # PDF lido como texto: colunas montadas pela posição das palavras, sempre reorganiza
+            linha = _realinhar(linha, largura, col_nome, sempre="texto" in aba)
             cel = {k: (linha[i] if i < len(linha) else None) for k, i in idx.items()}
             produto = str(cel.get("produto") or "").strip()
             nome_norm = _norm(produto or cel.get("codigo"))
