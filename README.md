@@ -84,6 +84,26 @@ apontar para o OneDrive/Google Drive); o administrador pode fazer ou baixar uma 
 - É uma estimativa: confira com notas de corretagem, informes de rendimentos e um contador; mudanças
   recentes na legislação (ex.: tributação de dividendos a partir de 2026) não estão no cálculo.
 
+**Metas por categoria e diversificação** (página *Diversificação*)
+- Metas por categoria (ex.: 40% ações, 25% renda fixa); dentro da categoria valem as metas dos ativos.
+  O *Próximo aporte* e o painel passam a seguir esse rebalanceamento em dois níveis.
+- Exposição por setor (das fontes ou informado no cadastro), por indexador (pós, IPCA+, pré, renda
+  variável) e por prazo de resgate; alerta de concentração por ativo e por setor.
+
+**Lista de acompanhamento** (página *Acompanhamento*)
+- Ativos de interesse com cotação, DY 12m, P/L, P/VP, preço-teto (Bazin, 6%) e preço justo (Graham),
+  com alertas de preço (acima/abaixo).
+
+**Alertas**
+- Sino no topo: preço-alvo, queda forte no dia, concentração, desvio da meta, data com nos próximos
+  7 dias, pagamentos, vencimentos de renda fixa e DARF a vencer.
+- Opcional: envio pelo **Telegram** (`TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`), verificado a cada hora,
+  cada alerta uma única vez.
+
+**Aplicativo instalável (PWA)**: no celular ou no computador, “Instalar app”/“Adicionar à tela inicial”.
+Os navegadores exigem HTTPS para instalar, exceto em `localhost` (na rede de casa, use por exemplo o
+HTTPS do Tailscale).
+
 **Fluxo financeiro**
 - Visão geral de **compras, vendas e proventos recebidos** por período (12 meses, ano, ano anterior,
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,
@@ -204,6 +224,7 @@ carteira/indices.py    # CDI, Selic, IPCA (Banco Central) e Ibovespa
 carteira/evolucao.py   # evolução do patrimônio e rentabilidade (método de cotas)
 carteira/backup.py     # cópia de segurança diária
 carteira/impostos.py   # apuração mensal de IR e relatório da declaração
+carteira/notificacoes.py # alertas por Telegram
 carteira/importacao.py # leitura de extratos/relatórios (xlsx, xls, csv, html, pdf)
 carteira/portfolio.py  # posições, preço médio, resumo e sugestão de aporte
 carteira/analysis.py   # indicadores técnicos e estatísticas de risco/retorno
@@ -248,5 +269,10 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | GET/POST/DELETE | `/api/eventos[/<id>]` | eventos corporativos; `/api/eventos/sugeridos` lista os detectados |
 | PUT | `/api/carteiras/<id>/meta-renda` | meta de renda passiva mensal |
 | GET | `/api/impostos?ano=` | apuração mensal, DARFs e dados da declaração (por carteira) |
+| GET/PUT | `/api/metas-classe` | metas por categoria |
+| GET | `/api/diversificacao` | exposição por setor, indexador, prazo e concentração |
+| GET/POST/DELETE | `/api/acompanhamento[/<id>]` | lista de acompanhamento |
+| POST/DELETE | `/api/alertas-preco[/<id>]` | alertas de preço |
+| GET | `/api/alertas` | alertas atuais; `POST /api/alertas/teste-telegram` testa o Telegram |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

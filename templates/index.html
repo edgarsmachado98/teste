@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Carteira de Aportes</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f1a33">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Carteira">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 </head>
@@ -30,9 +36,11 @@
       <button data-tab="proventos" data-titulo="Proventos" data-sub="Dividendos, JCP e rendimentos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.5-.9-1.6-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2s1.2 1.7 2.8 2 2.8.9 2.8 2.1-1.2 2.1-2.8 2.1c-1.3 0-2.4-.6-2.9-1.5M12 6v1.8m0 8.4V18"/></svg><span>Proventos</span></button>
       <p class="grupo-nav">Planejamento</p>
       <button data-tab="ativos" data-titulo="Ativos e metas" data-sub="Cadastro dos ativos e alocação desejada"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg><span>Ativos e metas</span></button>
+      <button data-tab="diversificacao" data-titulo="Diversificação" data-sub="Metas por categoria, exposição por setor, indexador e prazo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9l7.8 4.5"/><circle cx="12" cy="12" r="9"/></svg><span>Diversificação</span></button>
       <button data-tab="sugestao" data-titulo="Próximo aporte" data-sub="Quanto comprar de cada ativo para seguir a meta"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7.5h7M8.5 12h1m2.5 0h1m2.5 0h0M8.5 16h1m2.5 0h1m2.5 0h0"/></svg><span>Próximo aporte</span></button>
       <button data-tab="impostos" data-titulo="Imposto de Renda" data-sub="Apuração mensal das vendas, DARF e dados para a declaração anual"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span>Imposto de Renda</span></button>
       <p class="grupo-nav">Mercado</p>
+      <button data-tab="acompanhamento" data-titulo="Acompanhamento" data-sub="Ativos de interesse, preço-teto, preço justo e alertas de preço"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Acompanhamento</span></button>
       <button data-tab="mercado" data-titulo="Análise de ativos" data-sub="Indicadores técnicos, fundamentos e sinais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Análise de ativos</span></button>
       <button data-tab="comparar" data-titulo="Comparar ativos" data-sub="Desempenho e correlação entre ativos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-7"/></svg><span>Comparar ativos</span></button>
       <p class="grupo-nav">Configurações</p>
@@ -56,11 +64,23 @@
         <h1 id="titulo-pagina">Patrimônio</h1>
         <p id="sub-pagina">Resumo, alocação e evolução da carteira</p>
       </div>
+      <div class="acoes-topo">
+      <button type="button" class="btn-icone btn-instalar oculto" id="btn-instalar" title="Instalar como aplicativo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M5 21h14"/></svg></button>
+      <div class="sino-wrap">
+        <button type="button" class="btn-icone btn-sino" id="btn-sino" aria-label="Alertas" aria-expanded="false" title="Alertas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span class="contador oculto" id="contador-alertas"></span>
+        </button>
+        <div class="painel-alertas oculto" id="painel-alertas" role="dialog" aria-label="Alertas">
+          <div class="cab-alertas"><strong>Alertas</strong><span class="dica" id="info-telegram"></span></div>
+          <div id="lista-alertas"></div>
+        </div>
+      </div>
       <button type="button" class="btn-icone btn-privacidade" id="btn-privacidade" aria-pressed="false"
               title="Ocultar valores (modo privacidade)" aria-label="Ocultar valores">
         <svg class="icone olho-aberto" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
         <svg class="icone olho-fechado" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7c1.8 0 3.4-.6 4.8-1.4"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
       </button>
+      </div>
       <div class="topo-dir">
         <span class="saudacao" id="saudacao"></span>
         <span class="data-hoje" id="data-hoje"></span>
@@ -222,6 +242,48 @@
     </div>
   </section>
 
+  <section id="tab-diversificacao" class="tab">
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Metas por categoria</h3>
+          <p class="dica" style="margin:0">Defina quanto da carteira quer em cada categoria. Dentro da categoria, valem as metas
+            dos ativos (ou divisão igual entre eles). O “Próximo aporte” passa a seguir essas metas.</p></div>
+        <span class="selo" id="soma-metas-classe"></span>
+      </div>
+      <form id="form-metas-classe">
+        <div class="rolagem"><table id="tabela-metas-classe"></table></div>
+        <div class="form-linha requer-edicao" style="margin-top:12px"><button type="submit">Salvar metas</button></div>
+      </form>
+      <canvas id="graf-metas-classe" height="70" style="margin-top:12px"></canvas>
+    </div>
+    <div class="grade2">
+      <div class="painel"><h3>Por setor</h3><canvas id="graf-setores"></canvas>
+        <p class="dica">Setor das ações vem das fontes (brapi). Você pode corrigir em “Ativos e metas”.</p></div>
+      <div class="painel"><h3>Por indexador</h3><canvas id="graf-indexadores"></canvas></div>
+    </div>
+    <div class="grade2">
+      <div class="painel"><h3>Por prazo de resgate</h3><canvas id="graf-prazos"></canvas></div>
+      <div class="painel"><h3>Concentração</h3><div id="lista-concentracao"></div></div>
+    </div>
+  </section>
+
+  <section id="tab-acompanhamento" class="tab">
+    <div class="painel requer-edicao">
+      <form id="form-acompanhamento" class="form-linha">
+        <label>Ticker <input name="ticker" required placeholder="ex.: TAEE11"></label>
+        <label class="largo">Observação <input name="obs" placeholder="ex.: comprar abaixo de R$ 35"></label>
+        <button type="submit">Acompanhar</button>
+      </form>
+    </div>
+    <div class="painel">
+      <h3>Lista de acompanhamento</h3>
+      <div class="rolagem"><table id="tabela-acompanhamento" class="tabela-compacta"></table></div>
+      <p class="dica"><strong>Preço-teto (Bazin)</strong>: preço para o ativo render 6% ao ano com os proventos dos últimos 12 meses.
+        <strong>Preço justo (Graham)</strong>: √(22,5 × LPA × VPA). São referências simples, não recomendações. Margem positiva:
+        cotação abaixo da referência.</p>
+    </div>
+  </section>
+
   <section id="tab-aportes" class="tab">
     <div class="painel requer-edicao">
       <h3>Registrar operação</h3>
@@ -365,6 +427,12 @@
           {% for k, v in classes.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
         </select></label>
         <label>Meta (%) <input type="number" name="meta_pct" step="any" min="0" value="0"></label>
+        <label>Setor <input name="setor" list="lista-setores" placeholder="automático"></label>
+        <datalist id="lista-setores"><option value="Bancos"><option value="Energia elétrica"><option value="Petróleo e gás">
+          <option value="Mineração"><option value="Saneamento"><option value="Seguros"><option value="Bens industriais">
+          <option value="Varejo"><option value="Saúde"><option value="Tecnologia"><option value="Telecomunicações">
+          <option value="Agronegócio"><option value="Logística"><option value="Lajes corporativas"><option value="Shoppings">
+          <option value="Papel (recebíveis)"><option value="Híbrido"></datalist>
         <label>Preço manual <input type="number" name="preco_manual" step="any" min="0" placeholder="opcional"></label>
         <div class="campos-rf form-linha oculto">
           <label>Indexador <select name="indexador">
@@ -492,6 +560,17 @@
         <a class="btn secundario" id="btn-backup-baixar" href="/api/backup/baixar" style="text-decoration:none">Baixar uma cópia</a>
       </div>
       <div class="rolagem"><table id="tabela-backup"></table></div>
+    </div>
+
+    <div class="painel so-admin">
+      <h3>Alertas por Telegram</h3>
+      <p class="dica" style="margin-top:0">Receba os alertas (preço-alvo, quedas, data com, vencimentos, DARF) no celular.
+        1) No Telegram, fale com o <strong>@BotFather</strong>, crie um bot e copie o token.
+        2) Mande uma mensagem para o bot (ou adicione-o ao grupo da família) e descubra o id da conversa
+        (por exemplo, com o <strong>@userinfobot</strong>).
+        3) No arquivo <code>.env</code>: <code>TELEGRAM_BOT_TOKEN=...</code> e <code>TELEGRAM_CHAT_ID=...</code>; reinicie o servidor.
+        Com o servidor no ar, os alertas são verificados a cada hora e cada um é enviado uma vez.</p>
+      <button type="button" class="btn" id="btn-teste-telegram">Enviar mensagem de teste</button>
     </div>
 
     <div class="painel">

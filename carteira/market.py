@@ -92,7 +92,10 @@ def fundamentos_simulados(ticker):
     pl = rng.uniform(4, 30)
     pvp = rng.uniform(0.6, 4)
     return {
-        "nome": f"{ticker.upper()} (simulado)", "setor": "Simulado",
+        "nome": f"{ticker.upper()} (simulado)",
+        "setor": {"ITUB4": "Bancos", "BBAS3": "Bancos", "VALE3": "Mineração", "WEGE3": "Bens industriais",
+                  "TAEE11": "Energia elétrica", "PETR4": "Petróleo e gás", "EGIE3": "Energia elétrica",
+                  "SAPR11": "Saneamento"}.get(ticker.upper(), "Outros"),
         "pl": pl, "pvp": pvp, "lpa": preco / pl, "vpa": preco / pvp,
         "roe": pvp / pl, "margem_liquida": rng.uniform(0.03, 0.35),
         "divida_pl": rng.uniform(0, 2), "liquidez_corrente": rng.uniform(0.7, 3),

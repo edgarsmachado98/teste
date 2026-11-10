@@ -291,7 +291,7 @@ body:not(.admin) .so-admin { display: none !important; }
 .data-venc { font-weight: 700; }
 
 /* ------------------------------------------------------ modo privacidade */
-.btn-privacidade { color: var(--suave); border: 1px solid var(--borda); background: var(--painel); margin-left: auto; }
+.btn-privacidade { color: var(--suave); border: 1px solid var(--borda); background: var(--painel); }
 .btn-privacidade:hover { color: var(--texto); }
 .btn-privacidade .olho-fechado, body.privado .btn-privacidade .olho-aberto { display: none; }
 body.privado .btn-privacidade .olho-fechado { display: block; }
@@ -329,3 +329,31 @@ a.btn.secundario { background: var(--painel); color: var(--texto); border: 1px s
 .grupo-rend li { display: flex; justify-content: space-between; padding: 5px 0 5px 12px; font-size: .88rem; color: var(--suave); }
 .selo-isento { font-size: .68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(15,157,99,.12); color: var(--pos); margin-left: 6px; }
 #tabela-bens td:first-child { white-space: normal; max-width: 210px; }
+
+/* ---------------------------------------------------------- fase 5 */
+.sino-wrap { position: relative; }
+.btn-sino, .btn-instalar { color: var(--suave); border: 1px solid var(--borda); background: var(--painel); position: relative; }
+.btn-sino:hover, .btn-instalar:hover { color: var(--texto); }
+.contador { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--neg); color: #fff; font-size: .68rem; font-weight: 700; display: grid; place-items: center; }
+.painel-alertas { position: absolute; right: 0; top: 44px; width: min(400px, 90vw); max-height: 70vh; overflow-y: auto; z-index: 60;
+  background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; box-shadow: 0 16px 40px rgba(15, 23, 42, .18); padding: 12px; }
+.cab-alertas { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 4px 10px; border-bottom: 1px solid var(--borda); }
+.alerta-item { display: grid; grid-template-columns: 26px 1fr; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--borda); font-size: .88rem; }
+.alerta-item:last-child { border-bottom: 0; }
+.alerta-item .ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: .9rem; }
+.alerta-item.alerta .ic { background: rgba(214, 69, 61, .12); color: var(--neg); }
+.alerta-item.info .ic { background: var(--primaria-suave); color: var(--primaria); }
+.alerta-item small { display: block; color: var(--suave); margin-top: 2px; }
+.input-tabela { width: 90px !important; padding: 5px 8px !important; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: .74rem; padding: 2px 8px; border-radius: 999px; background: var(--painel-2); border: 1px solid var(--borda); white-space: nowrap; }
+.chip button { border: 0; background: none; color: var(--neg); cursor: pointer; padding: 0 0 0 4px; }
+.form-alerta { display: flex; gap: 4px; align-items: center; margin-top: 6px; }
+.form-alerta select, .form-alerta input { font-size: .78rem; padding: 4px 6px; }
+.form-alerta button { font-size: .74rem; padding: 4px 8px; border-radius: 6px; border: 0; background: var(--primaria); color: #fff; cursor: pointer; }
+.lista-concentracao li { padding: 8px 0; border-bottom: 1px solid var(--borda); }
+@media (max-width: 960px) { .painel-alertas { position: fixed; left: 12px; right: 12px; top: 70px; width: auto; } }
+.acoes-topo { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.tabela-compacta th, .tabela-compacta td { padding: 8px 7px; font-size: .84rem; }
+.tabela-compacta .form-alerta input { width: 64px !important; }

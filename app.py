@@ -1,6 +1,7 @@
 """Servidor web: gestão de aportes e análise de mercado."""
 import bisect
 import datetime as dt
+from collections import defaultdict
 import io
 import os
 import secrets
@@ -27,7 +28,7 @@ carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from carteira import analysis, auth, db, evolucao, impostos, portfolio, providers, rendafixa  # noqa: E402
 from carteira.tesouro import Tesouro  # noqa: E402
-from carteira import backup  # noqa: E402
+from carteira import backup, notificacoes  # noqa: E402
 from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
@@ -48,7 +49,18 @@ def chave_secreta(db_path):
         return f.read().strip()
 
 
+def brl(v):
+    return "R$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def fmt_data(iso):
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}"
+
+
 MAX_TENTATIVAS = 5
+LIMITE_CONCENTRACAO = float(os.environ.get("CARTEIRA_LIMITE_ATIVO") or 20)   # % da carteira em um ativo
+LIMITE_SETOR = float(os.environ.get("CARTEIRA_LIMITE_SETOR") or 35)         # % da carteira em um setor
+LIMITE_DESVIO = float(os.environ.get("CARTEIRA_LIMITE_DESVIO") or 5)        # pontos percentuais fora da meta
 BLOQUEIO_SEG = 300
 
 
@@ -83,7 +95,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         return erro(str(e), e.status)
 
     # ---------- Autenticação ----------
-    ROTAS_PUBLICAS = {"login", "auth_login", "auth_setup", "static"}
+    ROTAS_PUBLICAS = {"login", "auth_login", "auth_setup", "static", "manifest", "service_worker"}
 
     @app.before_request
     def verificar_sessao():
@@ -138,6 +150,27 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                 raise ErroAcesso("Nenhuma carteira disponível.", 404)
             return ids
         return [carteira_atual()]
+
+    # ---------- Aplicativo instalável (PWA) ----------
+    @app.get("/manifest.webmanifest")
+    def manifest():
+        return jsonify({
+            "name": "Carteira de Aportes", "short_name": "Carteira", "lang": "pt-BR",
+            "start_url": "/", "scope": "/", "display": "standalone",
+            "background_color": "#0f1a33", "theme_color": "#0f1a33",
+            "description": "Gestão de aportes, proventos e análise de investimentos da família",
+            "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                      {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+                      {"src": "/static/icons/maskable-512.png", "sizes": "512x512", "type": "image/png",
+                       "purpose": "maskable"}],
+        }), 200, {"Content-Type": "application/manifest+json"}
+
+    @app.get("/sw.js")
+    def service_worker():
+        resp = send_file(os.path.join(app.static_folder, "sw.js"), mimetype="text/javascript")
+        resp.headers["Cache-Control"] = "no-cache"
+        resp.headers["Service-Worker-Allowed"] = "/"
+        return resp
 
     @app.get("/login")
     def login():
@@ -424,10 +457,20 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                 anteriores[t] = serie[-2][1]  # fechamento do pregão anterior, para a variação do dia
         return precos, fontes, anteriores, series
 
+    def metas_classe(cid):
+        if isinstance(cid, (list, tuple)):
+            if len(cid) != 1:
+                return {}  # visão da família: cada carteira tem as suas metas
+            cid = cid[0]
+        return {r["classe"]: r["meta_pct"] for r in conn.execute(
+            "SELECT classe, meta_pct FROM metas_classe WHERE carteira_id = ?", (cid,))}
+
     def montar_resumo(cid):
         ativos = listar_ativos(cid)
         aportes = listar_operacoes(cid)
         precos, fontes, anteriores, _ = cotacoes(ativos, aportes)
+        com_posicao = {t for t, p in portfolio.calcular_posicoes(aportes).items() if p["quantidade"] > 0}
+        ativos = portfolio.aplicar_metas_classe(ativos, metas_classe(cid), com_posicao)
         resumo = portfolio.resumo_carteira(ativos, aportes, precos)
         for l in resumo["ativos"]:
             l["fonte_preco"] = fontes.get(l["ticker"])
@@ -437,6 +480,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                 l["variacao_valor"] = l["quantidade"] * (atual - ant)
             else:
                 l["variacao_pct"] = l["variacao_valor"] = None
+        resumo.update(portfolio.visao_por_categoria(resumo["ativos"]))
         return resumo
 
     @app.get("/")
@@ -476,13 +520,14 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             return erro("Informe a taxa contratada (ex.: 110 para 110% do CDI, 6 para IPCA + 6%).")
         conn.execute(
             """INSERT INTO ativos (carteira_id, ticker, nome, classe, meta_pct, preco_manual,
-                                  indexador, taxa, vencimento, isento_ir)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  indexador, taxa, vencimento, isento_ir, setor)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(carteira_id, ticker) DO UPDATE SET nome=excluded.nome, classe=excluded.classe,
                meta_pct=excluded.meta_pct, preco_manual=excluded.preco_manual, indexador=excluded.indexador,
-               taxa=excluded.taxa, vencimento=excluded.vencimento, isento_ir=excluded.isento_ir""",
+               taxa=excluded.taxa, vencimento=excluded.vencimento, isento_ir=excluded.isento_ir,
+               setor=excluded.setor""",
             (cid, ticker, d.get("nome") or "", classe, meta, manual, indexador, taxa, vencimento,
-             int(bool(d.get("isento_ir")))))
+             int(bool(d.get("isento_ir"))), (d.get("setor") or "").strip() or None))
         conn.commit()
         return jsonify({"ok": True, "ticker": ticker}), 201
 
@@ -998,6 +1043,284 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             "declaracao": impostos.declaracao(ops, provs, ativos, apuracao, ano),
         })
 
+    # ---------- Metas por categoria e diversificação ----------
+    @app.get("/api/metas-classe")
+    def api_metas_classe():
+        cid = carteira_atual()
+        return jsonify({"metas": metas_classe(cid), "classes": portfolio.CLASSES})
+
+    @app.put("/api/metas-classe")
+    def api_salvar_metas_classe():
+        cid = carteira_atual("editar")
+        d = request.get_json(silent=True) or {}
+        try:
+            metas = {c: float(v) for c, v in (d.get("metas") or {}).items() if v not in (None, "") and c in portfolio.CLASSES}
+        except (TypeError, ValueError):
+            return erro("As metas devem ser números.")
+        if any(v < 0 for v in metas.values()):
+            return erro("As metas não podem ser negativas.")
+        conn.execute("DELETE FROM metas_classe WHERE carteira_id = ?", (cid,))
+        conn.executemany("INSERT INTO metas_classe (carteira_id, classe, meta_pct) VALUES (?, ?, ?)",
+                         [(cid, c, v) for c, v in metas.items() if v > 0])
+        conn.commit()
+        return jsonify({"ok": True, "soma": sum(metas.values())})
+
+    def setor_do_ativo(a):
+        if a.get("setor"):
+            return a["setor"]
+        classe = a.get("classe")
+        if classe in ("acao", "bdr"):
+            try:
+                f, _ = mercado.fundamentos(a["ticker"])
+                if f and f.get("setor"):
+                    return f["setor"]
+            except MarketDataError:
+                pass
+            return "Setor não informado"
+        return {"fii": "Fundos imobiliários", "etf": "ETFs", "renda_fixa": "Renda fixa", "cripto": "Criptoativos",
+                "exterior": "Exterior"}.get(classe, "Outros")
+
+    def indexador_do_ativo(a):
+        classe, idx, nome = a.get("classe"), (a.get("indexador") or ""), a["ticker"].upper()
+        if classe != "renda_fixa":
+            return "Renda variável" if classe in ("acao", "fii", "etf", "bdr") else portfolio.CLASSES.get(classe, "Outros")
+        if idx in ("cdi", "selic") or "SELIC" in nome:
+            return "Pós-fixado (CDI/Selic)"
+        if idx == "ipca" or "IPCA" in nome:
+            return "Inflação (IPCA+)"
+        if idx == "pre" or "PREFIXADO" in nome:
+            return "Prefixado"
+        return "Renda fixa sem indexador"
+
+    @app.get("/api/diversificacao")
+    def api_diversificacao():
+        cids = carteiras_leitura()
+        resumo = montar_resumo(cids)
+        ativos = {a["ticker"]: a for a in listar_ativos(cids)}
+        total = resumo["total_valor"] or 0
+        setores, indexadores, prazos, concentracao = defaultdict(float), defaultdict(float), defaultdict(float), []
+        hoje_d = dt.date.fromisoformat(hoje())
+        for l in resumo["ativos"]:
+            if l["quantidade"] <= 0:
+                continue
+            a = {**ativos.get(l["ticker"], {}), "ticker": l["ticker"], "classe": l["classe"]}
+            setores[setor_do_ativo(a)] += l["valor"]
+            indexadores[indexador_do_ativo(a)] += l["valor"]
+            venc = a.get("vencimento")
+            if l["classe"] in ("acao", "fii", "etf", "bdr", "cripto") or "TESOURO" in l["ticker"].upper():
+                prazo = "Resgate em até 2 dias úteis"
+            elif venc:
+                anos = (dt.date.fromisoformat(venc) - hoje_d).days / 365
+                prazo = "Vence em até 1 ano" if anos <= 1 else "Vence em 1 a 3 anos" if anos <= 3 else "Vence em mais de 3 anos"
+            else:
+                prazo = "Prazo não informado"
+            prazos[prazo] += l["valor"]
+            if total and l["valor"] / total * 100 >= LIMITE_CONCENTRACAO:
+                concentracao.append({"tipo": "ativo", "nome": l["ticker"], "pct": l["valor"] / total * 100})
+        def lista(d):
+            return [{"nome": k, "valor": v, "pct": v / total * 100 if total else 0} for k, v in sorted(d.items(), key=lambda x: -x[1])]
+        for s_ in lista(setores):
+            if s_["pct"] >= LIMITE_SETOR and s_["nome"] not in ("Renda fixa", "Setor não informado"):
+                concentracao.append({"tipo": "setor", "nome": s_["nome"], "pct": s_["pct"]})
+        metas = metas_classe(cids)
+        soma = sum(metas.values())
+        categorias = {c["classe"]: c for c in resumo["categorias"]}
+        comparacao = [{"classe": c, "rotulo": portfolio.CLASSES[c],
+                       "atual_pct": categorias[c]["peso_pct"] if c in categorias else 0.0,
+                       "meta_pct": metas.get(c, 0) / soma * 100 if soma else None,
+                       "valor": categorias[c]["valor"] if c in categorias else 0.0}
+                      for c in portfolio.CLASSES if c in categorias or metas.get(c)]
+        return jsonify({"setores": lista(setores), "indexadores": lista(indexadores),
+                        "prazos": lista(prazos), "concentracao": concentracao, "metas_classe": metas,
+                        "categorias": comparacao, "limites": {"ativo": LIMITE_CONCENTRACAO, "setor": LIMITE_SETOR}})
+
+    # ---------- Lista de acompanhamento ----------
+    def analise_ativo(ticker):
+        """Cotação, variação do dia, DY, P/L, P/VP, preço-teto (Bazin) e preço justo (Graham)."""
+        out = {"ticker": ticker}
+        try:
+            serie, fonte = mercado.historico(ticker)
+            out["preco"], out["fonte"] = serie[-1][1], fonte
+            out["variacao_pct"] = (serie[-1][1] / serie[-2][1] - 1) * 100 if len(serie) > 1 and serie[-2][1] else None
+        except MarketDataError as e:
+            out["erro"] = str(e)
+            return out
+        try:
+            provs, _ = mercado.proventos(ticker)
+        except MarketDataError:
+            provs = []
+        um_ano = (dt.date.today() - dt.timedelta(days=365)).isoformat()
+        div12 = sum(float(p["valor"]) for p in provs if um_ano < p["data_com"] <= hoje())
+        out["proventos_12m"] = div12
+        out["dy_pct"] = div12 / out["preco"] * 100 if out["preco"] else None
+        out["preco_teto_bazin"] = div12 / 0.06 if div12 else None  # DY mínimo de 6% ao ano
+        try:
+            f, _ = mercado.fundamentos(ticker)
+        except MarketDataError:
+            f = {}
+        f = f or {}
+        out.update({k: f.get(k) for k in ("pl", "pvp", "lpa", "vpa", "setor")})
+        lpa, vpa = f.get("lpa"), f.get("vpa")
+        out["preco_justo_graham"] = (22.5 * lpa * vpa) ** 0.5 if lpa and vpa and lpa > 0 and vpa > 0 else None
+        for chave, nome in (("preco_teto_bazin", "margem_bazin_pct"), ("preco_justo_graham", "margem_graham_pct")):
+            out[nome] = (out[chave] / out["preco"] - 1) * 100 if out.get(chave) and out["preco"] else None
+        return out
+
+    @app.get("/api/acompanhamento")
+    def api_acompanhamento():
+        cids = carteiras_leitura()
+        f, ids = filtro_carteiras(cids)
+        itens = db.rows(conn.execute(f"SELECT * FROM acompanhamento WHERE {f} ORDER BY ticker", ids))
+        alertas = db.rows(conn.execute(f"SELECT * FROM alertas_preco WHERE {f} ORDER BY ticker, preco", ids))
+        posicoes = portfolio.calcular_posicoes(listar_operacoes(cids))
+        vistos, out = set(), []
+        for i in itens:
+            if i["ticker"] in vistos:
+                continue
+            vistos.add(i["ticker"])
+            r = analise_ativo(i["ticker"])
+            r.update({"id": i["id"], "carteira_id": i["carteira_id"], "obs": i["obs"] or "",
+                      "quantidade": (posicoes.get(i["ticker"]) or {}).get("quantidade", 0),
+                      "alertas": [a for a in alertas if a["ticker"] == i["ticker"]]})
+            out.append(r)
+        return jsonify({"itens": out, "alertas_sem_lista": [a for a in alertas if a["ticker"] not in vistos]})
+
+    @app.post("/api/acompanhamento")
+    def api_add_acompanhamento():
+        cid = carteira_atual("editar")
+        d = request.get_json(silent=True) or {}
+        ticker = (d.get("ticker") or "").upper().strip()
+        if not ticker:
+            return erro("Informe o ticker.")
+        try:
+            mercado.historico(ticker)
+        except MarketDataError as e:
+            return erro(f"Não encontrei cotações para {ticker}: {e}", 404)
+        conn.execute("INSERT OR IGNORE INTO acompanhamento (carteira_id, ticker, obs) VALUES (?, ?, ?)",
+                     (cid, ticker, d.get("obs") or ""))
+        conn.commit()
+        return jsonify({"ok": True}), 201
+
+    @app.delete("/api/acompanhamento/<int:iid>")
+    def api_remover_acompanhamento(iid):
+        cid = carteira_atual("editar")
+        row = conn.execute("SELECT ticker FROM acompanhamento WHERE id = ? AND carteira_id = ?", (iid, cid)).fetchone()
+        if row:
+            conn.execute("DELETE FROM alertas_preco WHERE carteira_id = ? AND ticker = ?", (cid, row["ticker"]))
+            conn.execute("DELETE FROM acompanhamento WHERE id = ?", (iid,))
+            conn.commit()
+        return jsonify({"ok": True})
+
+    @app.post("/api/alertas-preco")
+    def api_add_alerta_preco():
+        cid = carteira_atual("editar")
+        d = request.get_json(silent=True) or {}
+        ticker, condicao = (d.get("ticker") or "").upper().strip(), d.get("condicao")
+        try:
+            preco = float(str(d.get("preco")).replace(",", "."))
+        except (TypeError, ValueError):
+            return erro("Preço inválido.")
+        if not ticker or condicao not in ("acima", "abaixo") or preco <= 0:
+            return erro("Informe ticker, condição (acima/abaixo) e preço.")
+        conn.execute("INSERT INTO alertas_preco (carteira_id, ticker, condicao, preco) VALUES (?, ?, ?, ?)",
+                     (cid, ticker, condicao, preco))
+        conn.commit()
+        return jsonify({"ok": True}), 201
+
+    @app.delete("/api/alertas-preco/<int:aid>")
+    def api_remover_alerta_preco(aid):
+        cid = carteira_atual("editar")
+        conn.execute("DELETE FROM alertas_preco WHERE id = ? AND carteira_id = ?", (aid, cid))
+        conn.commit()
+        return jsonify({"ok": True})
+
+    # ---------- Alertas ----------
+    def calcular_alertas(cids):
+        """Alertas da carteira (ou das carteiras). nivel: 'alerta' (pede atenção) ou 'info'."""
+        hoje_ = hoje()
+        hoje_d = dt.date.fromisoformat(hoje_)
+        em = lambda dias: (hoje_d + dt.timedelta(days=dias)).isoformat()  # noqa: E731
+        out = []
+
+        def add(tipo, nivel, titulo, texto, ref):
+            out.append({"tipo": tipo, "nivel": nivel, "titulo": titulo, "texto": texto,
+                        "chave": f"{','.join(map(str, cids))}:{tipo}:{ref}"})
+
+        resumo = montar_resumo(cids)
+        ops = listar_operacoes(cids)
+        for l in resumo["ativos"]:
+            if l["quantidade"] <= 0:
+                continue
+            if l.get("variacao_pct") is not None and l["variacao_pct"] <= -5:
+                add("queda", "alerta", f"{l['ticker']} caiu {l['variacao_pct']:.1f}% no dia".replace(".", ","),
+                    "Queda forte no último pregão.", f"{l['ticker']}:{hoje_}")
+            if l["peso_pct"] >= LIMITE_CONCENTRACAO:
+                add("concentracao", "alerta", f"{l['ticker']} é {l['peso_pct']:.0f}% da carteira",
+                    f"Acima do limite de {LIMITE_CONCENTRACAO:.0f}% em um único ativo.", l["ticker"])
+        for c in resumo.get("categorias", []):
+            if c.get("desvio_pct") is not None and abs(c["desvio_pct"]) >= LIMITE_DESVIO and metas_classe(cids):
+                acima = c["desvio_pct"] > 0
+                add("desvio", "alerta", f"{c['rotulo']} {'acima' if acima else 'abaixo'} da meta",
+                    f"Atual {c['peso_pct']:.1f}% x meta {c['meta_pct']:.1f}%. "
+                    f"{'Direcione os próximos aportes para outras categorias.' if acima else 'Priorize esta categoria nos próximos aportes.'}"
+                    .replace(".", ",", 2), c["classe"])
+
+        f, ids = filtro_carteiras(cids)
+        for a in db.rows(conn.execute(f"SELECT * FROM alertas_preco WHERE {f}", ids)):
+            try:
+                preco = mercado.historico(a["ticker"])[0][-1][1]
+            except MarketDataError:
+                continue
+            if (a["condicao"] == "acima" and preco >= a["preco"]) or (a["condicao"] == "abaixo" and preco <= a["preco"]):
+                add("preco", "alerta", f"{a['ticker']} {'subiu acima' if a['condicao'] == 'acima' else 'caiu abaixo'} de {brl(a['preco'])}",
+                    f"Cotação atual: {brl(preco)}.", f"{a['id']}:{hoje_}")
+
+        fonte = {}
+        for t in {l["ticker"] for l in resumo["ativos"] if l["quantidade"] > 0 and l["classe"] in ("acao", "fii", "etf", "bdr")}:
+            try:
+                fonte[t], _ = mercado.proventos(t)
+            except MarketDataError:
+                pass
+        for item in portfolio.agenda_proventos(ops, fonte, listar_proventos(cids), hoje_):
+            if item["status"] == "anunciado" and item.get("data_com") and item["data_com"] <= em(7):
+                add("data_com", "info", f"Data com de {item['ticker']} em {fmt_data(item['data_com'])}",
+                    f"Quem tiver o ativo ao fim do dia recebe {brl(item['valor_unitario'])} por ação/cota "
+                    f"(pagamento {fmt_data(item['data_pagamento'])}).", f"{item['ticker']}:{item['data_com']}")
+            elif item["status"] in ("a_receber", "lancado") and item["data_pagamento"] <= em(7):
+                add("pagamento", "info", f"{item['ticker']} paga {brl(item['valor_total'])} em {fmt_data(item['data_pagamento'])}",
+                    "Provento a receber nos próximos dias.", f"{item['ticker']}:{item['data_pagamento']}")
+
+        for a in listar_ativos(cids):
+            venc = a.get("vencimento") or (getattr(g, "vencimentos_tesouro", {}) or {}).get(a["ticker"])
+            if venc and hoje_ <= venc <= em(30) and (portfolio.calcular_posicoes(ops).get(a["ticker"]) or {}).get("quantidade", 0) > 0:
+                add("vencimento", "alerta", f"{a['ticker']} vence em {fmt_data(venc)}",
+                    "Planeje o reinvestimento do valor.", f"{a['ticker']}:{venc}")
+
+        if len(cids) == 1:
+            classes = {a["ticker"]: a["classe"] for a in listar_ativos(cids)}
+            for m in impostos.apurar(ops, classes, ate_mes=hoje_[:7]):
+                if m["darf"] and hoje_ <= m["vencimento"] <= em(10):
+                    add("darf", "alerta", f"DARF de {brl(m['darf'])} vence em {fmt_data(m['vencimento'])}",
+                        f"Imposto sobre as vendas de {m['mes'][5:]}/{m['mes'][:4]} (código 6015).", m["mes"])
+        ordem = {"alerta": 0, "info": 1}
+        return sorted(out, key=lambda x: ordem[x["nivel"]])
+
+    @app.get("/api/alertas")
+    def api_alertas():
+        return jsonify({"itens": calcular_alertas(carteiras_leitura()),
+                        "telegram": bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"))})
+
+    app.config["calcular_alertas"] = calcular_alertas
+
+    @app.post("/api/alertas/teste-telegram")
+    def api_teste_telegram():
+        exigir_admin()
+        try:
+            notificacoes.enviar_telegram("✅ Carteira de Aportes: os alertas por Telegram estão funcionando.")
+        except Exception as e:
+            return erro(f"Não foi possível enviar: {e}", 502)
+        return jsonify({"ok": True})
+
     # ---------- Fundamentos ----------
     @app.get("/api/fundamentos/<ticker>")
     def api_fundamentos(ticker):
@@ -1102,5 +1425,6 @@ if __name__ == "__main__":
     aplicacao = create_app()
     if os.environ.get("CARTEIRA_BACKUP", "1") != "0":
         backup.iniciar_automatico(aplicacao.config["conn"].path)
+    notificacoes.iniciar_automatico(aplicacao)
     aplicacao.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
                   debug=os.environ.get("FLASK_DEBUG") == "1")

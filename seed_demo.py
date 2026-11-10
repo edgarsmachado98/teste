@@ -125,6 +125,15 @@ if __name__ == "__main__":
     edgar.put(f"/api/carteiras/{ids['Carteira Edgar Machado']}/acessos",
               json={"email": "eliandra@exemplo.com", "ver": True})
 
+    # metas por categoria e lista de acompanhamento (carteira do Edgar)
+    edgar.environ_base["HTTP_X_CARTEIRA"] = str(ids["Carteira Edgar Machado"])
+    edgar.put("/api/metas-classe", json={"metas": {"acao": 40, "fii": 20, "etf": 15, "renda_fixa": 25}})
+    for t, obs in (("TAEE11", "boa pagadora de dividendos"), ("EGIE3", ""), ("SAPR11", "saneamento")):
+        edgar.post("/api/acompanhamento", json={"ticker": t, "obs": obs})
+    preco_taee = serie_simulada("TAEE11")[-1][1]
+    edgar.post("/api/alertas-preco", json={"ticker": "TAEE11", "condicao": "abaixo", "preco": round(preco_taee * 1.02, 2)})
+    edgar.put(f"/api/carteiras/{ids['Carteira Edgar Machado']}/meta-renda", json={"valor": 250})
+
     print("Dados de exemplo criados.")
     print(f"  Carteira Edgar Machado: {n1} proventos importados")
     print(f"  Carteira Eliandra:      {n2} proventos importados")

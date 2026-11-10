@@ -64,7 +64,7 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
   document.body.classList.remove("menu-aberto");
   window.scrollTo({ top: 0 });
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos, diversificacao: carregarDiversificacao, acompanhamento: carregarAcompanhamento }[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -401,6 +401,156 @@ async function copiarTexto(texto) {
 $("#tabela-bens").addEventListener("click", ev => {
   const i = ev.target.dataset.copiarBem;
   if (i !== undefined) copiarTexto(impostosAtual.declaracao.bens[i].discriminacao);
+});
+
+// ---------------- Diversificação ----------------
+async function carregarDiversificacao() {
+  let d;
+  try { d = await api("/api/diversificacao"); } catch (e) { return toast(e.message, true); }
+  const familia = carteiraAtual === FAMILIA;
+  const atuais = Object.fromEntries(d.categorias.map(c => [c.classe, c]));
+  const metas = d.metas_classe || {};
+  const soma = Object.values(metas).reduce((a, b) => a + b, 0);
+  $("#soma-metas-classe").textContent = familia ? "metas por carteira" : `soma das metas: ${pct(soma)}`;
+  $("#tabela-metas-classe").innerHTML = `<tr><th>Categoria</th><th>Meta</th><th>Atual</th><th>Diferença</th><th>Valor atual</th></tr>` +
+    Object.entries(CLASSES).filter(([c]) => atuais[c] || metas[c] || ["acao", "fii", "etf", "renda_fixa"].includes(c)).map(([c, rot]) => {
+      const a = atuais[c], meta = soma ? (metas[c] || 0) / soma * 100 : null, atual = a ? a.atual_pct : 0;
+      const dif = meta == null ? null : atual - meta;
+      return `<tr><td><div class="nome-categoria"><span class="bolinha" style="background:${corClasse(c)}"></span>${esc(rot)}</div></td>
+        <td>${familia ? (metas[c] ? pct(metas[c]) : "—") : `<input type="number" class="input-tabela" name="${c}" min="0" step="any" value="${metas[c] ?? ""}" placeholder="0"> %`}</td>
+        <td>${pct(atual)}</td>
+        <td class="${dif == null ? "" : Math.abs(dif) >= 5 ? "neg" : "pos"}">${dif == null ? "—" : pctSinal(dif)}</td>
+        <td>${brl.format(a ? a.valor : 0)}</td></tr>`;
+    }).join("");
+  $("#form-metas-classe").querySelector("button").closest("div").classList.toggle("oculto", familia);
+  grafico("graf-metas-classe", {
+    type: "bar",
+    data: { labels: d.categorias.map(c => c.rotulo), datasets: [
+      { label: "Atual (%)", data: d.categorias.map(c => c.atual_pct), backgroundColor: PALETA[0] },
+      ...(soma ? [{ label: "Meta (%)", data: d.categorias.map(c => c.meta_pct), backgroundColor: PALETA[1] }] : []),
+    ] },
+    options: { plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${pct(x.raw)}` } } } },
+  });
+  const rosca = (id, itens) => grafico(id, {
+    type: "doughnut",
+    data: { labels: itens.map(x => x.nome), datasets: [{ data: itens.map(x => x.valor), backgroundColor: itens.map((_, i) => PALETA[i % PALETA.length]) }] },
+    options: { aspectRatio: 1.6, plugins: { legend: { position: "right" }, tooltip: { callbacks: { label: x => `${x.label}: ${brl.format(x.raw)} (${pct(itens[x.dataIndex].pct)})` } } } },
+  });
+  rosca("graf-setores", d.setores);
+  rosca("graf-indexadores", d.indexadores);
+  grafico("graf-prazos", {
+    type: "bar",
+    data: { labels: d.prazos.map(x => x.nome), datasets: [{ label: "% da carteira", data: d.prazos.map(x => x.pct), backgroundColor: PALETA[2] }] },
+    options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => `${pct(x.raw)} · ${brl.format(d.prazos[x.dataIndex].valor)}` } } } },
+  });
+  $("#lista-concentracao").innerHTML = d.concentracao.length
+    ? `<ul class="lista-concentracao" style="list-style:none;padding:0;margin:0">${d.concentracao.map(c => `<li><strong class="neg">${esc(c.nome)}</strong>
+        ${c.tipo === "ativo" ? "representa" : "(setor) soma"} <strong>${pct(c.pct)}</strong> da carteira
+        <small class="dica" style="display:block">Limite sugerido: ${pct(c.tipo === "ativo" ? d.limites.ativo : d.limites.setor, 0)}</small></li>`).join("")}</ul>`
+    : `<p class="dica">Nenhuma concentração acima dos limites (${pct(d.limites.ativo, 0)} por ativo, ${pct(d.limites.setor, 0)} por setor).</p>`;
+}
+
+$("#form-metas-classe").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const metas = {};
+  ev.target.querySelectorAll("input[type=number]").forEach(i => { if (i.value !== "") metas[i.name] = i.value; });
+  try {
+    const r = await api("/api/metas-classe", { method: "PUT", body: { metas } });
+    toast(Math.abs(r.soma - 100) > 0.01 ? `Metas salvas (soma ${pct(r.soma)}: serão normalizadas para 100%).` : "Metas salvas.");
+    carregarDiversificacao();
+  } catch (e) { toast(e.message, true); }
+});
+
+// ---------------- Acompanhamento ----------------
+let acompanhamentoAtual = null;
+async function carregarAcompanhamento() {
+  try { acompanhamentoAtual = await api("/api/acompanhamento"); } catch (e) { return toast(e.message, true); }
+  const r = acompanhamentoAtual;
+  const ref = (valor, margem) => valor == null ? "—" : `${brl.format(valor)}<span class="var-sub ${classeSinal(margem)}">${pctSinal(margem)}</span>`;
+  $("#tabela-acompanhamento").innerHTML = r.itens.length
+    ? `<tr><th>Ativo</th><th>Cotação</th><th>DY 12m</th><th>P/L</th><th>P/VP</th><th>Preço-teto (Bazin)</th><th>Preço justo (Graham)</th><th>Alertas de preço</th><th></th></tr>` +
+      r.itens.map(i => `<tr>
+        <td><strong>${esc(i.ticker)}</strong><small class="var-sub">${esc(i.setor || "")}${i.quantidade ? ` · na carteira: ${num.format(i.quantidade)}` : ""}${i.obs ? ` · ${esc(i.obs)}` : ""}</small></td>
+        <td>${i.preco == null ? `<span class="neg">${esc(i.erro || "sem cotação")}</span>` : brl.format(i.preco)}<span class="var-sub ${classeSinal(i.variacao_pct)}">${pctSinal(i.variacao_pct)}</span></td>
+        <td>${pct(i.dy_pct)}</td><td>${i.pl == null ? "—" : dec(i.pl)}</td><td>${i.pvp == null ? "—" : dec(i.pvp)}</td>
+        <td>${ref(i.preco_teto_bazin, i.margem_bazin_pct)}</td><td>${ref(i.preco_justo_graham, i.margem_graham_pct)}</td>
+        <td style="white-space:normal;min-width:190px"><div class="chips">${i.alertas.map(a => `<span class="chip">${a.condicao === "acima" ? "≥" : "≤"} ${brl.format(a.preco)}<button class="requer-edicao" data-remover-alerta="${a.id}" title="remover">×</button></span>`).join("")}</div>
+          <div class="form-alerta requer-edicao"><select data-cond="${esc(i.ticker)}"><option value="abaixo">≤</option><option value="acima">≥</option></select>
+          <input type="number" step="any" min="0" placeholder="preço" data-preco="${esc(i.ticker)}" style="width:80px">
+          <button type="button" data-criar-alerta="${esc(i.ticker)}">criar</button></div></td>
+        <td><button class="link requer-edicao" data-remover-acomp="${i.id}">remover</button></td></tr>`).join("")
+    : `<tr><td>Nenhum ativo na lista. Adicione acima os ativos que você quer acompanhar.</td></tr>`;
+}
+
+$("#form-acompanhamento").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  try { await api("/api/acompanhamento", { method: "POST", body: formDados(ev.target) }); toast("Ativo adicionado."); ev.target.reset(); carregarAcompanhamento(); }
+  catch (e) { toast(e.message, true); }
+});
+$("#tabela-acompanhamento").addEventListener("click", async ev => {
+  const d = ev.target.dataset;
+  try {
+    if (d.criarAlerta) {
+      const t = d.criarAlerta;
+      const preco = document.querySelector(`[data-preco="${CSS.escape(t)}"]`).value;
+      const condicao = document.querySelector(`[data-cond="${CSS.escape(t)}"]`).value;
+      if (!preco) return toast("Informe o preço do alerta.", true);
+      await api("/api/alertas-preco", { method: "POST", body: { ticker: t, condicao, preco } });
+      toast("Alerta criado."); carregarAcompanhamento(); carregarAlertas();
+    } else if (d.removerAlerta) {
+      await api(`/api/alertas-preco/${d.removerAlerta}`, { method: "DELETE" }); carregarAcompanhamento(); carregarAlertas();
+    } else if (d.removerAcomp && confirm("Remover da lista (e os alertas desse ativo)?")) {
+      await api(`/api/acompanhamento/${d.removerAcomp}`, { method: "DELETE" }); carregarAcompanhamento(); carregarAlertas();
+    }
+  } catch (e) { toast(e.message, true); }
+});
+
+// ---------------- Alertas (sino) ----------------
+const ICONE_ALERTA = { preco: "R$", queda: "↓", concentracao: "%", desvio: "≠", data_com: "📅", pagamento: "💰", vencimento: "⏳", darf: "🧾" };
+async function carregarAlertas() {
+  if (!carteiraAtual) return;
+  let r;
+  try { r = await api("/api/alertas"); } catch (e) { return; }
+  const n = r.itens.filter(a => a.nivel === "alerta").length;
+  const c = $("#contador-alertas");
+  c.textContent = n || r.itens.length;
+  c.classList.toggle("oculto", !r.itens.length);
+  c.style.background = n ? "" : "var(--primaria)";
+  $("#info-telegram").textContent = r.telegram ? "também enviados pelo Telegram" : "";
+  $("#lista-alertas").innerHTML = r.itens.length ? r.itens.map(a => `<div class="alerta-item ${a.nivel}">
+      <span class="ic">${ICONE_ALERTA[a.tipo] || "!"}</span><div><strong>${esc(a.titulo)}</strong><small>${esc(a.texto)}</small></div></div>`).join("")
+    : `<p class="dica" style="padding:8px 4px">Nenhum alerta no momento.</p>`;
+}
+$("#btn-sino").addEventListener("click", ev => {
+  ev.stopPropagation();
+  const p = $("#painel-alertas"), abrir = p.classList.contains("oculto");
+  p.classList.toggle("oculto", !abrir);
+  $("#btn-sino").setAttribute("aria-expanded", String(abrir));
+});
+document.addEventListener("click", ev => {
+  if (!ev.target.closest(".sino-wrap")) $("#painel-alertas").classList.add("oculto");
+});
+setInterval(carregarAlertas, 10 * 60 * 1000);
+
+$("#btn-teste-telegram").addEventListener("click", async () => {
+  try { await api("/api/alertas/teste-telegram", { method: "POST" }); toast("Mensagem enviada: confira o Telegram."); }
+  catch (e) { toast(e.message, true); }
+});
+
+// ---------------- Aplicativo instalável ----------------
+let pedidoInstalacao = null;
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+window.addEventListener("beforeinstallprompt", ev => {
+  ev.preventDefault();
+  pedidoInstalacao = ev;
+  $("#btn-instalar").classList.remove("oculto");
+});
+$("#btn-instalar").addEventListener("click", async () => {
+  if (!pedidoInstalacao) return;
+  pedidoInstalacao.prompt();
+  await pedidoInstalacao.userChoice;
+  pedidoInstalacao = null;
+  $("#btn-instalar").classList.add("oculto");
 });
 
 // ---------------- Rentabilidade ----------------
@@ -805,7 +955,7 @@ $("#tabela-ativos").addEventListener("click", async ev => {
   const editar = ev.target.dataset.editar, remover = ev.target.dataset.removerAtivo;
   if (editar) {
     const a = ativosCache.find(x => x.ticker === editar), f = $("#form-ativo");
-    for (const k of ["ticker", "nome", "classe", "meta_pct", "preco_manual", "indexador", "taxa", "vencimento"]) f[k].value = a[k] ?? "";
+    for (const k of ["ticker", "nome", "classe", "meta_pct", "preco_manual", "indexador", "taxa", "vencimento", "setor"]) f[k].value = a[k] ?? "";
     f.isento_ir.checked = !!a.isento_ir;
     atualizarCamposRF();
     f.scrollIntoView({ behavior: "smooth" });
@@ -1088,10 +1238,11 @@ async function carregarCarteiras(preferida) {
 }
 
 function recarregarAbaAtual() {
+  carregarAlertas();
   $("#resultado-sugestao").innerHTML = "";
   $("#resultado-estimar").innerHTML = "";
   const aba = document.querySelector("nav button.ativo")?.dataset.tab;
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos }[aba] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos, diversificacao: carregarDiversificacao, acompanhamento: carregarAcompanhamento }[aba] || (() => {}))();
 }
 
 $("#sel-carteira").addEventListener("change", ev => {
@@ -1301,4 +1452,5 @@ carregarCarteiras().then(() => {
   }
   carregarCarteira();
   carregarAportes();
+  carregarAlertas();
 }).catch(e => toast(e.message, true));

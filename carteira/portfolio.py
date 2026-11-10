@@ -198,7 +198,8 @@ def sugerir_aporte(resumo, valor_aporte):
             if l["classe"] not in CLASSES_INTEIRAS or l["preco_atual"] > saldo + 1e-9:
                 continue
             residual = alocado[t] - compras[t] * l["preco_atual"]
-            candidatos.append((residual, t))
+            if residual > 0:  # só ativos que ainda estão abaixo do valor que deveriam receber
+                candidatos.append((residual, t))
         if not candidatos:
             break
         _, t = max(candidatos)
@@ -473,6 +474,8 @@ def visao_por_categoria(linhas, tamanho_ranking=5):
     abertas = [l for l in linhas if l["quantidade"] > 0]
     total = sum(l["valor"] for l in abertas)
 
+    soma_metas = sum(l.get("meta_pct") or 0 for l in abertas) or 0
+
     def metricas(itens):
         valor = sum(l["valor"] for l in itens)
         custo = sum(l["custo"] for l in itens)
@@ -481,9 +484,11 @@ def visao_por_categoria(linhas, tamanho_ranking=5):
         com_var = [l for l in itens if l.get("variacao_valor") is not None]
         base_var = sum(l["valor"] - l["variacao_valor"] for l in com_var)
         rent_valor = valor - custo + prov
+        meta = sum(l.get("meta_pct") or 0 for l in itens) / soma_metas * 100 if soma_metas else None
+        peso = valor / total * 100 if total else 0.0
         return {
             "valor": valor, "custo": custo, "proventos": prov,
-            "peso_pct": valor / total * 100 if total else 0.0,
+            "peso_pct": peso, "meta_pct": meta, "desvio_pct": peso - meta if meta is not None else None,
             "variacao_valor": var_valor if com_var else None,
             "variacao_pct": var_valor / base_var * 100 if com_var and base_var else None,
             "valorizacao_pct": (valor - custo) / custo * 100 if custo else None,
@@ -656,3 +661,31 @@ def numero_magico(linhas, proventos_fonte, registrados, operacoes, hoje):
                     "progresso_pct": min(l["quantidade"] / necessarias * 100, 100),
                     "investimento_faltante": max(necessarias - l["quantidade"], 0) * l["preco_atual"]})
     return sorted(out, key=lambda x: -x["progresso_pct"])
+
+
+# ------------------------------------------------------- metas por categoria
+
+def aplicar_metas_classe(ativos, metas_classe, com_posicao=()):
+    """Converte metas por categoria em metas por ativo (rebalanceamento em dois níveis).
+
+    metas_classe: {classe: %}. Dentro de cada categoria, a meta é dividida pelas metas dos ativos
+    (proporcionalmente); se nenhum ativo da categoria tiver meta, divide igualmente entre os que
+    têm posição. Categorias sem meta ficam com 0%. Sem metas por categoria, nada muda.
+    """
+    if not metas_classe or not any(v > 0 for v in metas_classe.values()):
+        return ativos
+    por_classe = defaultdict(list)
+    for a in ativos:
+        por_classe[a["classe"]].append(a)
+    novos = []
+    for classe, lista in por_classe.items():
+        meta_classe = float(metas_classe.get(classe) or 0)
+        soma = sum(float(a.get("meta_pct") or 0) for a in lista)
+        candidatos = [a for a in lista if a["ticker"] in com_posicao] or lista
+        for a in lista:
+            if soma > 0:
+                parte = float(a.get("meta_pct") or 0) / soma
+            else:
+                parte = 1 / len(candidatos) if a in candidatos else 0.0
+            novos.append({**a, "meta_pct": meta_classe * parte, "meta_ativo_original": a.get("meta_pct")})
+    return novos

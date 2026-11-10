@@ -87,6 +87,38 @@ CREATE TABLE IF NOT EXISTS eventos (
     obs         TEXT
 );
 
+-- Metas de alocação por categoria (classe); dentro da categoria valem as metas dos ativos.
+CREATE TABLE IF NOT EXISTS metas_classe (
+    carteira_id INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    classe      TEXT NOT NULL,
+    meta_pct    REAL NOT NULL CHECK (meta_pct >= 0),
+    PRIMARY KEY (carteira_id, classe)
+);
+
+-- Lista de acompanhamento (ativos de interesse, com ou sem posição).
+CREATE TABLE IF NOT EXISTS acompanhamento (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    ticker      TEXT NOT NULL,
+    obs         TEXT,
+    UNIQUE (carteira_id, ticker)
+);
+
+-- Alertas de preço (quando a cotação ficar acima/abaixo do valor).
+CREATE TABLE IF NOT EXISTS alertas_preco (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    ticker      TEXT NOT NULL,
+    condicao    TEXT NOT NULL CHECK (condicao IN ('acima', 'abaixo')),
+    preco       REAL NOT NULL CHECK (preco > 0)
+);
+
+-- Alertas já enviados por Telegram (para não repetir).
+CREATE TABLE IF NOT EXISTS alertas_enviados (
+    chave      TEXT PRIMARY KEY,
+    enviado_em TEXT NOT NULL
+);
+
 -- Cache de respostas das fontes (proventos por ação, fundamentos) em JSON.
 CREATE TABLE IF NOT EXISTS cache_dados (
     ticker     TEXT NOT NULL,
@@ -206,6 +238,7 @@ COLUNAS_NOVAS = [
     ("ativos", "vencimento", "TEXT"),
     ("ativos", "isento_ir", "INTEGER NOT NULL DEFAULT 0"),  # LCI, LCA, CRI, CRA, debêntures incentivadas
     ("carteiras", "meta_renda_mensal", "REAL"),  # meta de renda passiva (R$/mês)
+    ("ativos", "setor", "TEXT"),                # setor econômico (preenchido pelas fontes ou manualmente)
 ]
 
 
