@@ -316,3 +316,16 @@ a.btn.secundario { background: var(--painel); color: var(--texto); border: 1px s
   background: rgba(183, 121, 31, .1); margin-bottom: 8px; }
 .sugestao-evento .texto { flex: 1 1 260px; }
 .sugestao-evento small { display: block; color: var(--suave); }
+
+/* ------------------------------------------------------ imposto de renda */
+.subtitulo-ir { margin: 6px 0 10px; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); }
+.discriminacao { white-space: normal; text-align: left !important; min-width: 280px; font-size: .84rem; }
+.btn-copiar { border: 1px solid var(--borda); background: var(--painel); color: var(--primaria); border-radius: 7px;
+  padding: 3px 8px; font-size: .75rem; cursor: pointer; margin-left: 6px; }
+.grupo-rend { margin-bottom: 14px; }
+.grupo-rend .cab { display: flex; justify-content: space-between; font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--borda); }
+.grupo-rend .cab small { color: var(--suave); font-weight: 500; }
+.grupo-rend ul { list-style: none; margin: 0; padding: 0; }
+.grupo-rend li { display: flex; justify-content: space-between; padding: 5px 0 5px 12px; font-size: .88rem; color: var(--suave); }
+.selo-isento { font-size: .68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(15,157,99,.12); color: var(--pos); margin-left: 6px; }
+#tabela-bens td:first-child { white-space: normal; max-width: 210px; }

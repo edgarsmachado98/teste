@@ -25,7 +25,7 @@ def carregar_env(caminho=".env"):
 
 carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-from carteira import analysis, auth, db, evolucao, portfolio, providers, rendafixa  # noqa: E402  (após o .env)
+from carteira import analysis, auth, db, evolucao, impostos, portfolio, providers, rendafixa  # noqa: E402
 from carteira.tesouro import Tesouro  # noqa: E402
 from carteira import backup  # noqa: E402
 from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
@@ -965,6 +965,38 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         conn.execute("UPDATE carteiras SET meta_renda_mensal = ? WHERE id = ?", (valor, cid))
         conn.commit()
         return jsonify({"ok": True})
+
+    # ---------- Imposto de Renda ----------
+    @app.get("/api/impostos")
+    def api_impostos():
+        if (request.headers.get("X-Carteira") or request.args.get("carteira")) == "todas":
+            return erro("O Imposto de Renda é calculado por pessoa: selecione a carteira de uma pessoa.", 400)
+        cid = carteira_atual()
+        hoje_ = hoje()
+        try:
+            ano = int(request.args.get("ano") or hoje_[:4])
+        except ValueError:
+            return erro("Ano inválido.")
+        ops, ativos, provs = listar_operacoes(cid), listar_ativos(cid), listar_proventos(cid)
+        classes = {a["ticker"]: a["classe"] for a in ativos}
+        apuracao = impostos.apurar(ops, classes, ate_mes=hoje_[:7])
+        meses = [m for m in apuracao if m["mes"].startswith(str(ano))]
+        ultimo = meses[-1] if meses else None
+        anos = sorted({int(o["data"][:4]) for o in ops} | {int(p["data_pagamento"][:4]) for p in provs}
+                      | {int(hoje_[:4])}, reverse=True)
+        return jsonify({
+            "ano": ano, "anos": anos, "apuracao": meses, "nomes_pools": impostos.NOME_POOL,
+            "resumo": {
+                "imposto_devido": sum(m["imposto_devido"] for m in meses),
+                "darf_total": sum(m["darf"] for m in meses),
+                "lucro_isento": sum(m["lucro_isento"] for m in meses),
+                "vendas_acoes": sum(m["vendas_acoes"] for m in meses),
+                "prejuizo_acumulado": ultimo["prejuizo_acumulado"] if ultimo else {},
+                "darfs_pendentes": [{"mes": m["mes"], "valor": m["darf"], "vencimento": m["vencimento"]}
+                                    for m in meses if m["darf"] and m["vencimento"] >= hoje_],
+            },
+            "declaracao": impostos.declaracao(ops, provs, ativos, apuracao, ano),
+        })
 
     # ---------- Fundamentos ----------
     @app.get("/api/fundamentos/<ticker>")

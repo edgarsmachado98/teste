@@ -73,6 +73,17 @@ apontar para o OneDrive/Google Drive); o administrador pode fazer ou baixar uma 
 - Eventos multiplicam a quantidade sem mudar o custo; valem em posições, vendas, proventos,
   evolução (compatível com cotações ajustadas) e importação.
 
+**Imposto de Renda** (por pessoa, página *Imposto de Renda*)
+- Apuração mensal das vendas: operações comuns de ações (isenção para vendas até R$ 20 mil no mês),
+  ETFs e BDRs (15%), FIIs (20%), day trade (20%, detectado por compra e venda no mesmo dia),
+  criptoativos (15% acima de R$ 35 mil/mês); compensação de prejuízos por tipo; IRRF descontado;
+  DARF (código 6015) com vencimento e acúmulo de valores abaixo de R$ 10.
+- Relatório para a declaração: Bens e Direitos (grupo/código sugeridos, discriminação pronta para
+  copiar, situação em 31/12 dos dois anos), rendimentos isentos (dividendos, rendimentos de FII, lucro
+  isento, bonificações) e tributação exclusiva (JCP).
+- É uma estimativa: confira com notas de corretagem, informes de rendimentos e um contador; mudanças
+  recentes na legislação (ex.: tributação de dividendos a partir de 2026) não estão no cálculo.
+
 **Fluxo financeiro**
 - Visão geral de **compras, vendas e proventos recebidos** por período (12 meses, ano, ano anterior,
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,
@@ -192,6 +203,7 @@ carteira/tesouro.py    # preços oficiais do Tesouro Direto
 carteira/indices.py    # CDI, Selic, IPCA (Banco Central) e Ibovespa
 carteira/evolucao.py   # evolução do patrimônio e rentabilidade (método de cotas)
 carteira/backup.py     # cópia de segurança diária
+carteira/impostos.py   # apuração mensal de IR e relatório da declaração
 carteira/importacao.py # leitura de extratos/relatórios (xlsx, xls, csv, html, pdf)
 carteira/portfolio.py  # posições, preço médio, resumo e sugestão de aporte
 carteira/analysis.py   # indicadores técnicos e estatísticas de risco/retorno
@@ -235,5 +247,6 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | GET | `/api/proventos/agenda` | agenda, projeção 12 meses, número mágico e meta |
 | GET/POST/DELETE | `/api/eventos[/<id>]` | eventos corporativos; `/api/eventos/sugeridos` lista os detectados |
 | PUT | `/api/carteiras/<id>/meta-renda` | meta de renda passiva mensal |
+| GET | `/api/impostos?ano=` | apuração mensal, DARFs e dados da declaração (por carteira) |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

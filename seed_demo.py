@@ -31,6 +31,14 @@ CARTEIRA_EDGAR = {
         ("2025-04-09", "WEGE3", 30, 52.0), ("2025-05-13", "HGLG11", 10, 158.0),
         ("2025-06-10", "TESOURO IPCA+ 2035", 2, 2150.0), ("2025-08-12", "ITUB4", 50, 35.1),
         ("2025-03-05", "CDB BANCO EXEMPLO", 1, 5000.0), ("2025-12-10", "LCA AGRO EXEMPLO", 1, 3000.0),
+        # vendas em 2026 (para a apuração do Imposto de Renda)
+        ("2026-04-14", "VALE3", 20, 0, "venda"),            # mês isento (vendas abaixo de R$ 20 mil)
+        ("2026-06-09", "ITUB4", 200, 0),
+        ("2026-07-14", "ITUB4", 300, 0, "venda"),           # vendas acima de R$ 20 mil: 15%
+        ("2026-07-21", "HGLG11", 5, 0, "venda"),            # FII: 20%
+        ("2026-08-05", "PETR4", 500, 30.0),                 # day trade
+        ("2026-08-05", "PETR4", 500, 31.2, "venda"),
+        ("2026-09-15", "IVVB11", 5, 0, "venda"),            # ETF: 15%, sem isenção
     ],
 }
 
@@ -74,9 +82,9 @@ def popular(c, dados):
     for t, n, cl, m in dados["ativos"]:
         c.post("/api/ativos", json={"ticker": t, "nome": n, "classe": cl, "meta_pct": m,
                                     **dados.get("renda_fixa", {}).get(t, {})})
-    for d, t, q, p in dados["aportes"]:
-        c.post("/api/aportes", json={"data": d, "ticker": t, "quantidade": q,
-                                     "preco": preco_na_data(t, d, p)})
+    for d, t, q, p, *tipo in dados["aportes"]:
+        c.post("/api/aportes", json={"data": d, "ticker": t, "quantidade": q, "tipo": tipo[0] if tipo else "compra",
+                                     "preco": p if t == "PETR4" else preco_na_data(t, d, p)})
     # registra os eventos corporativos detectados (desdobramentos, bonificações)
     for e in c.get("/api/eventos/sugeridos").get_json()["itens"]:
         c.post("/api/eventos", json={"ticker": e["ticker"], "data": e["data"], "tipo": e["tipo"],

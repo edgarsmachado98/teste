@@ -31,6 +31,7 @@
       <p class="grupo-nav">Planejamento</p>
       <button data-tab="ativos" data-titulo="Ativos e metas" data-sub="Cadastro dos ativos e alocação desejada"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg><span>Ativos e metas</span></button>
       <button data-tab="sugestao" data-titulo="Próximo aporte" data-sub="Quanto comprar de cada ativo para seguir a meta"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7.5h7M8.5 12h1m2.5 0h1m2.5 0h0M8.5 16h1m2.5 0h1m2.5 0h0"/></svg><span>Próximo aporte</span></button>
+      <button data-tab="impostos" data-titulo="Imposto de Renda" data-sub="Apuração mensal das vendas, DARF e dados para a declaração anual"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span>Imposto de Renda</span></button>
       <p class="grupo-nav">Mercado</p>
       <button data-tab="mercado" data-titulo="Análise de ativos" data-sub="Indicadores técnicos, fundamentos e sinais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Análise de ativos</span></button>
       <button data-tab="comparar" data-titulo="Comparar ativos" data-sub="Desempenho e correlação entre ativos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-7"/></svg><span>Comparar ativos</span></button>
@@ -183,6 +184,41 @@
     <div class="painel">
       <h3>Próximos vencimentos</h3>
       <div id="vencimentos-rf"></div>
+    </div>
+  </section>
+
+  <section id="tab-impostos" class="tab">
+    <div class="painel">
+      <div class="cabecalho-painel" style="margin-bottom:0">
+        <form class="form-linha" id="form-ano-ir">
+          <label>Ano-calendário <select name="ano" id="ano-ir"></select></label>
+        </form>
+        <p class="dica" style="margin:0;flex:1 1 380px">Cálculo por pessoa (selecione a carteira de quem vai declarar).
+          Estimativa baseada nas operações registradas: confira com as notas de corretagem, os informes de rendimentos e,
+          se possível, com um contador. Mudanças recentes na legislação (por exemplo, a tributação de dividendos a partir
+          de 2026) não estão no cálculo.</p>
+      </div>
+    </div>
+    <div class="cards" id="cards-ir"></div>
+
+    <div class="painel">
+      <h3>Apuração mensal</h3>
+      <p class="dica" style="margin-top:0">Clique em um mês para ver as vendas. Ações: isentas quando as vendas do mês somam até R$ 20.000.
+        ETFs e BDRs 15% sem isenção, FIIs 20%, day trade 20%. Prejuízos compensados dentro de cada tipo.</p>
+      <div class="rolagem"><table id="tabela-ir" class="tabela-categorias"></table></div>
+    </div>
+
+    <div class="painel">
+      <h3 id="titulo-declaracao">Declaração anual</h3>
+      <h4 class="subtitulo-ir">Bens e Direitos</h4>
+      <div class="rolagem"><table id="tabela-bens"></table></div>
+      <div class="grade2" style="margin-top:18px">
+        <div><h4 class="subtitulo-ir">Rendimentos isentos e não tributáveis</h4><div id="lista-isentos"></div></div>
+        <div><h4 class="subtitulo-ir">Rendimentos sujeitos à tributação exclusiva</h4><div id="lista-exclusivos"></div></div>
+      </div>
+      <p class="dica">Os grupos e códigos são sugestões: confirme no programa da Receita, que muda a cada ano. O CNPJ da fonte
+        pagadora (empresa ou fundo) está no informe de rendimentos da corretora. Bonificações são declaradas pelo custo informado
+        pela empresa.</p>
     </div>
   </section>
 

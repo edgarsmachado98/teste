@@ -64,7 +64,7 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
   document.body.classList.remove("menu-aberto");
   window.scrollTo({ top: 0 });
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos }[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -303,6 +303,104 @@ $("#form-evento").addEventListener("submit", async ev => {
   ev.preventDefault();
   try { await api("/api/eventos", { method: "POST", body: formDados(ev.target) }); toast("Evento registrado."); ev.target.reset(); carregarEventos(); }
   catch (e) { toast(e.message, true); }
+});
+
+// ---------------- Imposto de Renda ----------------
+let impostosAtual = null;
+const mesesAbertosIR = new Set();
+const nomeMes = m => `${MESES_LONGOS[+m.slice(5) - 1]}/${m.slice(0, 4)}`;
+
+async function carregarImpostos() {
+  if (carteiraAtual === FAMILIA) {
+    $("#cards-ir").innerHTML = `<p class="dica">O Imposto de Renda é por pessoa: selecione a carteira de quem vai declarar.</p>`;
+    ["#tabela-ir", "#tabela-bens", "#lista-isentos", "#lista-exclusivos"].forEach(s => ($(s).innerHTML = ""));
+    return;
+  }
+  const ano = $("#ano-ir").value || new Date().getFullYear();
+  try { impostosAtual = await api(`/api/impostos?ano=${ano}`); } catch (e) { return toast(e.message, true); }
+  const r = impostosAtual, res = r.resumo;
+  $("#ano-ir").innerHTML = r.anos.map(a => `<option value="${a}" ${a === r.ano ? "selected" : ""}>${a}</option>`).join("");
+  const prej = res.prejuizo_acumulado || {};
+  const prejTotal = (prej.comum || 0) + (prej.daytrade || 0) + (prej.fii || 0);
+  const pend = res.darfs_pendentes;
+  $("#cards-ir").innerHTML = [
+    ["Vendas de ações no ano", brl.format(res.vendas_acoes), ""],
+    ["Lucro isento (vendas ≤ R$ 20 mil/mês)", brl.format(res.lucro_isento), "pos"],
+    ["IR devido no ano", brl.format(res.imposto_devido), res.imposto_devido ? "neg" : ""],
+    ["DARFs no ano", brl.format(res.darf_total), res.darf_total ? "neg" : "",
+      pend.length ? `a vencer: ${brl.format(pend.reduce((s, d) => s + d.valor, 0))} até ${fmtData(pend[pend.length - 1].vencimento)}`
+        : res.darf_total ? "confira se foram pagos (código 6015)" : "nenhum DARF"],
+    ["Prejuízo a compensar", brl.format(prejTotal), "",
+      prejTotal ? `comum ${brl.format(prej.comum || 0)} · FII ${brl.format(prej.fii || 0)} · DT ${brl.format(prej.daytrade || 0)}` : ""],
+  ].map(([rot, v, c, sub]) => `<div class="card"><div class="rotulo">${rot}</div><div class="valor ${c}">${v}${sub ? `<span class="sub">${sub}</span>` : ""}</div></div>`).join("");
+  renderApuracao();
+  renderDeclaracao();
+}
+
+function renderApuracao() {
+  const r = impostosAtual;
+  const ativos = r.apuracao.filter(m => Object.keys(m.vendas).length || m.pools.daytrade.resultado || m.darf || m.imposto_devido);
+  const res = v => v ? `<span class="${classeSinal(v)}">${brlSinal(v)}</span>` : "—";
+  let html = `<tr><th>Mês</th><th>Vendas de ações</th><th>Ações, ETFs, BDRs</th><th>FII</th><th>Day trade</th><th>IR devido</th><th>IRRF</th><th>DARF</th></tr>`;
+  if (!ativos.length) html += `<tr><td colspan="8">Nenhuma venda em ${r.ano}.</td></tr>`;
+  for (const m of ativos) {
+    const aberto = mesesAbertosIR.has(m.mes);
+    const comum = (m.resultados.acoes || 0) + (m.resultados.etf || 0) + (m.resultados.bdr || 0);
+    html += `<tr class="linha-categoria ${aberto ? "aberta" : ""}" data-mes="${m.mes}" tabindex="0">
+      <td><div class="nome-categoria">${CHEVRON}${nomeMes(m.mes)}${m.isento ? `<span class="selo-isento">isento</span>` : ""}</div></td>
+      <td>${m.vendas_acoes ? brl.format(m.vendas_acoes) : "—"}</td><td>${res(comum)}</td><td>${res(m.resultados.fii)}</td>
+      <td>${res(m.pools.daytrade.resultado)}</td><td>${m.imposto_devido ? brl.format(m.imposto_devido) : "—"}</td>
+      <td>${m.irrf ? brl.format(m.irrf) : "—"}</td>
+      <td>${m.darf ? `<strong>${brl.format(m.darf)}</strong><span class="var-sub">vence ${fmtData(m.vencimento)}</span>`
+        : m.darf_acumulado_proximo ? `<span class="var-sub">${brl.format(m.darf_acumulado_proximo)} vai para o próximo mês (mínimo R$ 10)</span>` : "—"}</td></tr>`;
+    if (aberto) html += m.operacoes.map(o => `<tr class="linha-ativo">
+      <td><strong>${esc(o.ticker)}</strong><small>${fmtData(o.data)} · ${o.tipo === "daytrade" ? "day trade" : o.tipo}</small></td>
+      <td>${num.format(o.quantidade)}</td><td colspan="2">venda ${brl.format(o.venda)} · custo ${brl.format(o.custo)}</td>
+      <td colspan="4" class="${classeSinal(o.resultado)}">${brlSinal(o.resultado)}</td></tr>`).join("") +
+      `<tr class="linha-ativo"><td colspan="8" style="white-space:normal">${Object.entries(m.pools).filter(([, p]) => p.resultado || p.imposto)
+        .map(([k, p]) => `${r.nomes_pools[k]}: resultado ${brlSinal(p.resultado)}, base ${brl.format(p.base)}, imposto ${brl.format(p.imposto)}`).join(" · ") || "—"}
+        · prejuízo a compensar depois do mês: comum ${brl.format(m.prejuizo_acumulado.comum)}, FII ${brl.format(m.prejuizo_acumulado.fii)}, DT ${brl.format(m.prejuizo_acumulado.daytrade)}</td></tr>`;
+  }
+  $("#tabela-ir").innerHTML = html;
+}
+
+$("#tabela-ir").addEventListener("click", ev => {
+  const linha = ev.target.closest(".linha-categoria");
+  if (!linha) return;
+  mesesAbertosIR.has(linha.dataset.mes) ? mesesAbertosIR.delete(linha.dataset.mes) : mesesAbertosIR.add(linha.dataset.mes);
+  renderApuracao();
+});
+$("#ano-ir").addEventListener("change", carregarImpostos);
+
+function renderDeclaracao() {
+  const d = impostosAtual.declaracao;
+  $("#titulo-declaracao").textContent = `Declaração ${d.ano + 1} (ano-calendário ${d.ano})`;
+  $("#tabela-bens").innerHTML = d.bens.length
+    ? `<tr><th>Grupo / código</th><th>Ativo</th><th>Discriminação</th><th>31/12/${d.ano - 1}</th><th>31/12/${d.ano}</th></tr>` +
+      d.bens.map((b, i) => `<tr><td title="${esc(b.descricao_codigo)}">${b.grupo} / ${b.codigo}<small class="var-sub">${esc(b.descricao_codigo)}</small></td>
+        <td><strong>${esc(b.ticker)}</strong></td>
+        <td class="discriminacao">${esc(b.discriminacao)}<button type="button" class="btn-copiar" data-copiar-bem="${i}">copiar</button></td>
+        <td>${brl.format(b.situacao_anterior)}</td><td>${brl.format(b.situacao_atual)}</td></tr>`).join("")
+    : `<tr><td>Nenhum bem a declarar em ${d.ano}.</td></tr>`;
+  const grupos = lista => lista.map(g => `<div class="grupo-rend"><div class="cab"><span>${g.codigo}: ${esc(g.titulo)}</span>
+      <span>${g.total ? brl.format(g.total) : g.itens.length ? "" : "—"}</span></div>
+      <ul>${g.itens.map(i => `<li><span>${esc(i.ticker.length === 7 && i.ticker[4] === "-" ? nomeMes(i.ticker) : i.ticker)}</span>
+        <span>${i.valor == null ? "custo informado pela empresa" : brl.format(i.valor)}</span></li>`).join("")}</ul></div>`).join("");
+  $("#lista-isentos").innerHTML = grupos(d.isentos);
+  $("#lista-exclusivos").innerHTML = grupos(d.exclusivos);
+}
+
+async function copiarTexto(texto) {
+  try { await navigator.clipboard.writeText(texto); }
+  catch (e) {  // http na rede local não permite a área de transferência moderna
+    const t = document.createElement("textarea");
+    t.value = texto; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
+  }
+  toast("Copiado.");
+}
+$("#tabela-bens").addEventListener("click", ev => {
+  const i = ev.target.dataset.copiarBem;
+  if (i !== undefined) copiarTexto(impostosAtual.declaracao.bens[i].discriminacao);
 });
 
 // ---------------- Rentabilidade ----------------
@@ -993,7 +1091,7 @@ function recarregarAbaAtual() {
   $("#resultado-sugestao").innerHTML = "";
   $("#resultado-estimar").innerHTML = "";
   const aba = document.querySelector("nav button.ativo")?.dataset.tab;
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa }[aba] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos }[aba] || (() => {}))();
 }
 
 $("#sel-carteira").addEventListener("change", ev => {
