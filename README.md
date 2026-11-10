@@ -46,6 +46,20 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
   mês, ano, 12 meses e desde o início (com % do CDI), gráfico acumulado e tabela mês a mês.
 - Ativos sem histórico de cotação (renda fixa com preço manual) têm o valor passado estimado.
 
+**Renda fixa automática**
+- Em *Ativos e metas*, informe o **indexador** e a **taxa contratada** do título: % do CDI, % da Selic,
+  IPCA + taxa, prefixado, ou **preço oficial do Tesouro** (ticker com nome e ano, ex.: TESOURO IPCA+ 2035).
+- O valor é calculado todo dia por aplicação (CDI e Selic diários e IPCA mensal do Banco Central, dias
+  úteis com feriados nacionais), com **IR regressivo** e **IOF**, e resgates consumindo as aplicações
+  mais antigas primeiro. Títulos isentos (LCI, LCA, CRI, CRA) marcados como tal.
+- Página *Renda fixa*: aplicado, valor bruto, rendimento, impostos, valor líquido e próximos vencimentos.
+  O valor também alimenta o Patrimônio e a evolução (sem estimativas).
+
+**Modo privacidade**: o botão de olho no topo esconde os valores em reais (percentuais continuam visíveis).
+
+**Cópia de segurança**: automática, uma vez por dia, com o servidor no ar (`CARTEIRA_BACKUP_DIR` para
+apontar para o OneDrive/Google Drive); o administrador pode fazer ou baixar uma cópia em *Acessos e conta*.
+
 **Fluxo financeiro**
 - Visão geral de **compras, vendas e proventos recebidos** por período (12 meses, ano, ano anterior,
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,
@@ -160,6 +174,11 @@ python -m pytest
 app.py                 # servidor Flask e API REST
 carteira/db.py         # esquema SQLite, migração e conexão por thread
 carteira/auth.py       # usuários, carteiras e permissões
+carteira/rendafixa.py  # renda fixa: curva, IR/IOF, dias úteis
+carteira/tesouro.py    # preços oficiais do Tesouro Direto
+carteira/indices.py    # CDI, Selic, IPCA (Banco Central) e Ibovespa
+carteira/evolucao.py   # evolução do patrimônio e rentabilidade (método de cotas)
+carteira/backup.py     # cópia de segurança diária
 carteira/importacao.py # leitura de extratos/relatórios (xlsx, xls, csv, html, pdf)
 carteira/portfolio.py  # posições, preço médio, resumo e sugestão de aporte
 carteira/analysis.py   # indicadores técnicos e estatísticas de risco/retorno
@@ -197,5 +216,8 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | POST | `/api/importar/b3/previa` | envia o extrato (multipart, campo `arquivo`) e recebe a prévia |
 | POST | `/api/importar/b3/confirmar` | `{"aportes": [...], "proventos": [...]}` grava os selecionados |
 | GET | `/api/fluxo?inicio=&fim=` | compras, vendas e proventos do período |
+| GET | `/api/renda-fixa` | títulos de renda fixa com IR/IOF e vencimentos |
+| GET | `/api/evolucao` | evolução mensal, rentabilidade e referências |
+| GET/POST | `/api/backup` | cópias de segurança (administrador); `/api/backup/baixar` baixa uma cópia |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |

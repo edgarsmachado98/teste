@@ -72,8 +72,8 @@ def test_indices_com_cache(tmp_path):
 
     def bcb(codigo, inicio, fim):
         chamadas.append(codigo)
-        return [{"mes": "2025-02", "pct": 0.99 if codigo == 4391 else 0.5},
-                {"mes": "2025-03", "pct": 0.96 if codigo == 4391 else 0.3}]
+        return [("2025-02-01", 0.99 if codigo == 4391 else 0.5),
+                ("2025-03-01", 0.96 if codigo == 4391 else 0.3)]
 
     ind = Indices(db.connect(str(tmp_path / "x.db")), MercadoFalso(), bcb)
     s, falhas = ind.series("2025-02-01", "2025-03-31")

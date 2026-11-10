@@ -1,6 +1,10 @@
 "use strict";
 
-const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const _brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+// Modo privacidade: valores em reais aparecem como "R$ ••••" (percentuais continuam visíveis).
+let privado = false;
+try { privado = localStorage.getItem("privado") === "1"; } catch (e) { /* armazenamento indisponível */ }
+const brl = { format: v => privado ? "R$ ••••" : _brl.format(v) };
 const num = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 8 });
 const pct = (v, casas = 2) => v == null ? "—" : `${(v).toFixed(casas).replace(".", ",")}%`;
 const pctFrac = v => v == null ? "—" : pct(v * 100);
@@ -60,7 +64,7 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
   document.body.classList.remove("menu-aberto");
   window.scrollTo({ top: 0 });
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa }[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -150,6 +154,51 @@ function obterEvolucao() {
   return evolucaoCache.promessa;
 }
 let dadosVersao = 0;  // incrementado quando aportes/proventos mudam
+
+// ---------------- Renda fixa ----------------
+async function carregarRendaFixa() {
+  let r;
+  try { r = await api("/api/renda-fixa"); } catch (e) { return toast(e.message, true); }
+  const t = r.totais;
+  $("#cards-rf").innerHTML = [
+    ["Total aplicado", brl.format(t.aplicado), ""],
+    ["Valor bruto", brl.format(t.bruto), ""],
+    ["Rendimento", brlSinal(t.bruto - t.aplicado), classeSinal(t.bruto - t.aplicado)],
+    ["IR + IOF estimados", brl.format(t.ir + t.iof), "neg"],
+    ["Valor líquido", brl.format(t.liquido), ""],
+  ].map(([rot, v, c]) => `<div class="card"><div class="rotulo">${rot}</div><div class="valor ${c}">${v}</div></div>`).join("");
+  const venc = i => !i.vencimento ? "—" : `${fmtData(i.vencimento)}<small class="var-sub ${i.vencido ? "neg" : ""}">${
+    i.vencido ? "vencido" : `em ${i.dias_para_vencer} dias`}</small>`;
+  const FONTES = { curva: "taxa contratada", tesouro: "preço oficial", manual: "preço manual", custo: "sem preço" };
+  $("#tabela-rf").innerHTML = `<tr><th>Título</th><th>Indexador</th><th>Aplicado</th><th>Valor bruto</th><th>Rendimento</th><th>Impostos</th><th>Líquido</th><th>Vencimento</th><th></th></tr>` +
+    (r.itens.length ? r.itens.map(i => `<tr>
+      <td><strong>${esc(i.ticker)}</strong><small class="var-sub">${esc(FONTES[i.fonte] || i.fonte || "")}${i.erro ? ` · <span class="neg">${esc(i.erro)}</span>` : ""}</small></td>
+      <td>${i.indexador ? esc(descreverIndexador(i)) : `<span class="neg">não configurado</span>`}</td>
+      <td>${brl.format(i.aplicado)}</td><td>${brl.format(i.bruto)}</td>
+      <td class="${classeSinal(i.rendimento)}">${pctSinal(i.rendimento_pct)}<span class="var-sub">${brlSinal(i.rendimento)}</span></td>
+      <td>${i.ir == null ? "—" : brl.format(i.ir + i.iof)}${i.iof ? `<span class="var-sub">IOF ${brl.format(i.iof)}</span>` : ""}</td>
+      <td><strong>${i.liquido == null ? "—" : brl.format(i.liquido)}</strong></td><td>${venc(i)}</td>
+      <td><button class="link acao requer-edicao" data-configurar-rf="${esc(i.ticker)}">configurar</button></td></tr>`).join("")
+      : `<tr><td colspan="9">Nenhum título de renda fixa na carteira.</td></tr>`);
+  $("#aviso-rf").textContent = t.sem_configuracao
+    ? `${t.sem_configuracao} título(s) sem indexador: o valor vem do preço manual e o IR não é calculado. Clique em “configurar” para informar a taxa contratada.` : "";
+  const proximos = r.itens.filter(i => i.vencimento && !i.vencido).slice(0, 6);
+  $("#vencimentos-rf").innerHTML = proximos.length ? `<ol class="lista-vencimentos">${proximos.map(i => `<li>
+      <span class="data-venc">${fmtData(i.vencimento)}<small>${i.dias_para_vencer} dias</small></span>
+      <span><strong>${esc(i.ticker)}</strong><small>${esc(descreverIndexador(i))}</small></span>
+      <span class="valor-rank">${i.liquido == null ? brl.format(i.bruto) : brl.format(i.liquido)}<small>${i.liquido == null ? "bruto" : "líquido estimado"}</small></span></li>`).join("")}</ol>`
+    : `<p class="dica">Nenhum vencimento informado. Cadastre o vencimento em “configurar”.</p>`;
+}
+
+$("#tabela-rf").addEventListener("click", async ev => {
+  const t = ev.target.dataset.configurarRf;
+  if (!t) return;
+  document.querySelector('nav button[data-tab="ativos"]').click();
+  await carregarAtivos();
+  const a = ativosCache.find(x => x.ticker === t);
+  if (a) document.querySelector(`#tabela-ativos [data-editar="${CSS.escape(t)}"]`)?.click();
+  else { const f = $("#form-ativo"); f.reset(); f.ticker.value = t; f.classe.value = "renda_fixa"; atualizarCamposRF(); }
+});
 
 // ---------------- Rentabilidade ----------------
 const MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -508,17 +557,36 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
 });
 
 // ---------------- Ativos ----------------
+const NOMES_INDEXADOR = { cdi: "% do CDI", selic: "% da Selic", ipca: "IPCA +", pre: "Prefixado", tesouro: "Tesouro (preço oficial)" };
+function descreverIndexador(a) {
+  const taxa = a.taxa == null ? "" : String(a.taxa).replace(".", ",");
+  const txt = a.indexador === "cdi" ? `${taxa}% do CDI` : a.indexador === "selic" ? `${taxa}% da Selic`
+    : a.indexador === "ipca" ? `IPCA + ${taxa}%` : a.indexador === "pre" ? `Pré ${taxa}% a.a.` : NOMES_INDEXADOR[a.indexador] || "";
+  return txt + (a.isento_ir ? " · isento" : "");
+}
+function atualizarCamposRF() {
+  const f = $("#form-ativo"), rf = f.classe.value === "renda_fixa" || !!f.indexador.value;
+  document.querySelectorAll(".campos-rf").forEach(e => e.classList.toggle("oculto", !rf));
+  const idx = f.indexador.value;
+  f.querySelector(".campo-taxa").classList.toggle("oculto", !idx || idx === "tesouro");
+  f.taxa.placeholder = { cdi: "ex.: 110", selic: "ex.: 100", ipca: "ex.: 6,2", pre: "ex.: 12,5" }[idx] || "";
+  f.preco_manual.closest("label").classList.toggle("oculto", !!idx);
+}
+$("#form-ativo").classe.addEventListener("change", atualizarCamposRF);
+$("#form-ativo").indexador.addEventListener("change", atualizarCamposRF);
+$("#form-ativo").addEventListener("reset", () => setTimeout(atualizarCamposRF));
+
 let ativosCache = [];
 async function carregarAtivos() {
   try { ativosCache = await api("/api/ativos"); } catch (e) { return toast(e.message, true); }
   const soma = ativosCache.reduce((s, a) => s + a.meta_pct, 0);
   $("#soma-metas").textContent = `soma das metas: ${pct(soma)}`;
-  $("#tabela-ativos").innerHTML = `<tr><th>Ticker</th><th>Nome</th><th>Classe</th><th>Meta</th><th>Meta normalizada</th><th>Preço manual</th><th></th></tr>` +
+  $("#tabela-ativos").innerHTML = `<tr><th>Ticker</th><th>Nome</th><th>Classe</th><th>Meta</th><th>Meta normalizada</th><th>Preço / cálculo</th><th></th></tr>` +
     (ativosCache.length ? ativosCache.map(a => `<tr>
       <td><strong>${esc(a.ticker)}</strong></td><td>${esc(a.nome)}</td><td>${esc(CLASSES[a.classe] || a.classe)}</td>
       <td>${pct(a.meta_pct)}</td>
       <td><div class="barra" title="${pct(soma ? a.meta_pct / soma * 100 : 0)}"><span style="width:${soma ? a.meta_pct / soma * 100 : 0}%"></span></div></td>
-      <td>${a.preco_manual == null ? "—" : brl.format(a.preco_manual)}</td>
+      <td>${a.indexador ? esc(descreverIndexador(a)) : a.preco_manual == null ? "—" : brl.format(a.preco_manual)}</td>
       <td><span class="requer-edicao"><button class="link editar" data-editar="${esc(a.ticker)}">editar</button><button class="link" data-remover-ativo="${esc(a.ticker)}">excluir</button></span></td>
     </tr>`).join("") : `<tr><td colspan="7">Nenhum ativo cadastrado.</td></tr>`);
 }
@@ -533,7 +601,9 @@ $("#tabela-ativos").addEventListener("click", async ev => {
   const editar = ev.target.dataset.editar, remover = ev.target.dataset.removerAtivo;
   if (editar) {
     const a = ativosCache.find(x => x.ticker === editar), f = $("#form-ativo");
-    for (const k of ["ticker", "nome", "classe", "meta_pct", "preco_manual"]) f[k].value = a[k] ?? "";
+    for (const k of ["ticker", "nome", "classe", "meta_pct", "preco_manual", "indexador", "taxa", "vencimento"]) f[k].value = a[k] ?? "";
+    f.isento_ir.checked = !!a.isento_ir;
+    atualizarCamposRF();
     f.scrollIntoView({ behavior: "smooth" });
   } else if (remover && confirm(`Excluir ${remover}?`)) {
     try { await api(`/api/ativos/${encodeURIComponent(remover)}`, { method: "DELETE" }); toast("Ativo excluído."); carregarAtivos(); }
@@ -816,7 +886,7 @@ function recarregarAbaAtual() {
   $("#resultado-sugestao").innerHTML = "";
   $("#resultado-estimar").innerHTML = "";
   const aba = document.querySelector("nav button.ativo")?.dataset.tab;
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade }[aba] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa }[aba] || (() => {}))();
 }
 
 $("#sel-carteira").addEventListener("change", ev => {
@@ -837,6 +907,7 @@ let carteiraAcessos = null;
 
 async function carregarAcessos() {
   await carregarCarteiras();
+  carregarBackup();
   const gerenciaveis = carteiras.filter(c => c.permissoes.gerenciar);
   if (USUARIO.admin) {
     try { usuariosCache = await api("/api/usuarios"); } catch (e) { toast(e.message, true); }
@@ -983,6 +1054,37 @@ document.addEventListener("keydown", ev => { if (ev.key === "Escape") document.b
   const data = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   $("#data-hoje").textContent = data.charAt(0).toUpperCase() + data.slice(1);
 })();
+
+// ---------------- Modo privacidade ----------------
+function aplicarPrivacidade() {
+  document.body.classList.toggle("privado", privado);
+  const b = $("#btn-privacidade");
+  b.setAttribute("aria-pressed", String(privado));
+  b.title = privado ? "Mostrar valores" : "Ocultar valores (modo privacidade)";
+}
+$("#btn-privacidade").addEventListener("click", () => {
+  privado = !privado;
+  try { localStorage.setItem("privado", privado ? "1" : "0"); } catch (e) { /* ignora */ }
+  aplicarPrivacidade();
+  recarregarAbaAtual();
+});
+aplicarPrivacidade();
+
+// ---------------- Cópia de segurança ----------------
+async function carregarBackup() {
+  if (!USUARIO.admin) return;
+  let r;
+  try { r = await api("/api/backup"); } catch (e) { return; }
+  $("#pasta-backup").textContent = r.pasta;
+  const tam = b => b > 1048576 ? `${(b / 1048576).toFixed(1).replace(".", ",")} MB` : `${Math.ceil(b / 1024)} KB`;
+  $("#tabela-backup").innerHTML = `<tr><th>Arquivo</th><th>Feita em</th><th>Tamanho</th></tr>` +
+    (r.copias.length ? r.copias.slice(0, 10).map(c => `<tr><td>${esc(c.nome)}</td><td>${fmtData(c.modificado.slice(0, 10))} ${c.modificado.slice(11)}</td><td>${tam(c.tamanho)}</td></tr>`).join("")
+      : `<tr><td colspan="3">Nenhuma cópia ainda. A primeira é feita ao iniciar o servidor.</td></tr>`);
+}
+$("#btn-backup-agora").addEventListener("click", async () => {
+  try { await api("/api/backup", { method: "POST" }); toast("Cópia de segurança feita."); carregarBackup(); }
+  catch (e) { toast(e.message, true); }
+});
 
 // ---------------- Início ----------------
 $("#form-aporte").data.value = new Date().toISOString().slice(0, 10);

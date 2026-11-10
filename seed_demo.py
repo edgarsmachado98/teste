@@ -16,13 +16,21 @@ CARTEIRA_EDGAR = {
         ("ITUB4", "Itaú Unibanco", "acao", 15), ("VALE3", "Vale", "acao", 15),
         ("WEGE3", "WEG", "acao", 10), ("KNRI11", "Kinea Renda Imobiliária", "fii", 15),
         ("HGLG11", "CSHG Logística", "fii", 10), ("IVVB11", "iShares S&P 500", "etf", 20),
-        ("TESOURO-IPCA", "Tesouro IPCA+ 2035", "renda_fixa", 15),
+        ("TESOURO IPCA+ 2035", "Tesouro IPCA+ 2035", "renda_fixa", 10),
+        ("CDB BANCO EXEMPLO", "CDB 110% CDI", "renda_fixa", 5),
+        ("LCA AGRO EXEMPLO", "LCA 95% CDI", "renda_fixa", 0),
     ],
+    "renda_fixa": {
+        "TESOURO IPCA+ 2035": {"indexador": "tesouro"},
+        "CDB BANCO EXEMPLO": {"indexador": "cdi", "taxa": 110, "vencimento": "2027-06-15"},
+        "LCA AGRO EXEMPLO": {"indexador": "cdi", "taxa": 95, "vencimento": "2026-12-10", "isento_ir": True},
+    },
     "aportes": [
         ("2025-01-10", "ITUB4", 100, 31.50), ("2025-01-10", "KNRI11", 20, 138.0),
         ("2025-02-12", "VALE3", 50, 58.20), ("2025-03-11", "IVVB11", 15, 320.0),
         ("2025-04-09", "WEGE3", 30, 52.0), ("2025-05-13", "HGLG11", 10, 158.0),
-        ("2025-06-10", "TESOURO-IPCA", 2, 2150.0), ("2025-08-12", "ITUB4", 50, 35.1),
+        ("2025-06-10", "TESOURO IPCA+ 2035", 2, 2150.0), ("2025-08-12", "ITUB4", 50, 35.1),
+        ("2025-03-05", "CDB BANCO EXEMPLO", 1, 5000.0), ("2025-12-10", "LCA AGRO EXEMPLO", 1, 3000.0),
     ],
 }
 
@@ -30,19 +38,24 @@ CARTEIRA_ELIANDRA = {
     "ativos": [
         ("BBAS3", "Banco do Brasil", "acao", 20), ("TAEE11", "Taesa", "acao", 20),
         ("MXRF11", "Maxi Renda", "fii", 25), ("BOVA11", "iShares Ibovespa", "etf", 15),
-        ("TESOURO-SELIC", "Tesouro Selic 2029", "renda_fixa", 20),
+        ("TESOURO SELIC 2029", "Tesouro Selic 2029", "renda_fixa", 20),
+        ("CDB IPCA EXEMPLO", "CDB IPCA + 6,5%", "renda_fixa", 0),
     ],
+    "renda_fixa": {
+        "TESOURO SELIC 2029": {"indexador": "tesouro"},
+        "CDB IPCA EXEMPLO": {"indexador": "ipca", "taxa": 6.5, "vencimento": "2029-05-15"},
+    },
     "aportes": [
         ("2025-02-05", "BBAS3", 40, 27.0), ("2025-02-05", "MXRF11", 150, 9.6),
         ("2025-04-07", "TAEE11", 30, 34.0), ("2025-06-09", "BOVA11", 10, 128.0),
-        ("2025-07-08", "TESOURO-SELIC", 1, 15800.0), ("2025-09-10", "MXRF11", 100, 9.9),
+        ("2025-07-08", "TESOURO SELIC 2029", 1, 15800.0), ("2025-10-06", "CDB IPCA EXEMPLO", 1, 4000.0), ("2025-09-10", "MXRF11", 100, 9.9),
     ],
 }
 
 
 def preco_na_data(ticker, data, padrao):
     """No modo demo usa o preço simulado da data, para a carteira ficar coerente."""
-    if not modo_demo() or ticker.startswith("TESOURO"):
+    if not modo_demo() or ticker.startswith(("TESOURO", "CDB", "LCA")):
         return padrao
     serie = dict(serie_simulada(ticker))
     datas = [d for d in sorted(serie) if d <= data]
@@ -51,11 +64,8 @@ def preco_na_data(ticker, data, padrao):
 
 def popular(c, dados):
     for t, n, cl, m in dados["ativos"]:
-        preco_manual = None
-        if cl == "renda_fixa":
-            preco_manual = 2400 if "IPCA" in t else 16900
         c.post("/api/ativos", json={"ticker": t, "nome": n, "classe": cl, "meta_pct": m,
-                                    "preco_manual": preco_manual})
+                                    **dados.get("renda_fixa", {}).get(t, {})})
     for d, t, q, p in dados["aportes"]:
         c.post("/api/aportes", json={"data": d, "ticker": t, "quantidade": q,
                                      "preco": preco_na_data(t, d, p)})

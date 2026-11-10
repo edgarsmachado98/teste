@@ -281,3 +281,20 @@ body:not(.admin) .so-admin { display: none !important; }
 .tabela-rentabilidade .rel td { color: var(--suave); font-size: .76rem; }
 .tabela-rentabilidade td.total { font-weight: 700; background: var(--painel-2); }
 #sel-carteira option[value="todas"] { font-weight: 700; }
+
+/* --------------------------------------------------------- renda fixa */
+.campos-rf.form-linha { flex-basis: 100%; padding: 12px; border-radius: 10px; background: var(--painel-2); }
+.lista-vencimentos { list-style: none; margin: 0; padding: 0; }
+.lista-vencimentos li { display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+.lista-vencimentos li:last-child { border-bottom: 0; }
+.lista-vencimentos small { display: block; color: var(--suave); font-size: .76rem; }
+.data-venc { font-weight: 700; }
+
+/* ------------------------------------------------------ modo privacidade */
+.btn-privacidade { color: var(--suave); border: 1px solid var(--borda); background: var(--painel); margin-left: auto; }
+.btn-privacidade:hover { color: var(--texto); }
+.btn-privacidade .olho-fechado, body.privado .btn-privacidade .olho-aberto { display: none; }
+body.privado .btn-privacidade .olho-fechado { display: block; }
+body.privado .btn-privacidade { color: var(--primaria); border-color: var(--primaria); }
+.topo-dir { margin-left: 0; }
+a.btn.secundario { background: var(--painel); color: var(--texto); border: 1px solid var(--borda); }

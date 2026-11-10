@@ -1,10 +1,12 @@
 """Servidor web: gestão de aportes e análise de mercado."""
+import bisect
 import datetime as dt
+import io
 import os
 import secrets
 import time
 
-from flask import Flask, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
 
 
@@ -23,7 +25,9 @@ def carregar_env(caminho=".env"):
 
 carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-from carteira import analysis, auth, db, evolucao, portfolio, providers  # noqa: E402  (após carregar o .env)
+from carteira import analysis, auth, db, evolucao, portfolio, providers, rendafixa  # noqa: E402  (após o .env)
+from carteira.tesouro import Tesouro  # noqa: E402
+from carteira import backup  # noqa: E402
 from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
@@ -48,7 +52,7 @@ MAX_TENTATIVAS = 5
 BLOQUEIO_SEG = 300
 
 
-def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None):
+def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None, fonte_tesouro=None):
     app = Flask(__name__)
     app.secret_key = secret_key or chave_secreta(db_path)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
@@ -57,6 +61,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     conn = db.connect(db_path)
     mercado = Mercado(conn, fonte_mercado)
     indices = Indices(conn, mercado, fonte_bcb)
+    tesouro = Tesouro(conn, fonte_tesouro)
     app.config["conn"] = conn
     tentativas = {}  # (email, ip) -> [falhas, bloqueado_ate]
 
@@ -220,6 +225,32 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         conn.commit()
         return jsonify({"ok": True})
 
+    # ---------- Cópia de segurança (administrador) ----------
+    @app.get("/api/backup")
+    def api_backup():
+        exigir_admin()
+        pasta = backup.pasta_padrao(conn.path)
+        return jsonify({"pasta": pasta, "copias": [{k: c[k] for k in ("nome", "tamanho", "modificado")}
+                                                   for c in backup.listar(pasta)]})
+
+    @app.post("/api/backup")
+    def api_fazer_backup():
+        exigir_admin()
+        caminho = backup.fazer_backup(conn.path)
+        return jsonify({"ok": True, "arquivo": caminho}), 201
+
+    @app.get("/api/backup/baixar")
+    def api_baixar_backup():
+        exigir_admin()
+        nome = f"carteira-{dt.datetime.now().strftime('%Y-%m-%d-%H%M')}.db"
+        caminho = backup.fazer_backup(conn.path, nome=f"download-{nome}")
+        try:
+            dados = open(caminho, "rb").read()
+        finally:
+            os.remove(caminho)
+        return send_file(io.BytesIO(dados), as_attachment=True, download_name=nome,
+                         mimetype="application/vnd.sqlite3")
+
     # ---------- Carteiras e acessos ----------
     @app.post("/api/carteiras")
     def api_criar_carteira():
@@ -295,12 +326,84 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         f, ids = filtro_carteiras(cids)
         return db.rows(conn.execute(f"SELECT * FROM aportes WHERE {f} ORDER BY data DESC, id DESC", ids))
 
-    def cotacoes(ativos, aportes):
-        """Preço atual (manual ou de mercado), fonte, fechamento anterior e histórico de cada ativo."""
+    def configs_renda_fixa(ativos):
+        cfg = {}
+        for a in ativos:
+            if (a.get("indexador") or "") in rendafixa.INDEXADORES and a["ticker"] not in cfg:
+                cfg[a["ticker"]] = a
+        return cfg
+
+    def avaliar_renda_fixa(ativos, aportes, datas):
+        """Valor dos títulos com indexador configurado em cada data: ({ticker: {data: resultado}}, erros)."""
+        cfg = configs_renda_fixa(ativos)
+        por_ticker = {}
+        for a in aportes:
+            if a["ticker"] in cfg:
+                por_ticker.setdefault(a["ticker"], []).append(a)
+        if not por_ticker:
+            return {}, {}
+        hoje_ = hoje()
+        inicio = min(a["data"] for lista in por_ticker.values() for a in lista)
+        usados = {cfg[t]["indexador"] for t in por_ticker}
+        idx, erros = {}, {}
+        for nome in ("cdi", "selic"):
+            if nome in usados:
+                try:
+                    idx[nome] = indices.diaria(nome, inicio, hoje_)
+                except Exception as e:
+                    erros.update({t: f"{nome.upper()} indisponível: {e}" for t in por_ticker if cfg[t]["indexador"] == nome})
+        if "ipca" in usados:
+            try:
+                idx["ipca"] = indices.ipca_mensal(inicio, hoje_)
+            except Exception as e:
+                erros.update({t: f"IPCA indisponível: {e}" for t in por_ticker if cfg[t]["indexador"] == "ipca"})
+        pus = {}
+        titulos = {t: (cfg[t].get("nome") or t if not t.upper().startswith("TESOURO") else t, cfg[t].get("vencimento"))
+                   for t in por_ticker if cfg[t]["indexador"] == "tesouro"}
+        if titulos:
+            pus, erros_t, venc_t = tesouro.precos(titulos, demo=modo_demo())
+            erros.update(erros_t)
+            for t, venc in venc_t.items():  # vencimento oficial do título, se não foi informado
+                if venc and not cfg[t].get("vencimento"):
+                    cfg[t] = {**cfg[t], "vencimento": venc}
+        g.vencimentos_tesouro = {t: cfg[t].get("vencimento") for t in titulos}
+        resultado = {}
+        for t, lista in por_ticker.items():
+            if t in erros:
+                continue
+            serie_pu = pus.get(t) or []
+            datas_pu = [d for d, _ in serie_pu]
+            resultado[t] = {}
+            for d in datas:
+                i = bisect.bisect_right(datas_pu, d) if serie_pu else 0
+                pu = serie_pu[i - 1][1] if i else None
+                resultado[t][d] = rendafixa.avaliar(cfg[t], lista, d, idx, pu)
+        return resultado, erros
+
+    def cotacoes(ativos, aportes, com_series=False):
+        """Preço atual (renda fixa pela curva, manual ou de mercado), fonte, fechamento anterior e histórico."""
         manuais = {a["ticker"]: a["preco_manual"] for a in ativos if a["preco_manual"]}
         tickers = {a["ticker"] for a in ativos} | {a["ticker"] for a in aportes}
         precos, fontes, anteriores, series = {}, {}, {}, {}
+        hoje_ = hoje()
+        datas = [hoje_]
+        if com_series and aportes:  # fins de mês desde o primeiro aporte, para a evolução
+            primeiro = min(a["data"] for a in aportes)
+            fins = (evolucao._fim_do_mes(ano, mes).isoformat() for ano, mes in evolucao.meses_entre(primeiro, hoje_))
+            datas = sorted({f for f in fins if f < hoje_} | {hoje_})
+        rf, _ = avaliar_renda_fixa(ativos, aportes, datas)
+        for t, por_data in rf.items():
+            atual = por_data.get(hoje_)
+            if not atual or not atual["preco_unitario"]:
+                continue
+            precos[t] = atual["preco_unitario"]
+            fontes[t] = "tesouro" if configs_renda_fixa(ativos)[t]["indexador"] == "tesouro" else "curva"
+            if com_series:
+                series[t] = [(d, r["preco_unitario"]) for d, r in sorted(por_data.items())
+                             if r and r["preco_unitario"]]
         for t in tickers:
+            if t in precos:
+                continue
             if manuais.get(t):
                 precos[t], fontes[t] = float(manuais[t]), "manual"
                 continue
@@ -330,7 +433,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
 
     @app.get("/")
     def index():
-        return render_template("index.html", classes=portfolio.CLASSES,
+        return render_template("index.html", classes=portfolio.CLASSES, indexadores=rendafixa.INDEXADORES,
                                tipos_provento=portfolio.TIPOS_PROVENTO, demo=modo_demo(),
                                usuario=auth.publico(g.usuario))
 
@@ -349,19 +452,29 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         classe = d.get("classe") or "acao"
         if classe not in portfolio.CLASSES:
             return erro("Classe inválida.")
+        indexador = (d.get("indexador") or "").lower() or None
+        if indexador and indexador not in rendafixa.INDEXADORES:
+            return erro("Indexador inválido.")
         try:
             meta = float(d.get("meta_pct") or 0)
             manual = float(d["preco_manual"]) if d.get("preco_manual") not in (None, "") else None
+            taxa = float(str(d["taxa"]).replace(",", ".")) if d.get("taxa") not in (None, "") else None
+            vencimento = dt.date.fromisoformat(d["vencimento"]).isoformat() if d.get("vencimento") else None
         except (TypeError, ValueError):
-            return erro("Meta e preço manual devem ser numéricos.")
+            return erro("Meta, preço manual, taxa e vencimento devem ser válidos.")
         if meta < 0:
             return erro("A meta não pode ser negativa.")
+        if indexador in ("cdi", "selic", "ipca", "pre") and taxa is None:
+            return erro("Informe a taxa contratada (ex.: 110 para 110% do CDI, 6 para IPCA + 6%).")
         conn.execute(
-            """INSERT INTO ativos (carteira_id, ticker, nome, classe, meta_pct, preco_manual)
-               VALUES (?, ?, ?, ?, ?, ?)
+            """INSERT INTO ativos (carteira_id, ticker, nome, classe, meta_pct, preco_manual,
+                                  indexador, taxa, vencimento, isento_ir)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(carteira_id, ticker) DO UPDATE SET nome=excluded.nome, classe=excluded.classe,
-               meta_pct=excluded.meta_pct, preco_manual=excluded.preco_manual""",
-            (cid, ticker, d.get("nome") or "", classe, meta, manual))
+               meta_pct=excluded.meta_pct, preco_manual=excluded.preco_manual, indexador=excluded.indexador,
+               taxa=excluded.taxa, vencimento=excluded.vencimento, isento_ir=excluded.isento_ir""",
+            (cid, ticker, d.get("nome") or "", classe, meta, manual, indexador, taxa, vencimento,
+             int(bool(d.get("isento_ir")))))
         conn.commit()
         return jsonify({"ok": True, "ticker": ticker}), 201
 
@@ -454,13 +567,62 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             resumo["por_carteira"].sort(key=lambda x: -x["valor"])
         return jsonify(resumo)
 
+    # ---------- Renda fixa ----------
+    @app.get("/api/renda-fixa")
+    def api_renda_fixa():
+        cids = carteiras_leitura()
+        ativos, aportes = listar_ativos(cids), listar_aportes(cids)
+        hoje_ = hoje()
+        posicoes = portfolio.calcular_posicoes(aportes)
+        cfg = configs_renda_fixa(ativos)
+        rf, erros = avaliar_renda_fixa(ativos, aportes, [hoje_])
+        vistos, itens = set(), []
+        for a in ativos:
+            t = a["ticker"]
+            if t in vistos or not (a["classe"] == "renda_fixa" or t in cfg):
+                continue
+            vistos.add(t)
+            p = posicoes.get(t)
+            if not p or p["quantidade"] <= 0:
+                continue
+            c = cfg.get(t, a)
+            if getattr(g, "vencimentos_tesouro", {}).get(t) and not c.get("vencimento"):
+                c = {**c, "vencimento": g.vencimentos_tesouro[t]}
+            r = (rf.get(t) or {}).get(hoje_)
+            item = {"ticker": t, "nome": a.get("nome") or "", "indexador": c.get("indexador"),
+                    "taxa": c.get("taxa"), "vencimento": c.get("vencimento"), "isento_ir": bool(c.get("isento_ir")),
+                    "quantidade": p["quantidade"], "aplicado": p["custo"], "erro": erros.get(t)}
+            if r:
+                item.update({k: r[k] for k in ("bruto", "ir", "iof", "liquido", "rendimento", "dias_para_vencer",
+                                                "vencido")})
+                item["fonte"] = "tesouro" if c.get("indexador") == "tesouro" else "curva"
+            else:  # sem indexador (ou índice indisponível): preço manual, sem cálculo de impostos
+                valor = p["quantidade"] * a["preco_manual"] if a.get("preco_manual") else p["custo"]
+                venc = c.get("vencimento")
+                item.update({"bruto": valor, "ir": None, "iof": None, "liquido": None,
+                             "rendimento": valor - p["custo"], "fonte": "manual" if a.get("preco_manual") else "custo",
+                             "dias_para_vencer": (dt.date.fromisoformat(venc) - dt.date.fromisoformat(hoje_)).days
+                             if venc else None, "vencido": bool(venc and venc <= hoje_)})
+            item["rendimento_pct"] = item["rendimento"] / item["aplicado"] * 100 if item["aplicado"] else None
+            itens.append(item)
+        itens.sort(key=lambda x: (x["dias_para_vencer"] is None, x["dias_para_vencer"] or 0))
+        com_liquido = [i for i in itens if i["liquido"] is not None]
+        return jsonify({
+            "itens": itens, "indexadores": rendafixa.INDEXADORES,
+            "totais": {"aplicado": sum(i["aplicado"] for i in itens), "bruto": sum(i["bruto"] for i in itens),
+                       "ir": sum(i["ir"] or 0 for i in itens), "iof": sum(i["iof"] or 0 for i in itens),
+                       "liquido": sum(i["liquido"] for i in com_liquido) + sum(i["bruto"] for i in itens
+                                                                                if i["liquido"] is None),
+                       "sem_configuracao": sum(1 for i in itens if not i["indexador"])},
+        })
+
     # ---------- Evolução e rentabilidade ----------
     @app.get("/api/evolucao")
     def api_evolucao():
         cids = carteiras_leitura()
         aportes = listar_aportes(cids)
         hoje_ = hoje()
-        precos, _, _, series = cotacoes(listar_ativos(cids), aportes)
+        precos, _, _, series = cotacoes(listar_ativos(cids), aportes, com_series=True)
         ev = evolucao.calcular_evolucao(aportes, listar_proventos(cids), series, precos, hoje_)
         referencias, falhas = {}, {}
         if ev["meses"]:
@@ -796,5 +958,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
 
 
 if __name__ == "__main__":
-    create_app().run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
-                     debug=os.environ.get("FLASK_DEBUG") == "1")
+    aplicacao = create_app()
+    if os.environ.get("CARTEIRA_BACKUP", "1") != "0":
+        backup.iniciar_automatico(aplicacao.config["conn"].path)
+    aplicacao.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
+                  debug=os.environ.get("FLASK_DEBUG") == "1")

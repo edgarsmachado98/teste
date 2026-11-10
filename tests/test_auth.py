@@ -162,3 +162,19 @@ def test_requisicoes_em_paralelo(novo_app):
     with ThreadPoolExecutor(8) as ex:
         resultados = list(ex.map(consulta, range(24)))
     assert all(r == [200, 200, 200] for r in resultados)
+
+
+def test_backup(novo_app, tmp_path, monkeypatch):
+    import sqlite3
+    monkeypatch.setenv("CARTEIRA_BACKUP_DIR", str(tmp_path / "copias"))
+    _, edgar, eliandra, c_edgar, _ = preparar(novo_app)
+    com_carteira(edgar, c_edgar).post("/api/aportes", json=APORTE)
+    assert eliandra.get("/api/backup").status_code == 403  # só administradores
+    assert edgar.post("/api/backup").status_code == 201
+    copias = edgar.get("/api/backup").get_json()["copias"]
+    assert len(copias) == 1 and copias[0]["nome"].startswith("carteira-")
+    copia = sqlite3.connect(tmp_path / "copias" / copias[0]["nome"])
+    assert copia.execute("SELECT COUNT(*) FROM aportes").fetchone()[0] == 1
+    r = edgar.get("/api/backup/baixar")
+    assert r.status_code == 200 and r.data[:15] == b"SQLite format 3"
+    assert len(edgar.get("/api/backup").get_json()["copias"]) == 1  # o arquivo baixado não fica na pasta

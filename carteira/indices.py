@@ -20,9 +20,12 @@ SERIES_BCB = {"cdi": 4391, "ipca": 433}
 NOMES = {"cdi": "CDI", "ipca": "IPCA", "ibov": "Ibovespa"}
 
 
-def buscar_bcb(codigo, inicio, fim):
-    """Série mensal do SGS como [{"mes": "AAAA-MM", "pct": float}]."""
-    resp = requests.get(BCB_URL.format(codigo=codigo), timeout=15, params={
+SERIES_DIARIAS = {"cdi": 12, "selic": 11}  # % ao dia, por dia útil
+
+
+def buscar_bcb_bruto(codigo, inicio, fim):
+    """Série do SGS como [(data ISO, valor)]."""
+    resp = requests.get(BCB_URL.format(codigo=codigo), timeout=20, params={
         "formato": "json",
         "dataInicial": dt.date.fromisoformat(inicio).strftime("%d/%m/%Y"),
         "dataFinal": dt.date.fromisoformat(fim).strftime("%d/%m/%Y")})
@@ -30,7 +33,22 @@ def buscar_bcb(codigo, inicio, fim):
     out = []
     for item in resp.json():
         d, m, a = item["data"].split("/")
-        out.append({"mes": f"{a}-{m}", "pct": float(str(item["valor"]).replace(",", "."))})
+        out.append((f"{a}-{m}-{d}", float(str(item["valor"]).replace(",", "."))))
+    return out
+
+
+def buscar_bcb(codigo, inicio, fim):
+    """Série mensal do SGS como [{"mes": "AAAA-MM", "pct": float}]."""
+    return [{"mes": d[:7], "pct": v} for d, v in buscar_bcb_bruto(codigo, inicio, fim)]
+
+
+def _diaria_simulada(nome, inicio, fim):
+    rng = random.Random("diaria-" + nome)
+    d, fim_d, out = dt.date.fromisoformat(inicio), dt.date.fromisoformat(fim), []
+    while d <= fim_d:
+        if d.weekday() < 5:
+            out.append((d.isoformat(), round(0.0455 + rng.uniform(-0.002, 0.002), 6)))
+        d += dt.timedelta(days=1)
     return out
 
 
@@ -59,8 +77,27 @@ def mensal_de_diario(serie):
 
 class Indices:
     def __init__(self, conn, mercado, fonte_bcb=None):
+        """fonte_bcb(codigo, inicio, fim) -> [(data ISO, valor)] (padrão: API do Banco Central)."""
         self.conn, self.mercado = conn, mercado
-        self.fonte_bcb = fonte_bcb or buscar_bcb
+        self.fonte_bcb_bruta = fonte_bcb or buscar_bcb_bruto
+        self.fonte_bcb = lambda c, i, f: [{"mes": d[:7], "pct": v} for d, v in self.fonte_bcb_bruta(c, i, f)]
+
+    def diaria(self, nome, inicio, fim):
+        """CDI ou Selic diários [(data, % a.d.)] desde `inicio` (cache por ano inicial)."""
+        if modo_demo():
+            return _diaria_simulada(nome, inicio, fim)
+        codigo = SERIES_DIARIAS[nome]
+        ini = f"{inicio[:4]}-01-01"
+        dados = self._cache(f"BCB:{codigo}:{ini}", lambda: self.fonte_bcb_bruta(codigo, ini, fim))
+        return [tuple(x) for x in dados if x[0] >= inicio]
+
+    def ipca_mensal(self, inicio, fim):
+        """{"AAAA-MM": %} do IPCA desde o mês de `inicio`."""
+        if modo_demo():
+            return {x["mes"]: x["pct"] for x in _simulado("ipca", inicio, fim)}
+        ini = f"{inicio[:4]}-01-01"
+        dados = self._cache(f"BCB:433:{ini}", lambda: self.fonte_bcb(433, ini, fim))
+        return {x["mes"]: x["pct"] for x in dados}
 
     def _cache(self, chave, gerar):
         hoje = dt.date.today().isoformat()

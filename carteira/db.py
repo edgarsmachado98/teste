@@ -187,12 +187,29 @@ class Conexao:
             self._local.conn = None
 
 
+# Colunas acrescentadas depois da criação das tabelas: (tabela, coluna, definição).
+COLUNAS_NOVAS = [
+    # Renda fixa: como calcular o valor atual do título
+    ("ativos", "indexador", "TEXT"),            # cdi | selic | ipca | pre | tesouro | NULL (manual/mercado)
+    ("ativos", "taxa", "REAL"),                 # % do CDI/Selic, taxa real (IPCA+) ou taxa prefixada, ao ano
+    ("ativos", "vencimento", "TEXT"),
+    ("ativos", "isento_ir", "INTEGER NOT NULL DEFAULT 0"),  # LCI, LCA, CRI, CRA, debêntures incentivadas
+]
+
+
+def adicionar_colunas(conn):
+    for tabela, coluna, definicao in COLUNAS_NOVAS:
+        if coluna not in _colunas(conn, tabela):
+            conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
+
+
 def connect(path=None):
     path = path or os.environ.get("CARTEIRA_DB", "carteira.db")
     inicial = _abrir(path)
     inicial.execute("PRAGMA foreign_keys = OFF")
     inicial.executescript(SCHEMA)
     migrar(inicial)
+    adicionar_colunas(inicial)
     inicial.executescript(INDICES)
     inicial.execute("PRAGMA journal_mode = WAL")  # leituras não bloqueiam escritas
     inicial.commit()
