@@ -73,6 +73,10 @@ async function carregarCarteira() {
     ["Yield on cost (12 meses)", pct(c.proventos.yoc_pct)],
   ].map(([r, v]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div></div>`).join("");
 
+  carteiraResumo = c;
+  coresClasse = Object.fromEntries(c.categorias.map((cat, i) => [cat.classe, PALETA[i % PALETA.length]]));
+  renderCategorias();
+  renderRanking();
   const comPosicao = c.ativos.filter(a => a.quantidade > 0);
   $("#tabela-posicoes").innerHTML = `<tr><th>Ativo</th><th>Classe</th><th>Qtd.</th><th>Preço médio</th><th>Preço atual</th>
     <th>Valor</th><th>Resultado</th><th>Proventos 12m</th><th>YoC</th><th>Peso</th><th>Meta</th><th>Desvio</th></tr>` +
@@ -104,7 +108,7 @@ async function carregarCarteira() {
   });
   grafico("graf-classe", {
     type: "doughnut",
-    data: { labels: c.por_classe.map(x => x.rotulo), datasets: [{ data: c.por_classe.map(x => x.valor), backgroundColor: PALETA }] },
+    data: { labels: c.por_classe.map(x => x.rotulo), datasets: [{ data: c.por_classe.map(x => x.valor), backgroundColor: c.por_classe.map(x => corClasse(x.classe)) }] },
     options: { aspectRatio: 1.8, plugins: { legend: { position: "right" }, tooltip: { callbacks: { label: x => `${x.label}: ${brl.format(x.raw)} (${pct(c.por_classe[x.dataIndex].pct)})` } } } },
   });
   grafico("graf-evolucao", {
@@ -118,6 +122,81 @@ async function carregarCarteira() {
     options: { scales: { y: { ticks: { callback: v => brl.format(v) } } }, plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl.format(x.raw)}` } } } },
   });
 }
+
+// ---------------- Visão geral por categoria e classificação ----------------
+let carteiraResumo = null;
+let coresClasse = {};
+const categoriasAbertas = new Set();
+const corClasse = classe => coresClasse[classe] || PALETA[8];
+const CHEVRON = `<svg class="chevron icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`;
+const pctSinal = v => v == null ? "—" : `${v > 0 ? "+" : ""}${pct(v)}`;
+const brlSinal = v => v == null ? "" : `${v > 0 ? "+" : ""}${brl.format(v)}`;
+
+function celulasMetricas(m) {
+  return `<td>${brl.format(m.valor)}</td>
+    <td><div class="peso"><div class="barra"><span style="width:${Math.min(m.peso_pct, 100)}%"></span></div>${pct(m.peso_pct)}</div></td>
+    <td class="${classeSinal(m.variacao_valor)}">${pctSinal(m.variacao_pct)}<span class="var-sub">${brlSinal(m.variacao_valor)}</span></td>
+    <td class="${classeSinal(m.rentabilidade_valor)}" title="Valorização: ${pctSinal(m.valorizacao_pct)} · Proventos: ${brl.format(m.proventos)}">
+      ${pctSinal(m.rentabilidade_pct)}<span class="var-sub">${brlSinal(m.rentabilidade_valor)}</span></td>`;
+}
+
+function renderCategorias() {
+  const c = carteiraResumo, t = $("#tabela-categorias");
+  if (!c.categorias.length) {
+    t.innerHTML = `<tr><td>Nenhuma posição. Registre aportes ou importe seus extratos na página “Aportes”.</td></tr>`;
+    return;
+  }
+  let html = `<tr><th>Categoria / ativo</th><th>Valor total</th><th>% na carteira</th><th>Variação (dia)</th><th>Rentabilidade</th></tr>`;
+  for (const cat of c.categorias) {
+    const aberta = categoriasAbertas.has(cat.classe);
+    html += `<tr class="linha-categoria ${aberta ? "aberta" : ""}" data-classe="${esc(cat.classe)}" tabindex="0" aria-expanded="${aberta}">
+      <td><div class="nome-categoria">${CHEVRON}<span class="bolinha" style="background:${corClasse(cat.classe)}"></span>${esc(cat.rotulo)}
+        <span class="qtd-ativos">${cat.quantidade_ativos} ${cat.quantidade_ativos === 1 ? "ativo" : "ativos"}</span></div></td>
+      ${celulasMetricas(cat)}</tr>`;
+    if (aberta) html += cat.ativos.map(a => `<tr class="linha-ativo">
+      <td><strong>${esc(a.ticker)}</strong><small>${num.format(a.quantidade)} × ${a.preco_atual == null ? "—" : brl.format(a.preco_atual)} · PM ${brl.format(a.preco_medio)}</small></td>
+      ${celulasMetricas(a)}</tr>`).join("");
+  }
+  html += `<tr class="linha-total"><td>Total da carteira</td>${celulasMetricas(c.total_categorias)}</tr>`;
+  t.innerHTML = html;
+  $("#btn-expandir-todas").textContent = categoriasAbertas.size === c.categorias.length ? "Recolher todas" : "Expandir todas";
+}
+
+function alternarCategoria(classe) {
+  categoriasAbertas.has(classe) ? categoriasAbertas.delete(classe) : categoriasAbertas.add(classe);
+  renderCategorias();
+}
+
+$("#tabela-categorias").addEventListener("click", ev => {
+  const linha = ev.target.closest(".linha-categoria");
+  if (linha) alternarCategoria(linha.dataset.classe);
+});
+$("#tabela-categorias").addEventListener("keydown", ev => {
+  const linha = ev.target.closest(".linha-categoria");
+  if (linha && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); alternarCategoria(linha.dataset.classe); }
+});
+$("#btn-expandir-todas").addEventListener("click", () => {
+  if (!carteiraResumo) return;
+  const todas = categoriasAbertas.size === carteiraResumo.categorias.length;
+  categoriasAbertas.clear();
+  if (!todas) carteiraResumo.categorias.forEach(c => categoriasAbertas.add(c.classe));
+  renderCategorias();
+});
+
+function renderRanking() {
+  if (!carteiraResumo) return;
+  const criterio = $("#criterio-ranking").value;
+  const r = carteiraResumo.ranking[criterio];
+  const campo = criterio === "rentabilidade" ? ["rentabilidade_pct", "rentabilidade_valor"] : ["variacao_pct", "variacao_valor"];
+  const lista = (itens, tipo) => itens.length ? `<ol class="${tipo}">${itens.map((a, i) => `<li>
+      <span class="pos-rank">${i + 1}</span>
+      <span class="nome-rank"><strong>${esc(a.ticker)}</strong><small>${esc(a.rotulo_classe)} · ${pct(a.peso_pct)} da carteira</small></span>
+      <span class="valor-rank ${classeSinal(a[campo[0]])}">${pctSinal(a[campo[0]])}<small>${brlSinal(a[campo[1]])}</small></span></li>`).join("")}</ol>`
+    : `<p class="dica">${criterio === "variacao" ? "Sem cotações do dia para comparar." : "Sem dados."}</p>`;
+  const nome = criterio === "rentabilidade" ? "rentabilidade" : "variação do dia";
+  $("#ranking").innerHTML = `<div><h4>Maior ${nome}</h4>${lista(r.melhores, "melhores")}</div><div><h4>Menor ${nome}</h4>${lista(r.piores, "piores")}</div>`;
+}
+$("#criterio-ranking").addEventListener("change", renderRanking);
 
 // ---------------- Aportes ----------------
 async function carregarAportes() {

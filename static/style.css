@@ -230,3 +230,43 @@ body:not(.admin) .so-admin { display: none !important; }
   .card .valor { font-size: 1.1rem; }
   .painel { padding: 16px; }
 }
+
+/* ------------------------------------------- visão geral por categoria */
+.cabecalho-painel { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.cabecalho-painel h3 { margin: 0 0 2px; }
+.cabecalho-painel select { font-size: .85rem; padding: 6px 10px; }
+.btn-pequeno { padding: 6px 12px; font-size: .82rem; border-radius: 8px; cursor: pointer; }
+.tabela-categorias td, .tabela-categorias th { padding: 12px 14px; }
+.tabela-categorias .linha-categoria { cursor: pointer; }
+.tabela-categorias .linha-categoria td { font-weight: 600; background: var(--painel); }
+.tabela-categorias .linha-categoria:hover td { background: var(--painel-2); }
+.tabela-categorias .nome-categoria { display: flex; align-items: center; gap: 10px; }
+.chevron { width: 18px; height: 18px; color: var(--suave); transition: transform .15s; flex: none; }
+.linha-categoria.aberta .chevron { transform: rotate(90deg); }
+.bolinha { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.qtd-ativos { font-weight: 500; color: var(--suave); font-size: .8rem; }
+.tabela-categorias .linha-ativo td { font-size: .88rem; background: var(--painel-2); }
+.tabela-categorias .linha-ativo td:first-child { padding-left: 46px; }
+.tabela-categorias .linha-ativo small { display: block; color: var(--suave); font-size: .76rem; }
+.tabela-categorias .linha-total td { font-weight: 700; border-top: 2px solid var(--borda); }
+.peso { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.peso .barra { width: 70px; min-width: 70px; }
+.var-sub { display: block; font-size: .76rem; font-weight: 500; }
+.ranking { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.ranking h4 { margin: 0 0 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); }
+.ranking ol { list-style: none; margin: 0; padding: 0; }
+.ranking li { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--borda); }
+.ranking li:last-child { border-bottom: 0; }
+.ranking .pos-rank { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: .78rem;
+  font-weight: 700; background: var(--painel-2); color: var(--suave); }
+.ranking .melhores .pos-rank { background: rgba(15, 157, 99, .12); color: var(--pos); }
+.ranking .piores .pos-rank { background: rgba(214, 69, 61, .12); color: var(--neg); }
+.ranking .nome-rank strong { display: block; }
+.ranking .nome-rank small { color: var(--suave); font-size: .76rem; }
+.ranking .valor-rank { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ranking .valor-rank small { display: block; font-weight: 500; font-size: .76rem; }
+@media (max-width: 600px) {
+  .ranking { grid-template-columns: 1fr; }
+  .peso .barra { display: none; }
+  .tabela-categorias .linha-ativo td:first-child { padding-left: 28px; }
+}

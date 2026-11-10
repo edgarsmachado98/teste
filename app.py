@@ -280,14 +280,27 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
         aportes = listar_aportes(cid)
         manuais = {a["ticker"]: a["preco_manual"] for a in ativos}
         tickers = set(manuais) | {a["ticker"] for a in aportes}
-        precos, fontes = {}, {}
+        precos, fontes, anteriores = {}, {}, {}
         for t in tickers:
-            p, f = mercado.preco_atual(t, manuais.get(t))
-            if p is not None:
-                precos[t], fontes[t] = p, f
+            if manuais.get(t):
+                precos[t], fontes[t] = float(manuais[t]), "manual"
+                continue
+            try:
+                serie, fonte = mercado.historico(t)
+            except MarketDataError:
+                continue
+            precos[t], fontes[t] = serie[-1][1], fonte
+            if len(serie) >= 2:
+                anteriores[t] = serie[-2][1]  # fechamento do pregão anterior, para a variação do dia
         resumo = portfolio.resumo_carteira(ativos, aportes, precos)
         for l in resumo["ativos"]:
             l["fonte_preco"] = fontes.get(l["ticker"])
+            ant, atual = anteriores.get(l["ticker"]), precos.get(l["ticker"])
+            if ant and atual and l["quantidade"]:
+                l["variacao_pct"] = (atual / ant - 1) * 100
+                l["variacao_valor"] = l["quantidade"] * (atual - ant)
+            else:
+                l["variacao_pct"] = l["variacao_valor"] = None
         return resumo
 
     @app.get("/")
@@ -402,6 +415,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
             l["proventos_12m"] = p.get("ult_12m", 0.0)
             l["yoc_pct"] = p.get("yoc_pct")
         resumo["proventos"] = {k: prov[k] for k in ("total", "ult_12m", "media_mensal_12m", "yoc_pct", "dy_pct")}
+        resumo.update(portfolio.visao_por_categoria(resumo["ativos"]))
         return jsonify(resumo)
 
     # ---------- Proventos ----------

@@ -28,6 +28,12 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
 - Painel com patrimônio, alocação atual vs. meta, alocação por classe e evolução mensal dos aportes.
 - Validação: não permite vender mais do que se possui (nem excluir um aporte que deixaria uma venda descoberta).
 
+**Painel inicial (Patrimônio)**
+- **Visão geral por categoria** (Ação, FII, ETF, Renda Fixa...): valor total, % na carteira, variação do
+  dia e rentabilidade (valorização + proventos recebidos sobre o valor investido). Clique na categoria
+  para expandir os ativos.
+- **Classificação dos ativos** por rentabilidade ou variação do dia (maiores e menores).
+
 **Fluxo financeiro**
 - Visão geral de **compras, vendas e proventos recebidos** por período (12 meses, ano, ano anterior,
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,

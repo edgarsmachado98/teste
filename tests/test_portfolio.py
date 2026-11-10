@@ -75,3 +75,23 @@ def test_fluxo():
     assert [m["mes"] for m in f["por_mes"]] == ["2025-02", "2025-03"]
     assert f["lancamentos"][0]["tipo"] == "dividendo"
     assert {a["ticker"] for a in f["por_ativo"]} == {"A", "B"}
+
+
+def test_visao_por_categoria():
+    def linha(t, classe, qtd, custo, valor, prov=0, var=None):
+        return {"ticker": t, "classe": classe, "quantidade": qtd, "custo": custo, "valor": valor,
+                "preco_medio": custo / qtd if qtd else 0, "preco_atual": valor / qtd if qtd else None,
+                "proventos_total": prov, "variacao_valor": var, "variacao_pct": None if var is None else var / (valor - var) * 100}
+    linhas = [linha("A", "acao", 10, 100, 150, prov=10, var=5), linha("B", "acao", 10, 200, 180, var=-20),
+              linha("C", "fii", 5, 500, 520, prov=30), linha("D", "acao", 0, 0, 0)]
+    v = portfolio.visao_por_categoria(linhas, tamanho_ranking=2)
+    fii, acoes = v["categorias"]  # ordenadas por valor (FII 520 > ações 330)
+    assert acoes["classe"] == "acao" and acoes["quantidade_ativos"] == 2  # D (zerado) fica de fora
+    assert acoes["valor"] == 330 and acoes["peso_pct"] == pytest.approx(330 / 850 * 100)
+    assert acoes["rentabilidade_valor"] == pytest.approx(330 - 300 + 10)
+    assert acoes["rentabilidade_pct"] == pytest.approx(40 / 300 * 100)
+    assert acoes["variacao_valor"] == -15 and acoes["variacao_pct"] == pytest.approx(-15 / 345 * 100)
+    assert fii["variacao_pct"] is None  # sem cotação do dia
+    assert [a["ticker"] for a in acoes["ativos"]] == ["B", "A"]  # ordenados por valor
+    r = v["ranking"]["rentabilidade"]
+    assert [a["ticker"] for a in r["melhores"]] == ["A", "C"] and r["piores"][0]["ticker"] == "B"

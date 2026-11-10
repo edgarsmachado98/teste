@@ -63,13 +63,41 @@
 <main>
   <section id="tab-carteira" class="tab visivel">
     <div class="cards" id="cards-resumo"></div>
-    <div class="grade2">
-      <div class="painel"><h3>Alocação por ativo</h3><canvas id="graf-alocacao"></canvas></div>
-      <div class="painel"><h3>Alocação por classe</h3><canvas id="graf-classe"></canvas></div>
+
+    <div class="painel painel-destaque">
+      <div class="cabecalho-painel">
+        <div>
+          <h3>Visão geral por categoria</h3>
+          <p class="dica" style="margin:0">Clique em uma categoria para ver os ativos.
+            Rentabilidade = valorização + proventos recebidos, sobre o valor investido.</p>
+        </div>
+        <div class="acoes-painel">
+          <button type="button" class="secundario btn-pequeno" id="btn-expandir-todas">Expandir todas</button>
+        </div>
+      </div>
+      <div class="rolagem"><table id="tabela-categorias" class="tabela-categorias"></table></div>
     </div>
-    <div class="painel"><h3>Evolução dos aportes</h3><canvas id="graf-evolucao" height="90"></canvas></div>
+
+    <div class="grade2">
+      <div class="painel">
+        <div class="cabecalho-painel">
+          <h3>Classificação dos ativos</h3>
+          <select id="criterio-ranking" aria-label="Critério da classificação">
+            <option value="rentabilidade">Rentabilidade</option>
+            <option value="variacao">Variação do dia</option>
+          </select>
+        </div>
+        <div class="ranking" id="ranking"></div>
+      </div>
+      <div class="painel"><h3>Alocação por categoria</h3><canvas id="graf-classe"></canvas></div>
+    </div>
+
+    <div class="grade2">
+      <div class="painel"><h3>Alocação por ativo: atual x meta</h3><canvas id="graf-alocacao"></canvas></div>
+      <div class="painel"><h3>Evolução dos aportes</h3><canvas id="graf-evolucao"></canvas></div>
+    </div>
     <div class="painel">
-      <h3>Posições</h3>
+      <h3>Posições detalhadas</h3>
       <div class="rolagem"><table id="tabela-posicoes"></table></div>
     </div>
   </section>

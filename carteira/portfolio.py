@@ -422,3 +422,68 @@ def fluxo(aportes, proventos, inicio, fim, hoje):
                             key=lambda x: -(x["compras"] + x["vendas"] + x["proventos"])),
         "lancamentos": sorted(lancamentos, key=lambda x: (x["data"], x["ticker"]), reverse=True),
     }
+
+
+# ------------------------------------------------- Visão geral por categoria
+
+def visao_por_categoria(linhas, tamanho_ranking=5):
+    """Agrupa as posições abertas por categoria (classe) e monta a classificação dos ativos.
+
+    Para cada ativo e categoria:
+      valor            valor de mercado atual
+      peso_pct         % da carteira
+      variacao_valor   variação do dia em R$ (último fechamento x anterior) e variacao_pct em %
+      rentabilidade    valorização (valor - custo) + proventos recebidos, em R$ e % sobre o custo
+    Ativos sem cotação do dia (preço manual) entram com variação zero na categoria.
+    """
+    abertas = [l for l in linhas if l["quantidade"] > 0]
+    total = sum(l["valor"] for l in abertas)
+
+    def metricas(itens):
+        valor = sum(l["valor"] for l in itens)
+        custo = sum(l["custo"] for l in itens)
+        prov = sum(l.get("proventos_total") or 0 for l in itens)
+        var_valor = sum(l["variacao_valor"] or 0 for l in itens if l.get("variacao_valor") is not None)
+        com_var = [l for l in itens if l.get("variacao_valor") is not None]
+        base_var = sum(l["valor"] - l["variacao_valor"] for l in com_var)
+        rent_valor = valor - custo + prov
+        return {
+            "valor": valor, "custo": custo, "proventos": prov,
+            "peso_pct": valor / total * 100 if total else 0.0,
+            "variacao_valor": var_valor if com_var else None,
+            "variacao_pct": var_valor / base_var * 100 if com_var and base_var else None,
+            "valorizacao_pct": (valor - custo) / custo * 100 if custo else None,
+            "rentabilidade_valor": rent_valor,
+            "rentabilidade_pct": rent_valor / custo * 100 if custo else None,
+        }
+
+    grupos = defaultdict(list)
+    for l in abertas:
+        grupos[l["classe"]].append(l)
+    categorias = []
+    for classe, itens in grupos.items():
+        ativos = []
+        for l in sorted(itens, key=lambda x: -x["valor"]):
+            m = metricas([l])
+            m["variacao_valor"], m["variacao_pct"] = l.get("variacao_valor"), l.get("variacao_pct")
+            ativos.append({"ticker": l["ticker"], "nome": l.get("nome") or "", "quantidade": l["quantidade"],
+                           "preco_medio": l["preco_medio"], "preco_atual": l["preco_atual"], **m})
+        categorias.append({"classe": classe, "rotulo": CLASSES.get(classe, classe),
+                           "quantidade_ativos": len(itens), **metricas(itens), "ativos": ativos})
+    categorias.sort(key=lambda c: -c["valor"])
+
+    todos = [a for c in categorias for a in c["ativos"]]
+    for a, c in ((a, c) for c in categorias for a in c["ativos"]):
+        a["classe"], a["rotulo_classe"] = c["classe"], c["rotulo"]
+
+    def ranking(chave):
+        validos = sorted((a for a in todos if a.get(chave) is not None), key=lambda a: -a[chave])
+        k = min(tamanho_ranking, (len(validos) + 1) // 2)  # carteiras pequenas: sem repetir ativos nas listas
+        restantes = validos[k:]
+        return {"melhores": validos[:k], "piores": sorted(restantes[-tamanho_ranking:], key=lambda a: a[chave])}
+
+    return {
+        "categorias": categorias,
+        "total_categorias": metricas(abertas),
+        "ranking": {"rentabilidade": ranking("rentabilidade_pct"), "variacao": ranking("variacao_pct")},
+    }
