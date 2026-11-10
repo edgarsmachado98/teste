@@ -23,7 +23,8 @@ def carregar_env(caminho=".env"):
 
 carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-from carteira import analysis, auth, db, portfolio, providers  # noqa: E402  (após carregar o .env)
+from carteira import analysis, auth, db, evolucao, portfolio, providers  # noqa: E402  (após carregar o .env)
+from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
                                  marcar_duplicados)
@@ -47,7 +48,7 @@ MAX_TENTATIVAS = 5
 BLOQUEIO_SEG = 300
 
 
-def create_app(db_path=None, fonte_mercado=None, secret_key=None):
+def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None):
     app = Flask(__name__)
     app.secret_key = secret_key or chave_secreta(db_path)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
@@ -55,6 +56,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
                       MAX_CONTENT_LENGTH=10 * 1024 * 1024)  # extratos de até 10 MB
     conn = db.connect(db_path)
     mercado = Mercado(conn, fonte_mercado)
+    indices = Indices(conn, mercado, fonte_bcb)
     app.config["conn"] = conn
     tentativas = {}  # (email, ip) -> [falhas, bloqueado_ate]
 
@@ -104,8 +106,12 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
 
     def carteira_atual(permissao="ver"):
         """Carteira indicada pelo cabeçalho X-Carteira, verificando a permissão do usuário."""
+        valor = request.headers.get("X-Carteira") or request.args.get("carteira") or ""
+        if valor == "todas":
+            raise ErroAcesso("Na visão da família os dados são só para consulta. "
+                             "Selecione uma carteira para fazer alterações.")
         try:
-            cid = int(request.headers.get("X-Carteira") or request.args.get("carteira") or 0)
+            cid = int(valor or 0)
         except ValueError:
             cid = 0
         if not cid:
@@ -118,6 +124,15 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
                    "gerenciar": "Você não pode gerenciar os acessos desta carteira."}[permissao]
             raise ErroAcesso(msg, 403)
         return cid
+
+    def carteiras_leitura():
+        """Carteiras para consulta: a selecionada, ou todas as visíveis na visão da família."""
+        if (request.headers.get("X-Carteira") or request.args.get("carteira")) == "todas":
+            ids = [c["id"] for c in auth.carteiras_do_usuario(conn, g.usuario)]
+            if not ids:
+                raise ErroAcesso("Nenhuma carteira disponível.", 404)
+            return ids
+        return [carteira_atual()]
 
     @app.get("/login")
     def login():
@@ -268,19 +283,23 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
         return jsonify({"ok": True})
 
     # ---------- Dados da carteira ----------
-    def listar_ativos(cid):
-        return db.rows(conn.execute("SELECT * FROM ativos WHERE carteira_id = ? ORDER BY ticker", (cid,)))
+    def filtro_carteiras(cids):
+        ids = cids if isinstance(cids, (list, tuple)) else [cids]
+        return f"carteira_id IN ({','.join('?' * len(ids))})", list(ids)
 
-    def listar_aportes(cid):
-        return db.rows(conn.execute(
-            "SELECT * FROM aportes WHERE carteira_id = ? ORDER BY data DESC, id DESC", (cid,)))
+    def listar_ativos(cids):
+        f, ids = filtro_carteiras(cids)
+        return db.rows(conn.execute(f"SELECT * FROM ativos WHERE {f} ORDER BY ticker", ids))
 
-    def montar_resumo(cid):
-        ativos = listar_ativos(cid)
-        aportes = listar_aportes(cid)
-        manuais = {a["ticker"]: a["preco_manual"] for a in ativos}
-        tickers = set(manuais) | {a["ticker"] for a in aportes}
-        precos, fontes, anteriores = {}, {}, {}
+    def listar_aportes(cids):
+        f, ids = filtro_carteiras(cids)
+        return db.rows(conn.execute(f"SELECT * FROM aportes WHERE {f} ORDER BY data DESC, id DESC", ids))
+
+    def cotacoes(ativos, aportes):
+        """Preço atual (manual ou de mercado), fonte, fechamento anterior e histórico de cada ativo."""
+        manuais = {a["ticker"]: a["preco_manual"] for a in ativos if a["preco_manual"]}
+        tickers = {a["ticker"] for a in ativos} | {a["ticker"] for a in aportes}
+        precos, fontes, anteriores, series = {}, {}, {}, {}
         for t in tickers:
             if manuais.get(t):
                 precos[t], fontes[t] = float(manuais[t]), "manual"
@@ -289,9 +308,15 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
                 serie, fonte = mercado.historico(t)
             except MarketDataError:
                 continue
-            precos[t], fontes[t] = serie[-1][1], fonte
+            precos[t], fontes[t], series[t] = serie[-1][1], fonte, serie
             if len(serie) >= 2:
                 anteriores[t] = serie[-2][1]  # fechamento do pregão anterior, para a variação do dia
+        return precos, fontes, anteriores, series
+
+    def montar_resumo(cid):
+        ativos = listar_ativos(cid)
+        aportes = listar_aportes(cid)
+        precos, fontes, anteriores, _ = cotacoes(ativos, aportes)
         resumo = portfolio.resumo_carteira(ativos, aportes, precos)
         for l in resumo["ativos"]:
             l["fonte_preco"] = fontes.get(l["ticker"])
@@ -312,7 +337,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
     # ---------- Ativos ----------
     @app.get("/api/ativos")
     def api_ativos():
-        return jsonify(listar_ativos(carteira_atual()))
+        return jsonify(listar_ativos(carteiras_leitura()))
 
     @app.post("/api/ativos")
     def api_criar_ativo():
@@ -355,7 +380,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
     # ---------- Aportes ----------
     @app.get("/api/aportes")
     def api_aportes():
-        return jsonify(listar_aportes(carteira_atual()))
+        return jsonify(listar_aportes(carteiras_leitura()))
 
     @app.post("/api/aportes")
     def api_criar_aporte():
@@ -404,7 +429,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
     # ---------- Carteira ----------
     @app.get("/api/carteira")
     def api_carteira():
-        cid = carteira_atual()
+        cid = carteiras_leitura()
         resumo = montar_resumo(cid)
         resumo["evolucao_aportes"] = portfolio.aportes_por_mes(listar_aportes(cid))
         prov = portfolio.resumo_proventos(listar_proventos(cid), resumo, hoje())
@@ -416,15 +441,45 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
             l["yoc_pct"] = p.get("yoc_pct")
         resumo["proventos"] = {k: prov[k] for k in ("total", "ult_12m", "media_mensal_12m", "yoc_pct", "dy_pct")}
         resumo.update(portfolio.visao_por_categoria(resumo["ativos"]))
+        resumo["por_carteira"] = []
+        if len(cid) > 1:  # visão da família: quanto cada carteira representa
+            nomes = {c["id"]: c for c in auth.carteiras_do_usuario(conn, g.usuario)}
+            for i in cid:
+                r = montar_resumo(i)
+                resumo["por_carteira"].append({
+                    "id": i, "nome": nomes[i]["nome"], "dono": nomes[i]["dono_nome"],
+                    "valor": r["total_valor"], "custo": r["total_custo"], "lucro": r["lucro"],
+                    "lucro_pct": r["lucro_pct"],
+                    "peso_pct": r["total_valor"] / resumo["total_valor"] * 100 if resumo["total_valor"] else 0})
+            resumo["por_carteira"].sort(key=lambda x: -x["valor"])
         return jsonify(resumo)
+
+    # ---------- Evolução e rentabilidade ----------
+    @app.get("/api/evolucao")
+    def api_evolucao():
+        cids = carteiras_leitura()
+        aportes = listar_aportes(cids)
+        hoje_ = hoje()
+        precos, _, _, series = cotacoes(listar_ativos(cids), aportes)
+        ev = evolucao.calcular_evolucao(aportes, listar_proventos(cids), series, precos, hoje_)
+        referencias, falhas = {}, {}
+        if ev["meses"]:
+            inicio = ev["meses"][0]["mes"] + "-01"
+            referencias, falhas = indices.series(inicio, hoje_)
+        ev["referencias"] = referencias
+        ev["nomes_referencias"] = NOMES_INDICES
+        ev["falhas_referencias"] = falhas
+        ev["resumo"] = evolucao.resumo_periodos(ev["meses"], referencias, hoje_) if ev["meses"] else {}
+        return jsonify(ev)
 
     # ---------- Proventos ----------
     def hoje():
         return dt.date.today().isoformat()
 
-    def listar_proventos(cid):
+    def listar_proventos(cids):
+        f, ids = filtro_carteiras(cids)
         return db.rows(conn.execute(
-            "SELECT * FROM proventos WHERE carteira_id = ? ORDER BY data_pagamento DESC, id DESC", (cid,)))
+            f"SELECT * FROM proventos WHERE {f} ORDER BY data_pagamento DESC, id DESC", ids))
 
     def inserir_provento(cid, d):
         ticker = (d.get("ticker") or "").upper().strip()
@@ -451,7 +506,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
 
     @app.get("/api/proventos")
     def api_proventos():
-        cid = carteira_atual()
+        cid = carteiras_leitura()
         lista = listar_proventos(cid)
         return jsonify({"itens": lista,
                         "resumo": portfolio.resumo_proventos(lista, montar_resumo(cid), hoje())})
@@ -476,7 +531,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
     @app.get("/api/proventos/estimar")
     def api_estimar_proventos():
         """Busca proventos por ação nas fontes e calcula quanto você recebeu/receberá."""
-        cid = carteira_atual()
+        cid = carteiras_leitura()
         aportes = listar_aportes(cid)
         forcar = request.args.get("atualizar") == "1"
         por_ticker, fontes, falhas = {}, {}, {}
@@ -504,7 +559,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None):
     # ---------- Fluxo: compras, vendas e recebidos ----------
     @app.get("/api/fluxo")
     def api_fluxo():
-        cid = carteira_atual()
+        cid = carteiras_leitura()
         hoje_ = hoje()
         try:
             inicio = dt.date.fromisoformat(request.args.get("inicio") or "0001-01-01").isoformat()

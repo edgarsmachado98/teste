@@ -21,8 +21,8 @@ def test_brapi_le_historico_e_envia_token(monkeypatch):
 
     def fake_get(url, headers=None, params=None, timeout=None):
         chamadas.append((url, headers, params))
-        if params["range"] == "2y":
-            return Resp({"error": True}, 403)  # plano não libera 2 anos
+        if params["range"] in ("5y", "2y"):
+            return Resp({"error": True}, 403)  # plano não libera 5 nem 2 anos
         return Resp({"results": [{"symbol": "WEGE3", "historicalDataPrice": [
             {"date": 1735776000, "close": 50.0, "adjustedClose": 49.5},
             {"date": 1735862400, "close": 51.0, "adjustedClose": None},
@@ -32,7 +32,7 @@ def test_brapi_le_historico_e_envia_token(monkeypatch):
     serie = providers.Brapi(token="abc").historico("wege3")
     assert serie == [("2025-01-02", 49.5), ("2025-01-03", 51.0)]
     assert chamadas[0][1]["Authorization"] == "Bearer abc"
-    assert [c[2]["range"] for c in chamadas] == ["2y", "1y"]
+    assert [c[2]["range"] for c in chamadas] == ["5y", "2y", "1y"]
 
 
 def test_brapi_sem_token_so_sandbox():

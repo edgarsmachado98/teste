@@ -34,6 +34,18 @@ Feito em Python (Flask + SQLite), com interface em português e gráficos via Ch
   para expandir os ativos.
 - **Classificação dos ativos** por rentabilidade ou variação do dia (maiores e menores).
 
+**Visão da família**
+- No seletor de carteiras, "Família (todas)" soma todas as carteiras às quais você tem acesso
+  (somente consulta), com o patrimônio de cada carteira.
+
+**Rentabilidade e evolução**
+- Evolução do patrimônio mês a mês comparada com o valor investido.
+- Rentabilidade pelo **método de cotas** (Dietz modificado, mês a mês): aportes e vendas não
+  distorcem o resultado; proventos contam como ganho.
+- Comparação com **CDI** e **IPCA** (séries 4391 e 433 do Banco Central) e **Ibovespa**: cartões do
+  mês, ano, 12 meses e desde o início (com % do CDI), gráfico acumulado e tabela mês a mês.
+- Ativos sem histórico de cotação (renda fixa com preço manual) têm o valor passado estimado.
+
 **Fluxo financeiro**
 - Visão geral de **compras, vendas e proventos recebidos** por período (12 meses, ano, ano anterior,
   desde o início ou datas personalizadas): totais, aporte líquido, lucro realizado nas vendas,

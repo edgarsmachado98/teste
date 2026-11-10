@@ -270,3 +270,14 @@ body:not(.admin) .so-admin { display: none !important; }
   .peso .barra { display: none; }
   .tabela-categorias .linha-ativo td:first-child { padding-left: 28px; }
 }
+
+/* ------------------------------------------------------- rentabilidade */
+.card .sub { display: block; font-size: .78rem; font-weight: 500; color: var(--suave); margin-top: 4px; letter-spacing: 0; }
+.tabela-rentabilidade th, .tabela-rentabilidade td { padding: 8px 9px; font-size: .82rem; }
+.tabela-rentabilidade .ano td { border-top: 2px solid var(--borda); }
+.tabela-rentabilidade .ano td:first-child { font-weight: 700; }
+.tabela-rentabilidade .ref td { color: var(--suave); }
+.tabela-rentabilidade .ref td:first-child, .tabela-rentabilidade .rel td:first-child { padding-left: 20px; font-weight: 500; }
+.tabela-rentabilidade .rel td { color: var(--suave); font-size: .76rem; }
+.tabela-rentabilidade td.total { font-weight: 700; background: var(--painel-2); }
+#sel-carteira option[value="todas"] { font-weight: 700; }

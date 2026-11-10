@@ -109,7 +109,7 @@ class Brapi(Fonte):
     URL = "https://brapi.dev/api/quote/{ticker}"
     SANDBOX = {"PETR4", "VALE3", "MGLU3", "ITUB4"}
     # Planos diferentes liberam períodos diferentes; tenta do maior para o menor.
-    PERIODOS = ("2y", "1y", "6mo", "3mo")
+    PERIODOS = ("5y", "2y", "1y", "6mo", "3mo")
 
     def __init__(self, token=None):
         self.token = token if token is not None else os.environ.get("BRAPI_TOKEN", "")
@@ -265,7 +265,7 @@ class Yahoo(Fonte):
 
     def historico(self, ticker):
         resp = requests.get(self.URL.format(symbol=self.simbolo(ticker)),
-                            params={"range": "2y", "interval": "1d"},
+                            params={"range": "5y", "interval": "1d"},
                             headers={"User-Agent": "Mozilla/5.0"}, timeout=TIMEOUT)
         resp.raise_for_status()
         dados = resp.json()["chart"]

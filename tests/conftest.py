@@ -23,6 +23,9 @@ def cliente_logado(app, email="edgar@exemplo.com", senha="senha-edgar-123", nome
 
 @pytest.fixture
 def novo_app(tmp_path):
-    def fabrica(fonte):
-        return create_app(str(tmp_path / "t.db"), fonte, secret_key="teste")
+    def sem_rede(*_):
+        raise RuntimeError("sem rede nos testes")
+
+    def fabrica(fonte, fonte_bcb=sem_rede):
+        return create_app(str(tmp_path / "t.db"), fonte, secret_key="teste", fonte_bcb=fonte_bcb)
     return fabrica

@@ -22,7 +22,9 @@ function toast(msg, erro = false) {
 // Carteira selecionada: enviada em todas as requisições pelo cabeçalho X-Carteira.
 let carteiraAtual = null;
 let carteiras = [];
-const permissao = () => carteiras.find(c => c.id === carteiraAtual)?.permissoes || { ver: false, editar: false, gerenciar: false };
+const FAMILIA = "todas";
+const permissao = () => carteiraAtual === FAMILIA ? { ver: true, editar: false, gerenciar: false }
+  : carteiras.find(c => c.id === carteiraAtual)?.permissoes || { ver: false, editar: false, gerenciar: false };
 
 async function api(url, opts = {}) {
   const headers = { "Content-Type": "application/json", "X-Requested-With": "fetch" };
@@ -31,6 +33,7 @@ async function api(url, opts = {}) {
   if (r.status === 401) { location.href = "/login"; throw new Error("Sessão expirada."); }
   const dados = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
+  if (opts.method && opts.method !== "GET") dadosVersao++;  // dados mudaram: recalcula a evolução
   return dados;
 }
 
@@ -57,7 +60,7 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
   document.body.classList.remove("menu-aberto");
   window.scrollTo({ top: 0 });
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade }[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -104,23 +107,121 @@ async function carregarCarteira() {
         { label: "Meta (%)", data: comPosicao.map(a => a.meta_norm_pct), backgroundColor: PALETA[1] },
       ],
     },
-    options: { aspectRatio: 1.8, plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${pct(x.raw)}` } } } },
+    options: { aspectRatio: 3.2, plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${pct(x.raw)}` } } } },
   });
   grafico("graf-classe", {
     type: "doughnut",
     data: { labels: c.por_classe.map(x => x.rotulo), datasets: [{ data: c.por_classe.map(x => x.valor), backgroundColor: c.por_classe.map(x => corClasse(x.classe)) }] },
     options: { aspectRatio: 1.8, plugins: { legend: { position: "right" }, tooltip: { callbacks: { label: x => `${x.label}: ${brl.format(x.raw)} (${pct(c.por_classe[x.dataIndex].pct)})` } } } },
   });
+  const fam = c.por_carteira || [];
+  $("#painel-por-carteira").classList.toggle("oculto", !fam.length);
+  if (fam.length) $("#tabela-por-carteira").innerHTML = `<tr><th>Carteira</th><th>Dono</th><th>Valor</th><th>% da família</th><th>Resultado</th></tr>` +
+    fam.map(f => `<tr><td><strong>${esc(f.nome)}</strong></td><td>${esc(f.dono || "—")}</td><td>${brl.format(f.valor)}</td>
+      <td><div class="peso"><div class="barra"><span style="width:${Math.min(f.peso_pct, 100)}%"></span></div>${pct(f.peso_pct)}</div></td>
+      <td class="${classeSinal(f.lucro)}">${brlSinal(f.lucro)} (${pctSinal(f.lucro_pct)})</td></tr>`).join("");
+  carregarEvolucaoPatrimonio();
+}
+
+async function carregarEvolucaoPatrimonio() {
+  let ev;
+  try { ev = await obterEvolucao(); } catch (e) { return toast(e.message, true); }
   grafico("graf-evolucao", {
+    type: "line",
     data: {
-      labels: c.evolucao_aportes.map(x => x.mes),
+      labels: ev.meses.map(m => m.mes),
       datasets: [
-        { type: "bar", label: "Aporte líquido no mês", data: c.evolucao_aportes.map(x => x.aporte), backgroundColor: PALETA[0], yAxisID: "y" },
-        { type: "line", label: "Investido acumulado", data: c.evolucao_aportes.map(x => x.acumulado), borderColor: PALETA[1], backgroundColor: PALETA[1], yAxisID: "y" },
+        { label: "Patrimônio", data: ev.meses.map(m => m.patrimonio), borderColor: PALETA[0], backgroundColor: "rgba(47,91,234,.12)", fill: true, tension: .25, pointRadius: 2 },
+        { label: "Valor investido", data: ev.meses.map(m => m.investido), borderColor: PALETA[1], backgroundColor: PALETA[1], borderDash: [5, 4], tension: .25, pointRadius: 0 },
       ],
     },
-    options: { scales: { y: { ticks: { callback: v => brl.format(v) } } }, plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl.format(x.raw)}` } } } },
+    options: { interaction: { mode: "index", intersect: false }, scales: { y: { ticks: { callback: v => brl.format(v) } } },
+      plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl.format(x.raw)}` } } } },
   });
+  $("#aviso-estimados").textContent = ev.estimados.length
+    ? `Sem histórico de cotação, com valor passado estimado pelo ganho atual distribuído no tempo: ${ev.estimados.join(", ")}.` : "";
+}
+
+// Evolução: uma consulta por carteira selecionada, reaproveitada pelas páginas Patrimônio e Rentabilidade.
+let evolucaoCache = { chave: null, promessa: null };
+function obterEvolucao() {
+  const chave = `${carteiraAtual}|${new Date().toDateString()}|${dadosVersao}`;
+  if (evolucaoCache.chave !== chave) evolucaoCache = { chave, promessa: api("/api/evolucao").catch(e => { evolucaoCache.chave = null; throw e; }) };
+  return evolucaoCache.promessa;
+}
+let dadosVersao = 0;  // incrementado quando aportes/proventos mudam
+
+// ---------------- Rentabilidade ----------------
+const MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+async function carregarRentabilidade() {
+  let ev;
+  try { ev = await obterEvolucao(); } catch (e) { return toast(e.message, true); }
+  if (!ev.meses.length) {
+    $("#cards-rentabilidade").innerHTML = `<p class="dica">Registre ou importe aportes para ver a rentabilidade.</p>`;
+    $("#tabela-rentabilidade").innerHTML = "";
+    grafico("graf-rentabilidade", { type: "line", data: { labels: [], datasets: [] } });
+    return;
+  }
+  const r = ev.resumo;
+  const card = (rot, item) => {
+    const cdi = item.cdi == null ? "" : `CDI ${pctSinal(item.cdi)}${item.pct_cdi == null ? "" : ` · ${pct(item.pct_cdi, 0)} do CDI`}`;
+    return `<div class="card"><div class="rotulo">${rot}</div><div class="valor ${classeSinal(item.carteira)}">${pctSinal(item.carteira)}<span class="sub">${cdi || "&nbsp;"}</span></div></div>`;
+  };
+  const ultimo = ev.meses[ev.meses.length - 1];
+  $("#cards-rentabilidade").innerHTML = card(`No mês (${MESES_CURTOS[+ultimo.mes.slice(5) - 1]})`, r.mes) + card("No ano", r.ano) +
+    card("Últimos 12 meses", r["12m"]) + card("Desde o início", r.inicio) +
+    `<div class="card"><div class="rotulo">Patrimônio x investido</div><div class="valor">${brl.format(ultimo.patrimonio)}<span class="sub">investido ${brl.format(ultimo.investido)}</span></div></div>`;
+  renderGraficoRentabilidade(ev);
+  renderTabelaRentabilidade(ev);
+  const falhas = Object.values(ev.falhas_referencias || {});
+  $("#aviso-referencias").textContent = (falhas.length ? `Referências indisponíveis no momento: ${falhas.join("; ")}. ` : "") +
+    (ev.estimados.length ? `Ativos sem histórico de cotação (valor estimado): ${ev.estimados.join(", ")}.` : "");
+}
+
+function renderGraficoRentabilidade(ev) {
+  const periodo = $("#periodo-rentabilidade").value, ano = new Date().getFullYear();
+  let meses = ev.meses.map(m => m.mes);
+  if (periodo === "12m") meses = meses.slice(-12);
+  if (periodo === "ano") meses = meses.filter(m => m.startsWith(String(ano)));
+  const acumulada = mapa => { let t = 1; return meses.map(m => { if (mapa[m] == null) return null; t *= 1 + mapa[m] / 100; return (t - 1) * 100; }); };
+  const daCarteira = Object.fromEntries(ev.meses.map(m => [m.mes, m.rent_mes]));
+  const cores = { cdi: PALETA[2], ipca: PALETA[1], ibov: PALETA[8] };
+  const datasets = [{ label: "Carteira", data: acumulada(daCarteira), borderColor: PALETA[0], backgroundColor: PALETA[0], borderWidth: 3, tension: .25, pointRadius: 2 }];
+  for (const [ref, serie] of Object.entries(ev.referencias || {})) {
+    datasets.push({ label: ev.nomes_referencias[ref] || ref, data: acumulada(Object.fromEntries(serie.map(x => [x.mes, x.pct]))),
+      borderColor: cores[ref], backgroundColor: cores[ref], borderDash: ref === "cdi" ? [] : [5, 4], tension: .25, pointRadius: 0, spanGaps: true });
+  }
+  grafico("graf-rentabilidade", {
+    type: "line", data: { labels: meses, datasets },
+    options: { interaction: { mode: "index", intersect: false }, scales: { y: { ticks: { callback: v => pct(v, 0) } } },
+      plugins: { tooltip: { callbacks: { label: x => `${x.dataset.label}: ${pctSinal(x.raw)}` } } } },
+  });
+}
+$("#periodo-rentabilidade").addEventListener("change", () => obterEvolucao().then(renderGraficoRentabilidade).catch(() => {}));
+
+function renderTabelaRentabilidade(ev) {
+  const cart = Object.fromEntries(ev.meses.map(m => [m.mes, m.rent_mes]));
+  const cdi = Object.fromEntries((ev.referencias.cdi || []).map(x => [x.mes, x.pct]));
+  const anos = [...new Set(ev.meses.map(m => m.mes.slice(0, 4)))].reverse();
+  const acum = (mapa, lista) => lista.every(m => mapa[m] != null) && lista.length ? lista.reduce((t, m) => t * (1 + mapa[m] / 100), 1) * 100 - 100 : null;
+  const cel = v => v == null ? "<td>—</td>" : `<td class="${classeSinal(v)}">${v.toFixed(2).replace(".", ",")}%</td>`;
+  const todosMeses = ev.meses.map(m => m.mes);
+  let html = `<tr><th>Ano</th>${MESES_CURTOS.map(m => `<th>${m}</th>`).join("")}<th>No ano</th><th>Acumulado</th></tr>`;
+  for (const ano of anos) {
+    const mesesAno = MESES_CURTOS.map((_, i) => `${ano}-${String(i + 1).padStart(2, "0")}`);
+    const doAno = mesesAno.filter(m => cart[m] != null);
+    const ateAno = todosMeses.filter(m => m <= `${ano}-12`);
+    const rc = acum(cart, doAno), rcdi = acum(cdi, doAno);
+    html += `<tr class="ano"><td>${ano}</td>${mesesAno.map(m => cel(cart[m])).join("")}
+      <td class="total ${classeSinal(rc)}">${rc == null ? "—" : rc.toFixed(2).replace(".", ",") + "%"}</td>${cel(acum(cart, ateAno)).replace("<td", '<td class="total"')}</tr>`;
+    html += `<tr class="ref"><td>CDI</td>${mesesAno.map(m => cart[m] == null ? "<td></td>" : cel(cdi[m])).join("")}
+      ${cel(rcdi)}${cel(acum(cdi, ateAno))}</tr>`;
+    const rel = m => cart[m] != null && cdi[m] ? `<td>${pct(cart[m] / cdi[m] * 100, 0)}</td>` : "<td></td>";
+    html += `<tr class="rel"><td>% do CDI</td>${mesesAno.map(rel).join("")}
+      <td>${rc != null && rcdi ? pct(rc / rcdi * 100, 0) : ""}</td><td></td></tr>`;
+  }
+  $("#tabela-rentabilidade").innerHTML = html;
 }
 
 // ---------------- Visão geral por categoria e classificação ----------------
@@ -688,19 +789,25 @@ function aplicarPermissoes() {
   document.body.classList.toggle("somente-leitura", !p.editar);
   document.body.classList.toggle("admin", !!USUARIO.admin);
   $("#aviso-leitura").classList.toggle("oculto", !carteiraAtual || p.editar);
-  $("#selo-permissao").textContent = carteiraAtual ? ROTULO_PERM(p) : "";
+  $("#aviso-leitura").innerHTML = carteiraAtual === FAMILIA
+    ? `<strong>Visão da família:</strong> soma das ${carteiras.length} carteiras às quais você tem acesso. Somente consulta: para alterar dados, selecione uma carteira.`
+    : `Você tem acesso <strong>somente de visualização</strong> a esta carteira.`;
+  $("#selo-permissao").textContent = carteiraAtual === FAMILIA ? "visão consolidada" : carteiraAtual ? ROTULO_PERM(p) : "";
 }
 
 async function carregarCarteiras(preferida) {
   const r = await api("/api/eu");
   carteiras = r.carteiras;
   let salva = null;
-  try { salva = Number(localStorage.getItem("carteira")); } catch (e) { /* armazenamento indisponível */ }
+  try { salva = localStorage.getItem("carteira"); salva = salva === FAMILIA ? FAMILIA : Number(salva); }
+  catch (e) { /* armazenamento indisponível */ }
   const ids = carteiras.map(c => c.id);
+  if (carteiras.length > 1) ids.push(FAMILIA);
   carteiraAtual = [preferida, carteiraAtual, salva].find(id => ids.includes(id)) ?? ids[0] ?? null;
-  $("#sel-carteira").innerHTML = carteiras.length
-    ? carteiras.map(c => `<option value="${c.id}">${esc(c.nome)}${c.sou_dono ? "" : ` (${esc(c.dono_nome || "sem dono")})`}</option>`).join("")
-    : `<option value="">Nenhuma carteira disponível</option>`;
+  $("#sel-carteira").innerHTML = (carteiras.length > 1 ? `<option value="${FAMILIA}">Família (todas)</option>` : "") +
+    (carteiras.length
+      ? carteiras.map(c => `<option value="${c.id}">${esc(c.nome)}${c.sou_dono ? "" : ` (${esc(c.dono_nome || "sem dono")})`}</option>`).join("")
+      : `<option value="">Nenhuma carteira disponível</option>`);
   if (carteiraAtual) $("#sel-carteira").value = carteiraAtual;
   aplicarPermissoes();
 }
@@ -709,11 +816,11 @@ function recarregarAbaAtual() {
   $("#resultado-sugestao").innerHTML = "";
   $("#resultado-estimar").innerHTML = "";
   const aba = document.querySelector("nav button.ativo")?.dataset.tab;
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo }[aba] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade }[aba] || (() => {}))();
 }
 
 $("#sel-carteira").addEventListener("change", ev => {
-  carteiraAtual = Number(ev.target.value) || null;
+  carteiraAtual = ev.target.value === FAMILIA ? FAMILIA : Number(ev.target.value) || null;
   try { localStorage.setItem("carteira", carteiraAtual); } catch (e) { /* ignora */ }
   aplicarPermissoes();
   recarregarAbaAtual();

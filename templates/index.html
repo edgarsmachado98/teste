@@ -23,6 +23,7 @@
       <p class="grupo-nav">Visão geral</p>
       <button data-tab="carteira" data-titulo="Patrimônio" data-sub="Resumo, alocação e evolução da carteira" class="ativo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15.5 3.7A9 9 0 0 1 20.3 8.5H15.5z"/></svg><span>Patrimônio</span></button>
       <button data-tab="fluxo" data-titulo="Fluxo financeiro" data-sub="Visão geral de compras, vendas e proventos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 14.5h2"/></svg><span>Fluxo financeiro</span></button>
+      <button data-tab="rentabilidade" data-titulo="Rentabilidade" data-sub="Desempenho da carteira mês a mês comparado com CDI, IPCA e Ibovespa"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-5 4 4 8-8"/><path d="M15 8h5v5"/><path d="M3 21h18"/></svg><span>Rentabilidade</span></button>
       <p class="grupo-nav">Movimentações</p>
       <button data-tab="aportes" data-titulo="Aportes" data-sub="Compras, vendas e importação de extratos da B3"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m0 0l-3-3m3 3l3-3"/><path d="M17 20V4m0 0l-3 3m3-3l3 3"/></svg><span>Aportes</span></button>
       <button data-tab="proventos" data-titulo="Proventos" data-sub="Dividendos, JCP e rendimentos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.5-.9-1.6-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2s1.2 1.7 2.8 2 2.8.9 2.8 2.1-1.2 2.1-2.8 2.1c-1.3 0-2.4-.6-2.9-1.5M12 6v1.8m0 8.4V18"/></svg><span>Proventos</span></button>
@@ -92,10 +93,21 @@
       <div class="painel"><h3>Alocação por categoria</h3><canvas id="graf-classe"></canvas></div>
     </div>
 
-    <div class="grade2">
-      <div class="painel"><h3>Alocação por ativo: atual x meta</h3><canvas id="graf-alocacao"></canvas></div>
-      <div class="painel"><h3>Evolução dos aportes</h3><canvas id="graf-evolucao"></canvas></div>
+    <div class="painel oculto" id="painel-por-carteira">
+      <h3>Patrimônio por carteira</h3>
+      <div class="rolagem"><table id="tabela-por-carteira"></table></div>
     </div>
+
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Evolução do patrimônio</h3>
+          <p class="dica" style="margin:0">Valor da carteira no fim de cada mês comparado com o total investido (aportes menos vendas).</p></div>
+      </div>
+      <canvas id="graf-evolucao" height="85"></canvas>
+      <p class="dica" id="aviso-estimados"></p>
+    </div>
+
+    <div class="painel"><h3>Alocação por ativo: atual x meta</h3><canvas id="graf-alocacao"></canvas></div>
     <div class="painel">
       <h3>Posições detalhadas</h3>
       <div class="rolagem"><table id="tabela-posicoes"></table></div>
@@ -127,6 +139,27 @@
           <option value="venda">Vendas</option><option value="provento">Proventos</option>
         </select></h3>
       <div class="rolagem"><table id="tabela-fluxo"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-rentabilidade" class="tab">
+    <div class="cards" id="cards-rentabilidade"></div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Rentabilidade acumulada</h3>
+          <p class="dica" style="margin:0">Método de cotas: os aportes e as vendas não distorcem o resultado. Proventos recebidos contam como ganho.</p></div>
+        <select id="periodo-rentabilidade" aria-label="Período">
+          <option value="12m">Últimos 12 meses</option><option value="ano">Este ano</option>
+          <option value="inicio" selected>Desde o início</option>
+        </select>
+      </div>
+      <canvas id="graf-rentabilidade" height="90"></canvas>
+      <p class="dica" id="aviso-referencias"></p>
+    </div>
+    <div class="painel">
+      <h3>Rentabilidade mês a mês</h3>
+      <div class="rolagem"><table id="tabela-rentabilidade" class="tabela-rentabilidade"></table></div>
+      <p class="dica">Cada ano mostra a carteira, o CDI e quanto a carteira rendeu em relação ao CDI (% do CDI).</p>
     </div>
   </section>
 
