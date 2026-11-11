@@ -72,7 +72,7 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
   document.body.classList.remove("menu-aberto");
   window.scrollTo({ top: 0 });
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-" + b.dataset.tab));
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos, diversificacao: carregarDiversificacao, acompanhamento: carregarAcompanhamento }[b.dataset.tab] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos, diversificacao: carregarDiversificacao, acompanhamento: carregarAcompanhamento }[b.dataset.tab] || window.ABAS_MODULOS?.[b.dataset.tab] || (() => {}))();
 }));
 
 // ---------------- Carteira ----------------
@@ -1632,7 +1632,7 @@ function recarregarAbaAtual() {
   $("#resultado-estimar").innerHTML = "";
   $("#resultado-conferencia").innerHTML = "";
   const aba = document.querySelector("nav button.ativo")?.dataset.tab;
-  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos, diversificacao: carregarDiversificacao, acompanhamento: carregarAcompanhamento }[aba] || (() => {}))();
+  ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos, diversificacao: carregarDiversificacao, acompanhamento: carregarAcompanhamento }[aba] || window.ABAS_MODULOS?.[aba] || (() => {}))();
 }
 
 $("#sel-carteira").addEventListener("change", ev => {

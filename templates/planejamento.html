@@ -1,0 +1,120 @@
+{# Módulo adicional: Planejamento financeiro (incluído só quando ativo na licença) #}
+  <section id="tab-plan-resumo" class="tab">
+    <div class="plan-barra">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <button type="button" class="btn btn-pequeno requer-edicao" data-ir-aba="plan-lancamentos">Novo lançamento</button>
+    </div>
+    <div id="plan-boas-vindas" class="painel plan-boas-vindas oculto">
+      <h3>Comece pelo básico</h3>
+      <ol>
+        <li>Lance sua <strong>renda</strong> (salário bruto e líquido) marcando “todo mês”.</li>
+        <li>Lance as <strong>contas fixas</strong> (aluguel, condomínio, escola, internet…), também como “todo mês”.</li>
+        <li>No dia a dia, registre os <strong>gastos</strong>. Compras parceladas entram de uma vez, com todas as parcelas.</li>
+      </ol>
+      <p class="dica">Proventos e aportes da carteira já entram aqui automaticamente.</p>
+      <button type="button" class="btn requer-edicao" data-ir-aba="plan-lancamentos">Fazer o primeiro lançamento</button>
+    </div>
+    <div class="cards" id="plan-cards"></div>
+    <div class="grade2">
+      <div class="painel">
+        <h3>Para onde foi o dinheiro</h3>
+        <div class="plan-pizza"><canvas id="graf-plan-despesas"></canvas></div>
+        <div id="plan-despesas-grupo"></div>
+      </div>
+      <div class="painel">
+        <h3>De onde veio</h3>
+        <div id="plan-receitas"></div>
+        <h3 style="margin-top:20px">Contas do mês</h3>
+        <div id="plan-a-pagar"></div>
+      </div>
+    </div>
+    <div class="grade2">
+      <div class="painel">
+        <h3>Indicadores</h3>
+        <div id="plan-indicadores" class="plan-indicadores"></div>
+      </div>
+      <div class="painel">
+        <h3>Últimos 12 meses</h3>
+        <canvas id="graf-plan-serie" height="170"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-plan-lancamentos" class="tab">
+    <div class="painel requer-edicao" id="painel-plan-form">
+      <div class="cabecalho-painel">
+        <h3 id="plan-form-titulo">Novo lançamento</h3>
+        <div class="alternador" role="tablist" aria-label="Tipo de lançamento">
+          <button type="button" class="ativo" data-plan-tipo="despesa">Despesa</button>
+          <button type="button" data-plan-tipo="receita">Receita</button>
+        </div>
+      </div>
+      <form id="form-plan" class="form-linha">
+        <input type="hidden" name="id">
+        <label>Data <input type="date" name="data" required></label>
+        <label class="largo">Descrição <input name="descricao" maxlength="120" placeholder="ex.: Supermercado"></label>
+        <label>Categoria <select name="categoria_id" required></select></label>
+        <label><span data-rotulo-valor>Valor (R$)</span> <input type="number" name="valor" step="0.01" min="0" required inputmode="decimal"></label>
+        <label class="so-receita oculto">Valor bruto (R$) <input type="number" name="valor_bruto" step="0.01" min="0" inputmode="decimal" placeholder="antes dos descontos"></label>
+        <label class="so-despesa">Pagamento <select name="forma"><option value="">—</option></select></label>
+        <label class="so-novo">Repetir <select name="repetir">
+          <option value="nao">Não repete</option><option value="mensal">Todo mês</option>
+          <option value="parcelado" class="so-despesa-opt">Parcelado</option></select></label>
+        <label class="campo-parcelas oculto">Parcelas <input type="number" name="parcelas" min="2" max="120" value="2"></label>
+        <label class="campo-fim oculto">Até (opcional) <input type="month" name="fim"></label>
+        <label class="check"><input type="checkbox" name="pago" checked> <span data-rotulo-pago>Já pago</span></label>
+        <label class="check campo-proximos oculto"><input type="checkbox" name="atualizar_proximos"> Aplicar aos próximos meses</label>
+        <button type="submit" id="btn-plan-salvar">Adicionar</button>
+        <button type="button" class="secundario oculto" id="btn-plan-cancelar">Cancelar edição</button>
+      </form>
+      <p class="dica" id="plan-dica-form"></p>
+      <details class="dica">
+        <summary>Criar categoria</summary>
+        <form id="form-plan-categoria" class="form-linha" style="margin-top:8px">
+          <label>Tipo <select name="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>
+          <label>Grupo <input name="grupo" list="plan-grupos" required placeholder="ex.: Moradia"></label>
+          <label>Nome <input name="nome" required placeholder="ex.: Jardinagem"></label>
+          <button type="submit" class="secundario">Criar</button>
+        </form>
+        <datalist id="plan-grupos"></datalist>
+      </details>
+    </div>
+
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div class="seletor-mes" data-mes-nav>
+          <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <strong class="rotulo-mes"></strong>
+          <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+        <select id="plan-filtro" aria-label="Filtrar lançamentos">
+          <option value="">Receitas e despesas</option><option value="receita">Só receitas</option>
+          <option value="despesa">Só despesas</option><option value="pendente">Pendentes</option>
+        </select>
+      </div>
+      <div class="plan-totais" id="plan-totais"></div>
+      <div class="rolagem"><table id="tabela-plan" class="tabela-plan"></table></div>
+    </div>
+
+    <div class="painel">
+      <h3>Receitas e contas fixas</h3>
+      <p class="dica" style="margin-top:0">Lançadas automaticamente todo mês. Encerrar mantém os meses já lançados.</p>
+      <div class="rolagem"><table id="tabela-plan-fixas"></table></div>
+    </div>
+
+    <dialog id="dialogo-plan-excluir" class="dialogo">
+      <form method="dialog">
+        <h3>Excluir lançamento</h3>
+        <p id="dialogo-plan-texto"></p>
+        <div class="dialogo-acoes">
+          <button value="cancelar" class="secundario">Cancelar</button>
+          <button value="este" class="secundario">Só este</button>
+          <button value="proximos" class="btn">Este e os próximos</button>
+        </div>
+      </form>
+    </dialog>
+  </section>

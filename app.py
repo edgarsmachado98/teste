@@ -5,6 +5,7 @@ import hashlib
 from collections import defaultdict
 import io
 import json
+from types import SimpleNamespace
 import os
 import secrets
 import time
@@ -30,7 +31,7 @@ carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from carteira import analysis, auth, db, evolucao, impostos, portfolio, providers, rendafixa  # noqa: E402
 from carteira.tesouro import Tesouro  # noqa: E402
-from carteira import backup, conferencia, notificacoes  # noqa: E402
+from carteira import backup, conferencia, licenca, notificacoes, planejamento_api  # noqa: E402
 from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
@@ -219,7 +220,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     @app.get("/api/eu")
     def api_eu():
         return jsonify({"usuario": auth.publico(g.usuario),
-                        "carteiras": auth.carteiras_do_usuario(conn, g.usuario)})
+                        "carteiras": auth.carteiras_do_usuario(conn, g.usuario),
+                        "modulos": licenca.descrever()})
 
     @app.post("/api/eu/senha")
     def api_alterar_senha():
@@ -520,7 +522,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     def index():
         return render_template("index.html", classes=portfolio.CLASSES, indexadores=rendafixa.INDEXADORES,
                                tipos_provento=portfolio.TIPOS_PROVENTO, demo=modo_demo(),
-                               usuario=auth.publico(g.usuario))
+                               usuario=auth.publico(g.usuario), modulos=licenca.modulos_ativos())
 
     # ---------- Ativos ----------
     @app.get("/api/ativos")
@@ -1695,6 +1697,11 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                                  "max_drawdown": analysis.max_drawdown(p)} for t, p in precos.items()},
             "falhas": falhas,
         })
+
+    # ---------- Módulos adicionais (licenciados à parte) ----------
+    planejamento_api.registrar(app, SimpleNamespace(
+        conn=conn, erro=erro, carteira_atual=carteira_atual, carteiras_leitura=carteiras_leitura,
+        listar_aportes=listar_aportes, listar_proventos=listar_proventos, hoje=hoje, ErroAcesso=ErroAcesso))
 
     return app
 

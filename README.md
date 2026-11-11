@@ -168,6 +168,27 @@ HTTPS do Tailscale).
 
 > As leituras de indicadores são educacionais e **não constituem recomendação de investimento**.
 
+## Módulos adicionais
+
+Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até serem ativados.
+
+### Planejamento financeiro (`planejamento`)
+
+- **Receitas** com valor bruto e líquido (mostra os descontos), por categoria; os **proventos** da
+  carteira entram automaticamente como receita.
+- **Despesas** por categoria (grupos e subcategorias, com criação de categorias próprias), forma de
+  pagamento e situação (pago / a pagar).
+- **Todo mês:** salário, aluguel, escola, assinaturas... são lançados automaticamente a cada mês
+  (aparecem como pendentes até serem marcados); dá para alterar os próximos meses ou encerrar.
+- **Parcelado:** a compra é dividida nas parcelas, uma por mês.
+- **Resumo do mês:** receitas, despesas, quanto foi investido (aportes da carteira), sobra, para
+  onde foi o dinheiro, contas a pagar, taxa de poupança, custo de vida médio, reserva de emergência
+  ideal e quanto das despesas os proventos já pagam; gráfico dos últimos 12 meses.
+
+Ativação: `CARTEIRA_MODULOS=planejamento` no `.env` (ou `todos`). No modo demonstração todos os
+módulos ficam ativos. O controle fica em `carteira/licenca.py`, ponto único para a futura chave de
+licença.
+
 ## Como executar
 
 ```bash
