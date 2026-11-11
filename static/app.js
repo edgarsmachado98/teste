@@ -741,6 +741,73 @@ function renderRanking() {
 }
 $("#criterio-ranking").addEventListener("change", renderRanking);
 
+// ---------------- Conferência com os relatórios ----------------
+const SITUACAO_CONF = {
+  confere: ["Confere", "pos"], cotacao: ["Cotação/data diferente", ""], quantidade: ["Quantidade diferente", "neg"],
+  so_sistema: ["Só no sistema", "neg"], so_relatorio: ["Só no relatório", "neg"],
+};
+let conferenciaAtual = null;
+
+async function carregarConferencia() {
+  const alvo = $("#resultado-conferencia");
+  if (carteiraAtual === FAMILIA) { alvo.innerHTML = `<p class="dica">Selecione uma carteira para conferir.</p>`; return; }
+  alvo.innerHTML = `<p class="dica">Conferindo…</p>`;
+  try { conferenciaAtual = await api("/api/conferencia"); } catch (e) { alvo.innerHTML = ""; return toast(e.message, true); }
+  renderConferencia();
+}
+
+function renderConferencia() {
+  const c = conferenciaAtual, alvo = $("#resultado-conferencia");
+  if (c.vazio) {
+    alvo.innerHTML = `<p class="dica">Nenhum relatório de posição importado nesta carteira ainda. Importe a Posição da B3
+      e os relatórios dos bancos em “Aportes” (relatórios importados antes desta versão precisam ser importados de novo).</p>`;
+    return;
+  }
+  const soDif = $("#conf-so-diferencas")?.checked ?? true;
+  const dif = v => `<span class="${Math.abs(v) < 0.01 ? "" : v > 0 ? "pos" : "neg"}">${brlSinal(v)}</span>`;
+  const e = c.explicacao;
+  const linhasExp = [
+    ["Cotação ou data diferente (mesma quantidade)", e.cotacao, "O sistema usa a cotação mais recente; o relatório, a da data dele."],
+    ["Quantidade diferente", e.quantidade, "Compras, vendas ou eventos que faltam de um dos lados."],
+    ["Só no sistema", e.so_sistema, "Ativos fora dos relatórios ou contados duas vezes com nomes diferentes."],
+    ["Só no relatório", e.so_relatorio, "Ativos que o sistema não tem (valor negativo = falta no sistema)."],
+  ];
+  const itens = c.itens.filter(i => !soDif || i.situacao !== "confere");
+  alvo.innerHTML = `
+    <div class="chips" style="margin:6px 0 12px">${c.relatorios.map(r => `<span class="selo">${esc(r.origem)} · ${esc(r.nome)} ·
+      importado em ${fmtData(r.importado_em.slice(0, 10))} · ${brl.format(r.total)}</span>`).join(" ")}</div>
+    <div class="cards cards-conferencia">
+      <div class="card"><div class="rotulo">Relatórios (sem duplicar)</div><div class="valor">${brl.format(c.total_relatorios)}</div></div>
+      <div class="card"><div class="rotulo">Sistema</div><div class="valor">${brl.format(c.total_sistema)}</div></div>
+      <div class="card"><div class="rotulo">Diferença</div><div class="valor">${dif(c.diferenca)}</div></div>
+    </div>
+    <div class="grade2" style="margin-top:12px">
+      <div><h4>De onde vem a diferença</h4><table>${linhasExp.map(([n, v, d]) => `<tr><td style="white-space:normal">${n}
+        <small class="var-sub">${d}</small></td><td>${dif(v)}</td></tr>`).join("")}</table></div>
+      <div><h4>Por categoria</h4><table><tr><th>Categoria</th><th>Relatórios</th><th>Sistema</th><th>Diferença</th></tr>
+        ${c.categorias.map(k => `<tr><td>${esc(k.categoria)}</td><td>${brl.format(k.valor_relatorio)}</td>
+          <td>${brl.format(k.valor_sistema)}</td><td>${dif(k.diferenca)}</td></tr>`).join("")}</table></div>
+    </div>
+    <div class="cabecalho-painel" style="margin-top:16px"><h4 style="margin:0">Ativo a ativo</h4>
+      <label class="check dica"><input type="checkbox" id="conf-so-diferencas" ${soDif ? "checked" : ""}> Só os que têm diferença</label></div>
+    <div class="rolagem"><table class="tabela-conferencia"><tr><th>Ativo</th><th>Qtd. relatório</th><th>Qtd. sistema</th>
+      <th>Valor relatório</th><th>Valor sistema</th><th>Diferença</th><th>Situação</th></tr>
+      ${itens.length ? itens.map(i => `<tr><td><strong>${esc(i.ticker)}</strong><small class="var-sub">${esc(i.rotulo_classe)} · ${esc(i.origem || "fora dos relatórios")}</small></td>
+        <td>${i.qtd_relatorio ? num.format(i.qtd_relatorio) : "—"}</td>
+        <td>${i.qtd_sistema ? num.format(i.qtd_sistema) : "—"}</td><td>${brl.format(i.valor_relatorio)}</td>
+        <td>${brl.format(i.valor_sistema)}</td><td>${dif(i.diferenca)}</td>
+        <td style="white-space:normal;min-width:170px"><span class="${SITUACAO_CONF[i.situacao][1]}">${SITUACAO_CONF[i.situacao][0]}</span>
+          ${i.dica ? `<small class="var-sub">${esc(i.dica)}</small>` : ""}</td></tr>`).join("")
+        : `<tr><td colspan="7">Todos os ativos conferem com os relatórios.</td></tr>`}</table></div>
+    ${c.sobrepostos.length ? `<p class="dica">${c.sobrepostos.length} ativo(s) aparecem também nos relatórios dos bancos;
+      para eles vale a posição da B3 (não são somados).</p>` : ""}`;
+}
+
+$("#btn-conferir").addEventListener("click", carregarConferencia);
+$("#resultado-conferencia").addEventListener("change", ev => {
+  if (ev.target.id === "conf-so-diferencas") renderConferencia();
+});
+
 // ---------------- Aportes ----------------
 async function carregarHistoricoImportacoes() {
   try {
@@ -1474,6 +1541,7 @@ function recarregarAbaAtual() {
   carregarAlertas();
   $("#resultado-sugestao").innerHTML = "";
   $("#resultado-estimar").innerHTML = "";
+  $("#resultado-conferencia").innerHTML = "";
   const aba = document.querySelector("nav button.ativo")?.dataset.tab;
   ({ carteira: carregarCarteira, aportes: carregarAportes, ativos: carregarAtivos, proventos: carregarProventos, acessos: carregarAcessos, fluxo: carregarFluxo, rentabilidade: carregarRentabilidade, rendafixa: carregarRendaFixa, impostos: carregarImpostos, diversificacao: carregarDiversificacao, acompanhamento: carregarAcompanhamento }[aba] || (() => {}))();
 }

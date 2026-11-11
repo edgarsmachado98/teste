@@ -4,6 +4,7 @@ import datetime as dt
 import hashlib
 from collections import defaultdict
 import io
+import json
 import os
 import secrets
 import time
@@ -29,7 +30,7 @@ carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from carteira import analysis, auth, db, evolucao, impostos, portfolio, providers, rendafixa  # noqa: E402
 from carteira.tesouro import Tesouro  # noqa: E402
-from carteira import backup, notificacoes  # noqa: E402
+from carteira import backup, conferencia, notificacoes  # noqa: E402
 from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
@@ -335,7 +336,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             copia = backup.antes_de_importar(conn.path)
         except Exception as e:
             return erro(f"Nada foi apagado: não foi possível fazer a cópia de segurança antes ({e}).", 500)
-        tabelas = ["aportes", "proventos", "eventos", "importacoes", "ativos"]
+        tabelas = ["aportes", "proventos", "eventos", "importacoes", "ativos", "relatorios_posicao"]
         if d.get("tudo"):
             tabelas += ["alertas_preco", "acompanhamento", "metas_classe"]
         removidos = {}
@@ -656,6 +657,20 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             resumo["por_carteira"].sort(key=lambda x: -x["valor"])
         return jsonify(resumo)
 
+    # ---------- Conferência com os relatórios ----------
+    @app.get("/api/conferencia")
+    def api_conferencia():
+        if (request.headers.get("X-Carteira") or request.args.get("carteira")) == "todas":
+            return erro("A conferência é feita por carteira: selecione uma carteira.", 400)
+        cid = carteira_atual()
+        relatorios = [{"origem": r["origem"], "nome": r["nome"], "importado_em": r["importado_em"],
+                       "itens": json.loads(r["itens"])}
+                      for r in conn.execute("SELECT * FROM relatorios_posicao WHERE carteira_id = ?", (cid,))]
+        if not relatorios:
+            return jsonify({"vazio": True})
+        resumo = montar_resumo([cid])
+        return jsonify(conferencia.conferir(relatorios, resumo["ativos"], portfolio.CLASSES))
+
     # ---------- Renda fixa ----------
     @app.get("/api/renda-fixa")
     def api_renda_fixa():
@@ -864,6 +879,9 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         anteriores = [c for d, c in serie if d <= data]
         return anteriores[-1] if anteriores else None
 
+    CAMPOS_FOTO = ("ticker", "classe", "quantidade", "valor_atual", "preco_atual", "preco_medio",
+                   "sem_quantidade", "tesouro", "vencimento", "nome")
+
     def eh_posicao_inicial(a):
         return (a.get("obs") or "").startswith("posição inicial (")
 
@@ -944,7 +962,9 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             anterior = conn.execute("SELECT importado_em FROM importacoes WHERE carteira_id = ? AND hash = ?",
                                     (cid, digest)).fetchone()
             previa["arquivos"].append({"nome": arq.filename, "tipo": r["tipo_arquivo"], "origem": r["origem"],
-                                       "hash": digest, "ja_importado": anterior["importado_em"] if anterior else None})
+                                       "hash": digest, "ja_importado": anterior["importado_em"] if anterior else None,
+                                       # fotografia da posição do relatório, para a conferência do patrimônio
+                                       "posicao": [{k: p.get(k) for k in CAMPOS_FOTO} for p in r["posicao"]]})
             for chave in ("aportes", "proventos"):
                 previa[chave].extend({**x, "origem": r["origem"]} for x in r[chave])
             if r["posicao"]:
@@ -1150,6 +1170,13 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             return erro(str(e))
         agora = dt.datetime.now().isoformat(timespec="minutes")
         for a in d.get("arquivos") or []:
+            itens = [{k: p.get(k) for k in CAMPOS_FOTO} for p in a.get("posicao") or []
+                     if isinstance(p, dict) and p.get("ticker")]
+            if itens and a.get("origem"):
+                conn.execute("""INSERT INTO relatorios_posicao (carteira_id, origem, nome, hash, importado_em, itens)
+                                VALUES (?, ?, ?, ?, ?, ?)""",
+                             (cid, str(a["origem"])[:60], (a.get("nome") or "")[:200], a.get("hash"), agora,
+                              json.dumps(itens)))
             if a.get("hash"):
                 conn.execute("""INSERT OR IGNORE INTO importacoes (carteira_id, hash, nome, origem, tipo, importado_em)
                                 VALUES (?, ?, ?, ?, ?, ?)""",

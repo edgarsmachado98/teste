@@ -706,3 +706,36 @@ def test_api_tesouro_compara_so_titulos_publicos(novo_app):
     assert [(i["ticker"], i["quantidade"]) for i in conc["posicoes_iniciais"]] == [("TESOURO SELIC 2029", 0.06)]
     assert conc["posicoes_iniciais"][0]["preco"] == pytest.approx(800 / 0.06)  # valor investido
     assert conc["divergencias"] == [] and previa["ajustes"] == []  # ITUB4 não é afetado
+
+
+def test_conferencia_com_os_relatorios(novo_app):
+    from carteira import conferencia
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=300)))
+    assert c.get("/api/conferencia").get_json() == {"vazio": True}
+    b3 = xlsx_posicao()  # ITUB4 50, VALE3 10, IVVB11 3, Tesouro IPCA+ 2035
+    bb = xlsx_relatorio("Banco do Brasil", [["ITUB4", 50, 30, 1750], ["FUNDO BB RF REFERENCIADO DI", "", "", 8000]])
+    previa = c.post("/api/importar/b3/previa", content_type="multipart/form-data", data={
+        "arquivo": [(io.BytesIO(b3), "posicao.xlsx"), (io.BytesIO(bb), "bb.xlsx")], "modo": "completa"}).get_json()
+    ini = previa["conciliacao"]["posicoes_iniciais"]
+    r = c.post("/api/importar/b3/confirmar", json={
+        "aportes": [{"data": i["data"], "ticker": i["ticker"], "tipo": "compra", "quantidade": i["quantidade"],
+                     "preco": i["preco"] or 10, "classe": i["classe"]} for i in ini],
+        "ativos": previa["ajustes_ativos"], "arquivos": previa["arquivos"]})
+    assert r.status_code == 201
+    # um CDB lançado à mão com valor parecido com o do fundo: suspeita de duplicidade
+    c.post("/api/ativos", json={"ticker": "CDB BB 2027", "classe": "renda_fixa", "preco_manual": 8010})
+    c.post("/api/aportes", json={"data": "2025-01-02", "ticker": "CDB BB 2027", "quantidade": 1, "preco": 7000})
+    conf = c.get("/api/conferencia").get_json()
+    assert {x["origem"] for x in conf["relatorios"]} == {"B3", "Banco do Brasil"}
+    itens = {i["ticker"]: i for i in conf["itens"]}
+    assert itens["ITUB4"]["qtd_relatorio"] == itens["ITUB4"]["qtd_sistema"] == 50
+    assert itens["ITUB4"]["situacao"] in ("confere", "cotacao") and itens["ITUB4"]["origem"] == "B3"
+    assert itens["FUNDO BB RF REFERENCIADO DI"]["situacao"] == "confere"
+    assert itens["CDB BB 2027"]["situacao"] == "so_sistema" and "pode ser o mesmo" in itens["CDB BB 2027"]["dica"]
+    assert conf["explicacao"]["so_sistema"] == pytest.approx(8010)
+    assert conf["diferenca"] == pytest.approx(conf["total_sistema"] - conf["total_relatorios"])
+    assert any(s["ticker"] == "ITUB4" for s in conf["sobrepostos"])  # BB também informa ITUB4: vale a B3
+    # relatório mais recente de cada origem substitui o anterior
+    rels = [{"origem": "B3", "nome": "a", "importado_em": "2026-01-01T10:00", "itens": []},
+            {"origem": "B3", "nome": "b", "importado_em": "2026-02-01T10:00", "itens": []}]
+    assert [r["nome"] for r in conferencia.ultimos_por_origem(rels)] == ["b"]

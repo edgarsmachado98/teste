@@ -132,6 +132,17 @@ CREATE TABLE IF NOT EXISTS importacoes (
 );
 
 -- Cache de respostas das fontes (proventos por ação, fundamentos) em JSON.
+-- Fotografia dos relatórios de posição importados (para conferir o patrimônio com eles).
+CREATE TABLE IF NOT EXISTS relatorios_posicao (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id  INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    origem       TEXT NOT NULL,
+    nome         TEXT,
+    hash         TEXT,
+    importado_em TEXT NOT NULL,
+    itens        TEXT NOT NULL            -- JSON: [{ticker, classe, quantidade, valor_atual, ...}]
+);
+
 CREATE TABLE IF NOT EXISTS cache_dados (
     ticker     TEXT NOT NULL,
     tipo       TEXT NOT NULL,
