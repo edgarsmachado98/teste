@@ -79,6 +79,7 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
 async function carregarCarteira() {
   let c;
   try { c = await api("/api/carteira"); } catch (e) { return toast(e.message, true); }
+  carregarConferencia();  // a conferência com os relatórios é refeita sempre que o patrimônio é aberto
   $("#cards-resumo").innerHTML = [
     ["Patrimônio", brl.format(c.total_valor)],
     ["Total investido (custo)", brl.format(c.total_custo)],
@@ -756,95 +757,135 @@ async function carregarConferencia() {
   renderConferencia();
 }
 
+const ignoradosConf = () => { try { return new Set(JSON.parse(localStorage.getItem(`conf-ignorados-${carteiraAtual}`) || "[]")); } catch (e) { return new Set(); } };
+const chaveConf = i => `${i.ticker}|${i.qtd_sistema}|${i.qtd_relatorio}`;
+function ignorarConf(i) {
+  const s = ignoradosConf(); s.add(chaveConf(i));
+  try { localStorage.setItem(`conf-ignorados-${carteiraAtual}`, JSON.stringify([...s])); } catch (e) { /* ignora */ }
+}
+const qtdTxt = (q, i) => {
+  const [um, varios] = ["acao", "bdr"].includes(i.classe) ? ["ação", "ações"] : ["fii", "etf"].includes(i.classe) ? ["cota", "cotas"] : ["unidade", "unidades"];
+  return `${num.format(q)} ${q === 1 ? um : varios}`;
+};
+
+// Transforma cada diferença em um "ponto para revisar" em linguagem simples, com a ação recomendada.
+function pendenciasConf(c) {
+  const ign = ignoradosConf(), lista = [], normais = [];
+  for (const i of c.itens) {
+    const sg = i.sugestao, ignorado = ign.has(chaveConf(i));
+    if (sg?.acao === "excluir") {
+      const l = i.lancamentos.find(x => sg.ids.includes(x.id));
+      lista.push({ i, ignorado, tipo: "repetido", titulo: "Lançamento repetido",
+        texto: `A posição inicial de ${qtdTxt(l.quantidade, i)} em ${fmtData(l.data)} foi lançada duas vezes.
+          Removendo a repetida, o sistema fica com ${qtdTxt(i.qtd_sistema - l.quantidade, i)}, igual ao relatório.`,
+        acao: `<button type="button" class="btn btn-pequeno requer-edicao" data-conf-excluir="${sg.ids.join(",")}" data-ticker="${esc(i.ticker)}">Remover repetido</button>` });
+    } else if (sg?.acao === "ajustar") {
+      const sobra = sg.quantidade < 0;
+      lista.push({ i, ignorado, tipo: sobra ? "sobra" : "falta",
+        titulo: sobra ? `${qtdTxt(-sg.quantidade, i)} a mais no sistema` : `Faltam ${qtdTxt(sg.quantidade, i)} no sistema`,
+        texto: sobra
+          ? `O relatório mostra ${qtdTxt(i.qtd_relatorio, i)} e o sistema ${qtdTxt(i.qtd_sistema, i)}. Se você vendeu ou transferiu e a operação
+             não foi importada, iguale ao relatório: a diferença sai pelo preço médio, sem lucro nem prejuízo e sem afetar o IR.`
+          : `O relatório mostra ${qtdTxt(i.qtd_relatorio, i)} e o sistema ${qtdTxt(i.qtd_sistema, i)}. O melhor é importar o extrato de
+             negociação do período; se preferir, iguale ao relatório com uma compra pelo preço dele.`,
+        acao: `<button type="button" class="btn btn-pequeno requer-edicao" data-conf-ajustar="${esc(i.ticker)}">Igualar ao relatório</button>` });
+    } else if (sg?.acao === "nada") {
+      normais.push(`<strong>${esc(i.ticker)}</strong>: compra recente, ainda não liquidada na data do relatório.`);
+    } else if (i.situacao === "so_sistema" && i.dica) {
+      const duplo = i.dica.includes("pode ser o mesmo");
+      lista.push({ i, ignorado, tipo: duplo ? "duplicado" : "fora", titulo: duplo ? "Possível título em dobro" : "Não aparece nos relatórios",
+        texto: esc(i.dica) + (duplo ? " Se for o mesmo, exclua o repetido em “Ativos e metas”." : ""),
+        acao: `<button type="button" class="btn-pequeno secundario" data-conf-ir="ativos">Abrir Ativos e metas</button>` });
+    } else if (i.situacao === "so_relatorio" && !sg) {
+      lista.push({ i, ignorado, tipo: "falta", titulo: "Falta no sistema",
+        texto: `O relatório mostra ${esc(i.ticker)} (${brl.format(i.valor_relatorio)}), que não está no sistema. Importe o relatório de novo
+          em “Aportes” e confirme a posição inicial.`, acao: "" });
+    }
+  }
+  if (Math.abs(c.explicacao.cotacao) >= 0.01)
+    normais.unshift(`Diferença de cotação de ${brlSinal(c.explicacao.cotacao)}: o sistema usa a cotação mais recente e cada relatório a da sua data.`);
+  return { pendentes: lista.filter(p => !p.ignorado), ignorados: lista.filter(p => p.ignorado), normais };
+}
+
 function renderConferencia() {
   const c = conferenciaAtual, alvo = $("#resultado-conferencia");
   if (c.vazio) {
-    alvo.innerHTML = `<p class="dica">Nenhum relatório de posição importado nesta carteira ainda. Importe a Posição da B3
-      e os relatórios dos bancos em “Aportes” (relatórios importados antes desta versão precisam ser importados de novo).</p>`;
+    alvo.innerHTML = `<div class="conf-status neutro"><strong>Nada para conferir ainda</strong>
+      <span>Importe a Posição da B3 e os relatórios dos bancos em “Aportes”. Depois, o sistema compara tudo automaticamente aqui.</span></div>`;
     return;
   }
-  const soDif = $("#conf-so-diferencas")?.checked ?? true;
+  const { pendentes, ignorados, normais } = pendenciasConf(c);
   const dif = v => `<span class="${Math.abs(v) < 0.01 ? "" : v > 0 ? "pos" : "neg"}">${brlSinal(v)}</span>`;
-  const e = c.explicacao;
-  const linhasExp = [
-    ["Cotação ou data diferente (mesma quantidade)", e.cotacao, "O sistema usa a cotação mais recente; o relatório, a da data dele."],
-    ["Quantidade diferente", e.quantidade, "Compras, vendas ou eventos que faltam de um dos lados."],
-    ["Só no sistema", e.so_sistema, "Ativos fora dos relatórios ou contados duas vezes com nomes diferentes."],
-    ["Só no relatório", e.so_relatorio, "Ativos que o sistema não tem (valor negativo = falta no sistema)."],
-  ];
-  const itens = c.itens.filter(i => !soDif || i.situacao !== "confere");
-  alvo.innerHTML = `
-    <div class="chips" style="margin:6px 0 12px">${c.relatorios.map(r => `<span class="selo">${esc(r.origem)} · ${esc(r.nome)} ·
-      importado em ${fmtData(r.importado_em.slice(0, 10))} · ${brl.format(r.total)}</span>`).join(" ")}</div>
-    <div class="cards cards-conferencia">
-      <div class="card"><div class="rotulo">Relatórios (sem duplicar)</div><div class="valor">${brl.format(c.total_relatorios)}</div></div>
-      <div class="card"><div class="rotulo">Sistema</div><div class="valor">${brl.format(c.total_sistema)}</div></div>
-      <div class="card"><div class="rotulo">Diferença</div><div class="valor">${dif(c.diferenca)}</div></div>
+  const status = pendentes.length
+    ? `<div class="conf-status alerta"><strong>${pendentes.length} ${pendentes.length === 1 ? "ponto para revisar" : "pontos para revisar"}</strong>
+        <span>Resolva cada um abaixo. Depois de cada correção a conferência é refeita.</span></div>`
+    : `<div class="conf-status ok"><strong>Seu patrimônio confere com os relatórios</strong>
+        <span>${Math.abs(c.diferenca) >= 0.01 ? `A diferença de ${brlSinal(c.diferenca)} é explicada abaixo e não precisa de correção.` : "Nenhuma diferença encontrada."}</span></div>`;
+  const cartao = p => `<div class="conf-cartao ${p.tipo}">
+      <div class="conf-cartao-cab"><strong>${esc(p.i.ticker)}</strong><span class="selo">${esc(p.titulo)}</span></div>
+      <p>${p.texto}</p>
+      ${p.i.qtd_relatorio || p.i.qtd_sistema ? `<div class="conf-compara"><span>Relatório <b>${num.format(p.i.qtd_relatorio)}</b></span>
+        <span>Sistema <b>${num.format(p.i.qtd_sistema)}</b></span><span>Valor <b>${brlSinal(p.i.diferenca)}</b></span></div>` : ""}
+      <div class="conf-acoes">${p.acao}${p.ignorado ? "" : `<button type="button" class="link conf-ignorar" data-conf-ignorar="${esc(p.i.ticker)}">O sistema está certo</button>`}</div>
+    </div>`;
+  alvo.innerHTML = `${status}
+    <div class="conf-resumo">
+      <div><span>Relatórios</span><strong>${brl.format(c.total_relatorios)}</strong></div>
+      <div><span>Sistema</span><strong>${brl.format(c.total_sistema)}</strong></div>
+      <div><span>Diferença</span><strong>${brlSinal(c.diferenca) || brl.format(0)}</strong></div>
     </div>
-    <div class="grade2" style="margin-top:12px">
-      <div><h4>De onde vem a diferença</h4><table>${linhasExp.map(([n, v, d]) => `<tr><td style="white-space:normal">${n}
-        <small class="var-sub">${d}</small></td><td>${dif(v)}</td></tr>`).join("")}</table></div>
-      <div><h4>Por categoria</h4><table><tr><th>Categoria</th><th>Relatórios</th><th>Sistema</th><th>Diferença</th></tr>
+    ${pendentes.length ? `<div class="conf-cartoes">${pendentes.map(cartao).join("")}</div>` : ""}
+    ${normais.length ? `<details class="conf-mais"><summary>Diferenças normais, sem correção (${normais.length})</summary>
+      <ul>${normais.map(n => `<li>${n}</li>`).join("")}</ul></details>` : ""}
+    ${ignorados.length ? `<details class="conf-mais"><summary>Marcados como “o sistema está certo” (${ignorados.length})</summary>
+      <div class="conf-cartoes">${ignorados.map(cartao).join("")}</div>
+      <button type="button" class="link" id="conf-limpar-ignorados">Voltar a mostrar como pendentes</button></details>` : ""}
+    <details class="conf-mais"><summary>Ver detalhes por categoria e ativo</summary>
+      <p class="dica">Relatórios usados: ${c.relatorios.map(r => `${esc(r.origem)} (importado em ${fmtData(r.importado_em.slice(0, 10))})`).join(" · ")}.
+        ${c.sobrepostos.length ? `${c.sobrepostos.length} ativo(s) aparecem também nos bancos: vale a posição da B3.` : ""}</p>
+      <div class="rolagem"><table><tr><th>Categoria</th><th>Relatórios</th><th>Sistema</th><th>Diferença</th></tr>
         ${c.categorias.map(k => `<tr><td>${esc(k.categoria)}</td><td>${brl.format(k.valor_relatorio)}</td>
           <td>${brl.format(k.valor_sistema)}</td><td>${dif(k.diferenca)}</td></tr>`).join("")}</table></div>
-    </div>
-    <div class="cabecalho-painel" style="margin-top:16px"><h4 style="margin:0">Ativo a ativo</h4>
-      <label class="check dica"><input type="checkbox" id="conf-so-diferencas" ${soDif ? "checked" : ""}> Só os que têm diferença</label></div>
-    <div class="rolagem"><table class="tabela-conferencia"><tr><th>Ativo</th><th>Qtd. relatório</th><th>Qtd. sistema</th>
-      <th>Valor relatório</th><th>Valor sistema</th><th>Diferença</th><th>Situação</th></tr>
-      ${itens.length ? itens.map(i => `<tr><td><strong>${esc(i.ticker)}</strong><small class="var-sub">${esc(i.rotulo_classe)} · ${esc(i.origem || "fora dos relatórios")}</small></td>
-        <td>${i.qtd_relatorio ? num.format(i.qtd_relatorio) : "—"}</td>
-        <td>${i.qtd_sistema ? num.format(i.qtd_sistema) : "—"}</td><td>${brl.format(i.valor_relatorio)}</td>
-        <td>${brl.format(i.valor_sistema)}</td><td>${dif(i.diferenca)}</td>
-        <td style="white-space:normal;min-width:220px"><span class="${SITUACAO_CONF[i.situacao][1]}">${SITUACAO_CONF[i.situacao][0]}</span>
-          ${i.dica ? `<small class="var-sub">${esc(i.dica)}</small>` : ""}${htmlSugestao(i)}</td></tr>`).join("")
-        : `<tr><td colspan="7">Todos os ativos conferem com os relatórios.</td></tr>`}</table></div>
-    ${c.sobrepostos.length ? `<p class="dica">${c.sobrepostos.length} ativo(s) aparecem também nos relatórios dos bancos;
-      para eles vale a posição da B3 (não são somados).</p>` : ""}`;
-}
-
-function htmlSugestao(i) {
-  const sg = i.sugestao;
-  if (!sg) return "";
-  const botao = sg.acao === "excluir"
-    ? `<button type="button" class="btn-pequeno secundario requer-edicao" data-conf-excluir="${sg.ids.join(",")}" data-ticker="${esc(i.ticker)}">Excluir lançamento em dobro</button>`
-    : sg.acao === "ajustar"
-      ? `<button type="button" class="btn-pequeno secundario requer-edicao" data-conf-ajustar="${esc(i.ticker)}">Ajustar ao relatório</button>`
-      : "";
-  const lanc = i.lancamentos.length ? `<details class="lanc-conf"><summary>${i.lancamentos.length} lançamento(s) no sistema</summary>
-    <table>${i.lancamentos.map(l => `<tr class="${sg.ids?.includes(l.id) ? "destaque-conf" : ""}"><td>${fmtData(l.data)}</td>
-      <td>${l.ajuste ? ROTULO_AJUSTE[l.ajuste] || l.ajuste : l.tipo === "compra" ? "Compra" : "Venda"}</td><td>${num.format(l.quantidade)}</td>
-      <td style="white-space:normal">${esc(l.obs || "")}</td></tr>`).join("")}</table></details>` : "";
-  return `<div class="sugestao-conf"><small>${esc(sg.texto)}</small>${botao}${lanc}</div>`;
+      <div class="rolagem" style="margin-top:12px"><table class="tabela-conferencia"><tr><th>Ativo</th><th>Qtd. relatório</th><th>Qtd. sistema</th>
+        <th>Valor relatório</th><th>Valor sistema</th><th>Diferença</th><th>Situação</th></tr>
+        ${c.itens.map(i => `<tr><td><strong>${esc(i.ticker)}</strong><small class="var-sub">${esc(i.rotulo_classe)} · ${esc(i.origem || "fora dos relatórios")}</small></td>
+          <td>${i.qtd_relatorio ? num.format(i.qtd_relatorio) : "—"}</td><td>${i.qtd_sistema ? num.format(i.qtd_sistema) : "—"}</td>
+          <td>${brl.format(i.valor_relatorio)}</td><td>${brl.format(i.valor_sistema)}</td><td>${dif(i.diferenca)}</td>
+          <td><span class="${SITUACAO_CONF[i.situacao][1]}">${SITUACAO_CONF[i.situacao][0]}</span></td></tr>`).join("")}</table></div>
+    </details>`;
 }
 
 $("#resultado-conferencia").addEventListener("click", async ev => {
+  const ign = ev.target.closest("[data-conf-ignorar]"), ir = ev.target.closest("[data-conf-ir]");
+  if (ign) { ignorarConf(conferenciaAtual.itens.find(x => x.ticker === ign.dataset.confIgnorar)); return renderConferencia(); }
+  if (ir) return document.querySelector(`nav button[data-tab="${ir.dataset.confIr}"]`).click();
+  if (ev.target.id === "conf-limpar-ignorados") {
+    try { localStorage.removeItem(`conf-ignorados-${carteiraAtual}`); } catch (e) { /* ignora */ }
+    return renderConferencia();
+  }
   const exc = ev.target.closest("[data-conf-excluir]"), aj = ev.target.closest("[data-conf-ajustar]");
   if (!exc && !aj) return;
   try {
     if (exc) {
-      if (!confirm(`Excluir o lançamento em dobro de ${exc.dataset.ticker} (destacado na lista de lançamentos)?`)) return;
+      if (!confirm(`Remover o lançamento repetido de ${exc.dataset.ticker}?`)) return;
       for (const id of exc.dataset.confExcluir.split(",")) await api(`/api/aportes/${id}`, { method: "DELETE" });
-      toast(`Lançamento de ${exc.dataset.ticker} excluído.`);
+      toast(`${exc.dataset.ticker}: lançamento repetido removido.`);
     } else {
       const i = conferenciaAtual.itens.find(x => x.ticker === aj.dataset.confAjustar), q = i.sugestao.quantidade;
       const preco = i.preco_relatorio ?? (i.qtd_sistema ? i.valor_sistema / i.qtd_sistema : 0);
-      const txt = q < 0 ? `baixa sem resultado de ${num.format(-q)} ${i.ticker} (sai pelo preço médio, fora do IR)`
-        : `compra de ${num.format(q)} ${i.ticker} a ${brl.format(preco)} (preço do relatório)`;
-      if (!confirm(`Lançar hoje um ajuste: ${txt}?`)) return;
+      const txt = q < 0 ? `retirar ${num.format(-q)} de ${i.ticker} pelo preço médio (sem lucro nem prejuízo, fora do IR)`
+        : `incluir ${num.format(q)} de ${i.ticker} a ${brl.format(preco)} (preço do relatório)`;
+      if (!confirm(`Igualar ao relatório: ${txt}?`)) return;
       await api("/api/importar/b3/confirmar", { method: "POST", body: { ajustes: [{
         ticker: i.ticker, classe: i.classe, data: new Date().toLocaleDateString("sv-SE"),
         acao: q < 0 ? "baixa" : "compra", quantidade: Math.abs(q), preco }] } });
-      toast(`Ajuste de ${i.ticker} lançado.`);
+      toast(`${i.ticker} igualado ao relatório.`);
     }
     carregarConferencia();
   } catch (e) { toast(e.message, true); }
 });
 
 $("#btn-conferir").addEventListener("click", carregarConferencia);
-$("#resultado-conferencia").addEventListener("change", ev => {
-  if (ev.target.id === "conf-so-diferencas") renderConferencia();
-});
 
 // ---------------- Aportes ----------------
 async function carregarHistoricoImportacoes() {
