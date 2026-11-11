@@ -864,6 +864,9 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         anteriores = [c for d, c in serie if d <= data]
         return anteriores[-1] if anteriores else None
 
+    def eh_posicao_inicial(a):
+        return (a.get("obs") or "").startswith("posição inicial (")
+
     def propor_ajustes(cid, conc, posicao, existentes, com_ops_novas, estimadas):
         """Diferenças de quantidade entre o relatório e o sistema em ativos sem operações neste extrato.
 
@@ -978,9 +981,24 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         com_ops_novas = {a["ticker"] for a in previa["aportes"] if not a.get("ja_registrado")}
         if com_ops_novas:
             # ajustes feitos antes sem a operação real: as operações deste extrato os substituem
+            primeira_nova = {}
+            for a in previa["aportes"]:
+                if not a.get("ja_registrado"):
+                    primeira_nova[a["ticker"]] = min(primeira_nova.get(a["ticker"], a["data"]), a["data"])
+
+            def substituivel(a):
+                if a["ticker"] not in com_ops_novas or portfolio.eh_evento(a):
+                    return False
+                if a.get("ajuste"):
+                    return True
+                # posição inicial de uma importação anterior, com data depois de operações agora conhecidas
+                # (só com a posição atual junto: é ela que permite recalcular a posição inicial correta)
+                return bool(previa["posicao"]) and eh_posicao_inicial(a) and primeira_nova[a["ticker"]] < a["data"]
+
             previa["ajustes_anteriores"] = [
-                {k: a[k] for k in ("id", "data", "ticker", "tipo", "quantidade", "preco", "ajuste")}
-                for a in existentes if a.get("ajuste") and a["ticker"] in com_ops_novas]
+                {**{k: a.get(k) for k in ("id", "data", "ticker", "tipo", "quantidade", "preco")},
+                 "ajuste": a.get("ajuste") or "posicao_inicial"}
+                for a in existentes if substituivel(a)]
             ids_anteriores = {a["id"] for a in previa["ajustes_anteriores"]}
             existentes = [a for a in existentes if a.get("id") not in ids_anteriores]
         if previa["posicao"]:
@@ -1077,13 +1095,14 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         remover = {int(i) for i in d.get("remover_ajustes") or [] if str(i).isdigit()}
         if remover:  # só ajustes desta carteira podem ser removidos
             remover &= {r["id"] for r in conn.execute(
-                "SELECT id FROM aportes WHERE carteira_id = ? AND ajuste IS NOT NULL", (cid,))}
+                "SELECT id FROM aportes WHERE carteira_id = ? AND (ajuste IS NOT NULL OR obs LIKE 'posição inicial (%')",
+                (cid,))}
         base = [a for a in listar_operacoes(cid) if portfolio.eh_evento(a) or a["id"] not in remover]
         try:
             portfolio.calcular_posicoes(base + validos + portfolio.com_eventos([], novos_eventos))
         except ValueError as e:
-            return erro(f"{e} Importe um período maior (desde a primeira compra) ou registre a posição "
-                        "inicial antes de importar as vendas.", 409)
+            return erro(f"{e}. Envie junto o relatório de Posição atual da B3 (o sistema calcula a posição "
+                        "inicial que cobre essas vendas) ou importe um período maior, desde a primeira compra.", 409)
         for i in remover:
             conn.execute("DELETE FROM aportes WHERE id = ? AND carteira_id = ?", (i, cid))
         for e in novos_eventos:

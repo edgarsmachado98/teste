@@ -982,7 +982,7 @@ function renderPreviaB3() {
       (está no app da corretora ou na declaração de IR); os preços sugeridos pela cotação são apenas estimativas.</p>`;
     html += iniciais.length ? `<div class="rolagem"><table><tr><th></th><th>Ativo</th><th>Classe</th><th>Qtd. inicial</th><th>Qtd. no relatório</th><th>Preço médio (R$)</th><th>Origem do preço</th></tr>
       ${iniciais.map((x, i) => `<tr><td><input type="checkbox" data-lista="iniciais" data-idx="${i}" checked></td>
-        <td><strong>${esc(x.ticker)}</strong><small class="var-sub">${esc(origemPos[x.ticker] || "")}</small></td><td>${esc(CLASSES[x.classe] || x.classe)}</td>
+        <td><strong>${esc(x.ticker)}</strong><small class="var-sub">${esc(x.motivo || origemPos[x.ticker] || "")}</small></td><td>${esc(CLASSES[x.classe] || x.classe)}</td>
         <td><input type="number" step="any" min="0" class="qtd-inicial" data-idx="${i}" value="${x.quantidade}" style="width:100px">
           ${x.quantidade_estimada ? `<br><small class="neg">estimada pela cotação: confira</small>` : ""}</td><td>${num.format(x.qtd_b3)}</td>
         <td><input type="number" step="any" min="0" class="preco-inicial" data-idx="${i}" value="${x.preco == null ? "" : Number(x.preco.toFixed(4))}" placeholder="obrigatório" style="width:120px"></td>
@@ -1014,9 +1014,10 @@ function renderPreviaB3() {
         <td><input type="number" step="any" min="0" class="preco-ajuste" data-idx="${i}" style="width:110px"></td></tr>`).join("")}
       </table></div>`;
   }
-  if (anteriores.length) html += `<h3 style="margin-top:16px">Ajustes anteriores</h3>
-    <p class="dica">Estes ajustes foram lançados antes sem a operação real. Os arquivos atuais trazem as operações desses ativos:
-    os ajustes marcados serão <strong>removidos e substituídos</strong> pelas operações reais.</p>
+  if (anteriores.length) html += `<h3 style="margin-top:16px">Lançamentos a substituir</h3>
+    <p class="dica">Ajustes e posições iniciais lançados em importações anteriores, sem a operação real. Os arquivos atuais trazem
+    operações desses ativos de antes dessas datas: os itens marcados serão <strong>removidos e substituídos</strong> pelas
+    operações reais (e, se preciso, por uma nova posição inicial na data certa).</p>
     <div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Ajuste</th><th>Qtd.</th></tr>
     ${anteriores.map((a, i) => `<tr><td><input type="checkbox" data-lista="anteriores" data-idx="${i}" checked></td>
       <td>${fmtData(a.data)}</td><td><strong>${esc(a.ticker)}</strong></td><td>${esc(ROTULO_AJUSTE[a.ajuste] || a.ajuste)}</td>
@@ -1041,6 +1042,7 @@ function renderPreviaB3() {
 }
 
 const ROTULO_AJUSTE = { compra: "Compra", bonificacao: "Bonificação", venda: "Venda", baixa: "Baixa sem resultado",
+  posicao_inicial: "Posição inicial de importação anterior",
   desdobramento: "Desdobramento", grupamento: "Grupamento" };
 
 function opcoesAjuste(a) {

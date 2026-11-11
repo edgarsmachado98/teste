@@ -89,9 +89,11 @@ def calcular_posicoes(aportes):
             p["total_aportado"] += qtd * preco + taxas
         else:
             if qtd > p["quantidade"] + 1e-9:
+                q = lambda v: f"{v:g}".replace(".", ",")  # noqa: E731
+                d = "/".join(reversed(a["data"].split("-")))
                 raise ValueError(
-                    f"Venda de {qtd} {a['ticker']} em {a['data']} excede a posição "
-                    f"({p['quantidade']})")
+                    f"Venda de {q(qtd)} {a['ticker']} em {d} é maior que a quantidade que o sistema "
+                    f"conhece nessa data ({q(p['quantidade'])})")
             medio = p["custo"] / p["quantidade"] if p["quantidade"] else 0
             if not eh_baixa(a):  # a baixa sai pelo preço médio: sem resultado
                 p["realizado"] += qtd * (preco - medio) - taxas

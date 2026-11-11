@@ -947,14 +947,17 @@ def conciliar_posicao(posicao, aportes_existentes, aportes_novos, hoje):
     no dia anterior à primeira operação. Se negativa, há eventos ou vendas que o sistema não conhece.
     Ativos zerados na B3 mas vendidos nos extratos também recebem posição inicial.
     """
-    saldo = {}
+    saldo, falta = {}, {}  # falta: quanto o saldo chega a ficar negativo ao longo do tempo
     ops = list(aportes_existentes) + [a for a in aportes_novos if not a.get("ja_registrado")]
     for a in sorted(ops, key=lambda x: (x["data"], x.get("id") or 0)):
+        t = a["ticker"]
         if a.get("tipo") == "evento":
-            saldo[a["ticker"]] = saldo.get(a["ticker"], 0.0) * a["fator"]
+            saldo[t] = saldo.get(t, 0.0) * a["fator"]
             continue
         sinal = 1 if a.get("tipo", "compra") == "compra" else -1
-        saldo[a["ticker"]] = saldo.get(a["ticker"], 0.0) + sinal * float(a["quantidade"])
+        saldo[t] = saldo.get(t, 0.0) + sinal * float(a["quantidade"])
+        if saldo[t] < -1e-9:  # venda antes de haver posição: precisa de posição inicial anterior
+            falta[t] = max(falta.get(t, 0.0), -saldo[t])
     todas = [a["data"] for a in list(aportes_existentes) + list(aportes_novos) if a.get("tipo") != "evento"]
     data_abertura = _dia_anterior(min(todas)) if todas else hoje
     na_b3 = {p["ticker"]: p for p in posicao}
@@ -964,6 +967,23 @@ def conciliar_posicao(posicao, aportes_existentes, aportes_novos, hoje):
         p = na_b3.get(ticker)
         qtd_b3 = p["quantidade"] if p else 0.0
         diferenca = round(qtd_b3 - saldo.get(ticker, 0.0), 8)
+        necessaria = round(falta.get(ticker, 0.0), 8)
+        if necessaria > 1e-9 and necessaria > diferenca + 1e-9:
+            # vendas anteriores à posição que o sistema conhece: a posição inicial precisa cobri-las,
+            # e o que passar da posição do relatório aparece como divergência
+            iniciais.append({"ticker": ticker, "classe": p["classe"] if p else classe_provavel(ticker),
+                             "quantidade": necessaria, "data": data_abertura,
+                             "preco": p.get("preco_medio") if p else None,
+                             "preco_origem": "valor aplicado informado no relatório"
+                             if p and p.get("preco_medio") else None, "qtd_b3": qtd_b3,
+                             "motivo": "Há vendas antes da primeira compra conhecida: a posição inicial cobre essas vendas."})
+            if necessaria - diferenca > 1e-9:
+                divergencias.append({"ticker": ticker, "qtd_b3": qtd_b3,
+                                     "qtd_sistema": round(saldo.get(ticker, 0.0) + necessaria, 8),
+                                     "motivo": "Com a posição inicial necessária para as vendas, o sistema terá mais "
+                                               "do que o relatório: verifique se há uma posição inicial antiga a "
+                                               "substituir, vendas ou transferências não importadas."})
+            continue
         if abs(diferenca) < 1e-9:
             continue
         if diferenca > 0:

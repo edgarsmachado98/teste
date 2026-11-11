@@ -587,3 +587,41 @@ def test_ajuste_venda_entra_no_ir():
     assert portfolio.calcular_posicoes(ops)["ITUB4"]["realizado"] == pytest.approx(200)
     meses = {m["mes"]: m for m in impostos.apurar(ops, {"ITUB4": "acao"})}
     assert meses["2025-06"]["vendas_acoes"] == pytest.approx(1400)
+
+
+def test_vendas_antes_da_posicao_inicial_antiga(novo_app):
+    """Importação anterior criou a posição inicial em 01/04; agora chega um extrato com venda em 31/03."""
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=600)))
+    r = c.post("/api/importar/b3/confirmar", json={"aportes": [
+        {"data": "2026-04-01", "ticker": "PETR4", "tipo": "compra", "quantidade": 14, "preco": 30,
+         "classe": "acao", "obs": "posição inicial (importação)"}]})
+    assert r.status_code == 201
+    neg = xlsx(NEG_CAB, [["31/03/2026", "Venda", "Mercado à Vista", "-", "CORRETORA X", "PETR4", 14, 35, 490]])
+    # só o extrato: a venda vem antes da posição conhecida -> recusa com orientação
+    so_neg = enviar(c, neg, "neg.xlsx").get_json()
+    assert so_neg["ajustes_anteriores"] == []
+    r = c.post("/api/importar/b3/confirmar", json={"aportes": so_neg["aportes"]})
+    assert r.status_code == 409 and "Posição atual" in r.get_json()["erro"]
+    # extrato + posição atual (14): substitui a posição inicial antiga por 28 antes da venda
+    pos = xlsx_relatorio("B3", [["PETR4", 14, 30, 420]])
+    previa = c.post("/api/importar/b3/previa", content_type="multipart/form-data", data={
+        "arquivo": [(io.BytesIO(neg), "neg.xlsx"), (io.BytesIO(pos), "posicao.xlsx")]}).get_json()
+    assert [(a["ticker"], a["ajuste"]) for a in previa["ajustes_anteriores"]] == [("PETR4", "posicao_inicial")]
+    ini = previa["conciliacao"]["posicoes_iniciais"]
+    assert [(i["ticker"], i["quantidade"], i["data"]) for i in ini] == [("PETR4", 28, "2026-03-30")]
+    r = c.post("/api/importar/b3/confirmar", json={
+        "aportes": [{**i, "tipo": "compra", "preco": 30} for i in ini] + previa["aportes"],
+        "remover_ajustes": [a["id"] for a in previa["ajustes_anteriores"]]})
+    assert r.status_code == 201
+    pos = {a["ticker"]: a for a in c.get("/api/carteira").get_json()["ativos"]}
+    assert pos["PETR4"]["quantidade"] == 14 and pos["PETR4"]["realizado"] == pytest.approx(70)
+
+
+def test_conciliacao_cobre_vendas_anteriores_mesmo_com_total_igual():
+    # o total bate (14 + 9 - 23 = 0), mas a venda de 31/03 acontece antes da compra de 10/04
+    existentes = [{"id": 1, "data": "2026-03-01", "ticker": "PETR4", "tipo": "compra", "quantidade": 14, "preco": 30}]
+    novos = [{"data": "2026-03-31", "ticker": "PETR4", "tipo": "venda", "quantidade": 23, "preco": 35},
+             {"data": "2026-04-10", "ticker": "PETR4", "tipo": "compra", "quantidade": 9, "preco": 36}]
+    c = importacao.conciliar_posicao([], existentes, novos, "2026-11-05")
+    assert [(i["ticker"], i["quantidade"]) for i in c["posicoes_iniciais"]] == [("PETR4", 9)]
+    assert [d["ticker"] for d in c["divergencias"]] == ["PETR4"]
