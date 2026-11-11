@@ -1842,3 +1842,6 @@ carregarCarteiras().then(() => {
   carregarAportes();
   carregarAlertas();
 }).catch(e => toast(e.message, true));
+
+// Tema mudou pelo botão: redesenha os gráficos com as cores do novo tema.
+document.addEventListener("tema-alterado", () => recarregarAbaAtual());
