@@ -344,7 +344,8 @@ COLUNAS_MOVIMENTACAO = {"es": "entrada/saida", "data": "data", "mov": "movimenta
 COLUNAS_EVENTOS = {
     "produto": ("produto", "ativo", "codigo de negociacao"),
     "tipo": ("tipo de evento", "tipo evento", "evento", "tipo de provento", "tipo"),
-    "data": ("pagamento", "data de pagamento", "data do pagamento", "data pagamento", "data"),
+    "data": ("pagamento", "data de pagamento", "data do pagamento", "data pagamento",
+             "previsao de pagamento", "data prevista de pagamento", "data prevista", "data"),
     "quantidade": ("quantidade", "qtd", "quantidade base"),
     "preco": ("preco unitario", "valor unitario", "valor por cota", "valor por acao"),
     "valor": ("valor liquido", "valor liquido (r$)", "valor total", "valor da operacao", "valor bruto",

@@ -139,6 +139,23 @@ def test_eventos():
     assert len(r["ignorados"]) == 1 and "Evento corporativo" in r["ignorados"][0]["motivo"]
 
 
+def test_eventos_layout_previsao_de_pagamento():
+    """Layout de 2026: colunas Tipo e Tipo de Evento, data em "Previsão de pagamento"."""
+    cab = ["Produto", "Tipo", "Tipo de Evento", "Previsão de pagamento", "Instituição", "Conta",
+           "Quantidade", "Preço unitário", "Valor líquido"]
+    linhas = [
+        ["PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS", "Ações", "Dividendo", "20/12/2026", "CORRETORA X", "123",
+         100, 0.5, 50],
+        ["MXRF11 - MAXI RENDA FII", "FII", "Rendimento", "14/11/2026", "CORRETORA X", "123", 150, 0.09, "13,50"],
+        ["ITUB4 - ITAU", "Ações", "Juros Sobre Capital Próprio", "01/12/2026", "CORRETORA X", "123", 40, 0.2, 6.8],
+    ]
+    r = importacao.analisar_extrato(xlsx(cab, linhas), "eventos-2026-11-11-13-01-31.xlsx")
+    assert r["tipo_arquivo"] == "eventos"
+    assert [(p["ticker"], p["tipo"], p["data_pagamento"], p["valor_total"]) for p in r["proventos"]] == [
+        ("PETR4", "dividendo", "2026-12-20", 50.0), ("MXRF11", "rendimento", "2026-11-14", 13.5),
+        ("ITUB4", "jcp", "2026-12-01", 6.8)]
+
+
 def test_erro_mostra_colunas():
     with pytest.raises(importacao.ErroImportacao, match="Tabelas encontradas: Coluna A, Coluna B, Coluna C"):
         importacao.analisar_extrato(xlsx(["Coluna A", "Coluna B", "Coluna C"], [[1, 2, 3]]), "x.xlsx")
