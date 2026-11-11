@@ -883,11 +883,67 @@ function renderExtratoFluxo() {
 // ---------------- Importação B3 ----------------
 let previaB3 = null;
 
+let arquivosImport = [];
+const tamanhoArquivo = b => b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1048576).toFixed(1).replace(".", ",")} MB`;
+
+function renderArquivosImport() {
+  $("#lista-arquivos").innerHTML = arquivosImport.map((f, i) => {
+    const ext = (f.name.split(".").pop() || "").toUpperCase().slice(0, 4);
+    return `<li><span class="ext ext-${esc(ext.toLowerCase())}">${esc(ext)}</span>
+      <span class="nome-arq"><strong title="${esc(f.name)}">${esc(f.name)}</strong><small>${tamanhoArquivo(f.size)}</small></span>
+      <button type="button" class="btn-icone" data-remover-arquivo="${i}" title="Remover" aria-label="Remover ${esc(f.name)}">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`;
+  }).join("");
+  $("#btn-add-arquivo span").textContent = arquivosImport.length ? "Adicionar mais" : "Adicionar arquivo";
+  $("#btn-ler-arquivos").disabled = !arquivosImport.length;
+  $("#btn-ler-arquivos").textContent = arquivosImport.length > 1 ? `Ler ${arquivosImport.length} arquivos` : "Ler arquivo";
+}
+
+function adicionarArquivos(lista) {
+  const chave = f => `${f.name}|${f.size}|${f.lastModified}`;
+  const existentes = new Set(arquivosImport.map(chave));
+  const aceitos = /\.(xlsx|xls|csv|pdf|htm|html)$/i;
+  let recusados = 0;
+  for (const f of lista) {
+    if (!aceitos.test(f.name)) { recusados++; continue; }
+    if (!existentes.has(chave(f))) { arquivosImport.push(f); existentes.add(chave(f)); }
+  }
+  if (recusados) toast(`${recusados} arquivo(s) ignorado(s): use Excel, CSV ou PDF.`, true);
+  limparPreviaImport();
+  renderArquivosImport();
+}
+
+function limparPreviaImport() {
+  previaB3 = null;
+  $("#resultado-importar-b3").innerHTML = "";
+}
+
+$("#btn-add-arquivo").addEventListener("click", () => $("#input-arquivos").click());
+$("#input-arquivos").addEventListener("change", ev => {
+  adicionarArquivos([...ev.target.files]);
+  ev.target.value = "";  // permite escolher o mesmo arquivo de novo depois de removê-lo
+});
+$("#lista-arquivos").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-remover-arquivo]");
+  if (!b) return;
+  arquivosImport.splice(Number(b.dataset.removerArquivo), 1);
+  limparPreviaImport();
+  renderArquivosImport();
+});
+const zonaArquivos = $("#zona-arquivos");
+["dragenter", "dragover"].forEach(t => zonaArquivos.addEventListener(t, ev => { ev.preventDefault(); zonaArquivos.classList.add("arrastando"); }));
+["dragleave", "drop"].forEach(t => zonaArquivos.addEventListener(t, () => zonaArquivos.classList.remove("arrastando")));
+zonaArquivos.addEventListener("drop", ev => { ev.preventDefault(); adicionarArquivos([...ev.dataTransfer.files]); });
+renderArquivosImport();
+
 $("#form-importar-b3").addEventListener("submit", async ev => {
   ev.preventDefault();
   const alvo = $("#resultado-importar-b3");
-  const fd = new FormData(ev.target);
-  alvo.innerHTML = `<p class="dica">Lendo arquivo…</p>`;
+  if (!arquivosImport.length) return toast("Adicione ao menos um arquivo.", true);
+  const fd = new FormData();
+  arquivosImport.forEach(f => fd.append("arquivo", f, f.name));
+  fd.append("modo", ev.target.modo.value);
+  alvo.innerHTML = `<p class="dica">Lendo ${arquivosImport.length > 1 ? `${arquivosImport.length} arquivos` : "arquivo"}…</p>`;
   try {
     const r = await fetch("/api/importar/b3/previa", { method: "POST", body: fd,
       headers: { "X-Requested-With": "fetch", "X-Carteira": String(carteiraAtual) } });
@@ -981,6 +1037,8 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
       `Cópia de segurança feita antes: ${r.copia_seguranca}.`);
     $("#resultado-importar-b3").innerHTML = "";
     $("#form-importar-b3").reset();
+    arquivosImport = [];
+    renderArquivosImport();
     carregarAportes();
     carregarHistoricoImportacoes();
   } catch (e) { toast(e.message, true); }

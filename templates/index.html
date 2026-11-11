@@ -306,9 +306,18 @@
     <div class="painel requer-edicao">
       <h3>Importar extratos e relatórios de investimentos</h3>
       <form id="form-importar-b3" class="form-linha">
-        <label class="largo">Arquivos Excel (.xlsx, .xls), CSV ou PDF — pode selecionar vários (B3, bancos, corretoras)
-          <input type="file" name="arquivo" accept=".xlsx,.xls,.csv,.pdf,.htm,.html" multiple required></label>
-        <button type="submit">Ler arquivos</button>
+        <div class="seletor-arquivos">
+          <span class="rotulo-campo">Arquivos Excel (.xlsx, .xls), CSV ou PDF da B3, bancos e corretoras</span>
+          <input type="file" id="input-arquivos" accept=".xlsx,.xls,.csv,.pdf,.htm,.html" multiple hidden>
+          <ul id="lista-arquivos" class="lista-arquivos"></ul>
+          <div class="zona-arquivos" id="zona-arquivos">
+            <button type="button" class="secundario btn-pequeno" id="btn-add-arquivo">
+              <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Adicionar arquivo</span></button>
+            <span class="dica">ou arraste os arquivos para cá</span>
+          </div>
+        </div>
+        <button type="submit" id="btn-ler-arquivos" disabled>Ler arquivos</button>
         <fieldset class="modo-importacao">
           <legend>Os relatórios de posição desta importação mostram:</legend>
           <label class="check"><input type="radio" name="modo" value="completa" checked>

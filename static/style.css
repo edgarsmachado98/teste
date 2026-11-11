@@ -416,3 +416,32 @@ body:not(.admin) .so-admin { display: none !important; }
   .peso .barra { display: none; }
   .tabela-categorias .linha-ativo td:first-child { padding-left: 26px; }
 }
+
+/* ------------------------------------------------- seleção de arquivos */
+.seletor-arquivos { flex: 1 1 320px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rotulo-campo { font-size: .74rem; color: var(--suave); font-weight: 500; }
+.lista-arquivos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lista-arquivos:empty { display: none; }
+.lista-arquivos li { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 10px; border: 1px solid var(--borda);
+  border-radius: var(--raio-p); background: var(--painel); }
+.lista-arquivos .ext { flex: none; min-width: 38px; padding: 3px 0; text-align: center; border-radius: 5px; font-size: .66rem;
+  font-weight: 650; letter-spacing: .04em; background: var(--painel-2); color: var(--texto-2); border: 1px solid var(--borda); }
+.lista-arquivos .ext-pdf { background: #fbeeec; color: #a8392b; border-color: #f1d3ce; }
+.lista-arquivos .ext-xlsx, .lista-arquivos .ext-xls, .lista-arquivos .ext-csv { background: #e8f3ec; color: #1d6b3d; border-color: #cfe6d7; }
+.lista-arquivos .nome-arq { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lista-arquivos .nome-arq strong { font-size: .86rem; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lista-arquivos .nome-arq small { font-size: .74rem; color: var(--suave); }
+.lista-arquivos .btn-icone { width: 28px; height: 28px; color: var(--suave); }
+.lista-arquivos .btn-icone:hover { background: var(--painel-2); color: var(--neg); }
+.lista-arquivos .btn-icone .icone { width: 15px; height: 15px; }
+.zona-arquivos { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px dashed var(--borda-forte);
+  border-radius: var(--raio-p); background: var(--painel-2); transition: border-color .15s, background .15s; }
+.zona-arquivos.arrastando { border-color: var(--primaria); background: var(--primaria-suave); }
+.zona-arquivos .dica { margin: 0; }
+#btn-add-arquivo { display: inline-flex; align-items: center; gap: 6px; }
+#btn-add-arquivo .icone { width: 15px; height: 15px; }
+#btn-ler-arquivos:disabled { opacity: .5; cursor: not-allowed; }
+@media (prefers-color-scheme: dark) {
+  .lista-arquivos .ext-pdf { background: #3a1d19; color: #f0a093; border-color: #4d2620; }
+  .lista-arquivos .ext-xlsx, .lista-arquivos .ext-xls, .lista-arquivos .ext-csv { background: #18321f; color: #8fd3a5; border-color: #22452c; }
+}
