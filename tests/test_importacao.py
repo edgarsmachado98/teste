@@ -658,3 +658,12 @@ def test_leitura_bruta_igual_a_do_openpyxl():
     esperado = [[c for c in r] for r in wb.active.iter_rows(values_only=True)]
     bruto = importacao.ler_xlsx_bruto(conteudo)[0][1]
     assert [[c for c in l if c is not None] for l in bruto] == [[c for c in l if c is not None] for l in esperado]
+
+
+def test_extrato_do_tesouro_sem_titulos():
+    """Extrato consolidado de uma instituição sem títulos: só o título mesclado em A1:G1."""
+    titulo = "EXTRATO CONSOLIDADO - 11/2026"
+    r = importacao.analisar_extrato(xlsx([titulo] * 7, [], titulo=False),
+                                    "ExtratoConsolidado_FULANO_2026-11_90_2026-11-11_13-14.xlsx")
+    assert r["tipo_arquivo"] == "vazio" and r["origem"] == "Tesouro Direto"
+    assert r["posicao"] == [] and "sem dados" in r["ignorados"][0]["motivo"]

@@ -903,6 +903,7 @@ def _posicao(abas):
 # Instituições reconhecidas pelo texto do relatório (palavras inteiras, sem acento, minúsculas).
 INSTITUICOES = (
     (r"area do investidor|b3 s\.?a|brasil, bolsa, balcao", "B3"),
+    (r"extratoconsolidado|tesouro direto|tesourodireto", "Tesouro Direto"),
     (r"bb\.com\.br|banco do brasil|bb investimentos", "Banco do Brasil"),
     (r"xp investimentos|\bxpi\b", "XP"),
     (r"\bitau\b|itau unibanco|ion itau", "Itaú"),
@@ -1010,6 +1011,13 @@ def analisar_extrato(conteudo, nome_arquivo):
         return {"tipo_arquivo": "posicao", "aportes": [], "proventos": [], "ignorados": ignorados,
                 "posicao": posicao, "origem": origem}
     linhas = [linha for _, ls in abas for linha in ls]
+    textos = {str(c).strip() for l in linhas for c in l if c not in (None, "") and str(c).strip()}
+    if len(textos) <= 1:
+        # só um título (ex.: extrato do Tesouro de uma instituição onde não há títulos no período)
+        return {"tipo_arquivo": "vazio", "aportes": [], "proventos": [], "posicao": [],
+                "origem": identificar_origem(abas, "vazio", nome_arquivo),
+                "ignorados": [{"linha": 1, "descricao": next(iter(textos), ""),
+                               "motivo": "Arquivo sem dados: nenhum ativo nesta instituição ou período."}]}
     tipo, inicio, nomes = _localizar_cabecalho(linhas)
     if tipo == "negociacao":
         aportes, proventos, ignorados = _negociacao(linhas, inicio, nomes)

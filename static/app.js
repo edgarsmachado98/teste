@@ -969,7 +969,7 @@ $("#form-importar-b3").addEventListener("submit", async ev => {
   renderPreviaB3();
 });
 
-const ROTULO_ARQ = { negociacao: "Negociação", movimentacao: "Movimentação", eventos: "Eventos", posicao: "Posição / relatório" };
+const ROTULO_ARQ = { negociacao: "Negociação", movimentacao: "Movimentação", eventos: "Eventos", posicao: "Posição / relatório", vazio: "sem dados" };
 
 function renderPreviaB3() {
   const p = previaB3, alvo = $("#resultado-importar-b3");
