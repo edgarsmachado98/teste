@@ -667,3 +667,42 @@ def test_extrato_do_tesouro_sem_titulos():
                                     "ExtratoConsolidado_FULANO_2026-11_90_2026-11-11_13-14.xlsx")
     assert r["tipo_arquivo"] == "vazio" and r["origem"] == "Tesouro Direto"
     assert r["posicao"] == [] and "sem dados" in r["ignorados"][0]["motivo"]
+
+
+def test_extrato_consolidado_do_tesouro_direto():
+    t = "EXTRATO CONSOLIDADO - 11/2026"
+    linhas = [
+        ["FULANO - 123 - BB BANCO DE INVESTIMENTO S/A (Conta ativa desde 01/01/2020)"] * 7,
+        ["Título", "Vencimento", "Valor (R$)", "Valor (R$)", "Valor (R$)", "Quantidade", "Quantidade"],
+        ["Título", "Vencimento", "Investido", "Bruto atual", "Liquído atual", "Total", "Bloqueada"],
+        ["Tesouro IPCA+ 2035", 49444, 2000.0, 2600.0, 2500.0, 1.2, 0],
+        ["Tesouro IPCA+ 2035", 49444, 900.0, 1000.0, 980.0, 0.5, 0],
+        ["Tesouro Selic 2029", 47178, 800.0, 950.0, 940.0, 0.06, 0],
+        ["Total", "Total", 3700.0, 4550.0, 4420.0, 1.76, 0],
+        [],
+        ["Extrato Consolidado gerado em 11/11/2026 13:14:31. Período 11/2026."] * 7,
+    ]
+    r = importacao.analisar_extrato(xlsx([t] * 7, linhas, titulo=False),
+                                    "ExtratoConsolidado_FULANO_2026-11_820_2026-11-11_13-14.xlsx")
+    assert r["tipo_arquivo"] == "posicao" and r["origem"] == "Tesouro Direto" and r["ignorados"] == []
+    pos = {p["ticker"]: p for p in r["posicao"]}
+    assert set(pos) == {"TESOURO IPCA+ 2035", "TESOURO SELIC 2029"}
+    ipca = pos["TESOURO IPCA+ 2035"]
+    assert ipca["quantidade"] == pytest.approx(1.7) and ipca["valor_atual"] == pytest.approx(3600)
+    assert ipca["preco_medio"] == pytest.approx(2900 / 1.7) and ipca["vencimento"] == "2035-05-15"
+    assert ipca["tesouro"] and ipca["classe"] == "renda_fixa"
+
+
+def test_api_tesouro_compara_so_titulos_publicos(novo_app):
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=300)))
+    c.post("/api/aportes", json={"data": "2025-01-02", "ticker": "ITUB4", "quantidade": 100, "preco": 30})
+    linhas = [["Título", "Vencimento", "Valor (R$)", "Valor (R$)", "Valor (R$)", "Quantidade", "Quantidade"],
+              ["Título", "Vencimento", "Investido", "Bruto atual", "Liquído atual", "Total", "Bloqueada"],
+              ["Tesouro Selic 2029", 47178, 800.0, 950.0, 940.0, 0.06, 0]]
+    arq = xlsx(["EXTRATO CONSOLIDADO - 11/2026"] * 7, linhas, titulo=False)
+    previa = c.post("/api/importar/b3/previa", content_type="multipart/form-data", data={
+        "arquivo": (io.BytesIO(arq), "ExtratoConsolidado_X_820.xlsx"), "modo": "tesouro"}).get_json()
+    conc = previa["conciliacao"]
+    assert [(i["ticker"], i["quantidade"]) for i in conc["posicoes_iniciais"]] == [("TESOURO SELIC 2029", 0.06)]
+    assert conc["posicoes_iniciais"][0]["preco"] == pytest.approx(800 / 0.06)  # valor investido
+    assert conc["divergencias"] == [] and previa["ajustes"] == []  # ITUB4 não é afetado

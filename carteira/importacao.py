@@ -1003,8 +1003,81 @@ def mesclar_posicoes(por_arquivo):
     return sorted(mesclado.values(), key=lambda x: x["ticker"]), conflitos
 
 
+def _data_excel(v):
+    """Data em texto, datetime ou número de série do Excel (ex.: 46447 -> 2027-02-28)."""
+    d = _data(v)
+    if d:
+        return d
+    n = _numero(v)
+    if n and 20000 < n < 80000:
+        return (dt.date(1899, 12, 30) + dt.timedelta(days=int(n))).isoformat()
+    return None
+
+
+def _tesouro_consolidado(abas):
+    """Extrato consolidado do site do Tesouro Direto (um arquivo por instituição de custódia).
+
+    Cabeçalho em duas linhas: "Título | Vencimento | Valor (R$) x3 | Quantidade x2" e
+    "Título | Vencimento | Investido | Bruto atual | Líquido atual | Total | Bloqueada".
+    Devolve (posição, ignorados) ou None se o arquivo não for nesse formato.
+    """
+    for aba, linhas in abas:
+        for i in range(len(linhas) - 1):
+            cab1 = [_norm(c) for c in linhas[i]]
+            cab2 = [_norm(c) for c in linhas[i + 1]]
+            if not ("titulo" in cab1 and "vencimento" in cab1 and "investido" in cab2):
+                continue
+            col = {}
+            for j, nome in enumerate(cab2):
+                for chave, opcoes in (("titulo", ("titulo",)), ("vencimento", ("vencimento",)),
+                                      ("investido", ("investido",)), ("bruto", ("bruto atual", "bruto")),
+                                      ("liquido", ("liquido atual", "liquido")), ("quantidade", ("total",))):
+                    if nome in opcoes and chave not in col:
+                        col[chave] = j
+            if not {"titulo", "quantidade"} <= set(col) or not ({"bruto", "liquido"} & set(col)):
+                continue
+            itens, ignorados = {}, []
+            for n, linha in enumerate(linhas[i + 2:], start=i + 3):
+                cel = lambda k: linha[col[k]] if k in col and col[k] < len(linha) else None  # noqa: E731
+                nome = str(cel("titulo") or "").strip()
+                if not nome or _norm(nome).startswith(("total", "extrato consolidado gerado")):
+                    continue
+                qtd = _numero(cel("quantidade"))
+                valor = _numero(cel("bruto"))
+                valor = valor if valor is not None else _numero(cel("liquido"))
+                ticker, origem = ticker_do_produto(nome)
+                if origem != "tesouro" or not qtd:
+                    ignorados.append({"linha": n, "descricao": f"{aba}: {nome}",
+                                      "motivo": "Sem quantidade." if origem == "tesouro" else "Título não reconhecido."})
+                    continue
+                it = itens.setdefault(ticker, {
+                    "ticker": ticker, "classe": classe_provavel(ticker, "tesouro"), "quantidade": 0.0,
+                    "sem_quantidade": False, "tesouro": True, "vencimento": _data_excel(cel("vencimento")),
+                    "valor_atual": 0.0, "custo": 0.0, "tem_custo": False, "nome": nome[:80]})
+                it["quantidade"] += qtd
+                it["valor_atual"] += valor or 0.0
+                investido = _numero(cel("investido"))
+                if investido is not None:
+                    it["custo"] += investido
+                    it["tem_custo"] = True
+            posicao = []
+            for it in itens.values():
+                it["quantidade"] = round(it["quantidade"], 6)
+                it["preco_atual"] = it["valor_atual"] / it["quantidade"]
+                it["preco_medio"] = it["custo"] / it["quantidade"] if it["tem_custo"] else None
+                del it["custo"], it["tem_custo"]
+                posicao.append(it)
+            return sorted(posicao, key=lambda x: x["ticker"]), ignorados
+    return None
+
+
 def analisar_extrato(conteudo, nome_arquivo):
     abas = ler_abas(conteudo, nome_arquivo)
+    tesouro = _tesouro_consolidado(abas)
+    if tesouro is not None:
+        posicao, ignorados = tesouro
+        return {"tipo_arquivo": "posicao", "aportes": [], "proventos": [], "ignorados": ignorados,
+                "posicao": posicao, "origem": "Tesouro Direto"}
     if any(_cabecalho_posicao(linhas) for _, linhas in abas):
         posicao, ignorados = _posicao(abas)
         origem = identificar_origem(abas, "posicao", nome_arquivo)

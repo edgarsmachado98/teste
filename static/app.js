@@ -892,8 +892,7 @@ document.querySelectorAll(".abas-fonte button").forEach(b => b.addEventListener(
   document.querySelectorAll(".ajuda-fonte").forEach(x => x.classList.toggle("oculto", x.dataset.ajuda !== fonteImport));
   // B3: a Posição é a posição completa. Tesouro: soma ao que existe. Bancos: o usuário escolhe.
   $(".modo-importacao").classList.toggle("oculto", fonteImport !== "banco");
-  const modo = $("#form-importar-b3").modo;
-  modo.value = fonteImport === "b3" ? "completa" : "parcial";
+  $("#form-importar-b3").modo.value = fonteImport === "banco" ? "parcial" : "completa";
   arquivosImport = [];
   limparPreviaImport();
   renderArquivosImport();
@@ -956,7 +955,7 @@ $("#form-importar-b3").addEventListener("submit", async ev => {
   if (!arquivosImport.length) return toast("Adicione ao menos um arquivo.", true);
   const fd = new FormData();
   arquivosImport.forEach(f => fd.append("arquivo", f, f.name));
-  fd.append("modo", ev.target.modo.value);
+  fd.append("modo", fonteImport === "tesouro" ? "tesouro" : ev.target.modo.value);
   fd.append("fonte", fonteImport);
   alvo.innerHTML = `<p class="dica">Lendo ${arquivosImport.length > 1 ? `${arquivosImport.length} arquivos` : "arquivo"}…</p>`;
   try {

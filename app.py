@@ -1006,9 +1006,11 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             existentes = [a for a in existentes if a.get("id") not in ids_anteriores]
         if previa["posicao"]:
             # parcial: o relatório mostra só uma instituição; a posição dele soma ao que já existe
-            base = [] if modo == "parcial" else existentes
+            # tesouro: os extratos do Tesouro Direto são a posição completa só dos títulos públicos
+            base = [] if modo == "parcial" else [a for a in existentes if a["ticker"].startswith("TESOURO")] \
+                if modo == "tesouro" else existentes
             conc = conciliar_posicao(previa["posicao"], base, previa["aportes"], hoje())
-            if modo != "parcial" and any(not portfolio.eh_evento(a) for a in existentes):
+            if modo == "completa" and any(not portfolio.eh_evento(a) for a in existentes):
                 previa["ajustes"] = propor_ajustes(cid, conc, previa["posicao"], existentes, com_ops_novas, estimadas)
                 ausentes = sum(1 for a in previa["ajustes"] if not a["marcado"])
                 if ausentes:
