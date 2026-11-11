@@ -391,7 +391,7 @@ body:not(.admin) .so-admin { display: none !important; }
 
 /* ----------------------------------------------------------------- login */
 .pagina-login { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); min-height: 100vh; background: var(--painel); }
-.login-apresentacao { background: var(--tinta); color: #e9ece8; padding: 48px 56px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+.login-apresentacao { background: #15181c; color: #e9ece8; padding: 48px 56px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
 .login-apresentacao::after { content: ""; position: absolute; right: -120px; bottom: -120px; width: 420px; height: 420px; border-radius: 50%;
   border: 1px solid rgba(127, 214, 194, .16); box-shadow: 0 0 0 60px rgba(127, 214, 194, .04), 0 0 0 120px rgba(127, 214, 194, .025); }
 .login-apresentacao .marca strong { color: #fff; }
@@ -556,11 +556,13 @@ button.link.conf-ignorar:hover { color: var(--texto); }
 :root { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
-.btn-tema { position: fixed; right: 20px; bottom: 20px; z-index: 60; width: 42px; height: 42px; border-radius: 50%;
+.btn-tema-flutuante { position: fixed; right: 20px; top: 20px; z-index: 60; width: 40px; height: 40px; border-radius: 50%;
   display: grid; place-items: center; cursor: pointer; background: var(--painel); color: var(--texto);
-  border: 1px solid var(--borda-forte); box-shadow: var(--sombra-2); transition: transform .15s, background .15s; }
-.btn-tema:hover { background: var(--painel-2); transform: translateY(-1px); }
-.btn-tema .icone { width: 19px; height: 19px; }
+  border: 1px solid var(--borda-forte); box-shadow: var(--sombra); }
+.btn-tema-flutuante:hover { background: var(--painel-2); }
+.acoes-topo .btn-tema { color: var(--texto-2); border: 1px solid var(--borda); background: var(--painel); }
+.acoes-topo .btn-tema:hover { border-color: var(--borda-forte); color: var(--texto); }
+.btn-tema .icone { width: 18px; height: 18px; }
 .btn-tema .ic-sol { display: none; }
 :root[data-theme="dark"] .btn-tema .ic-sol { display: block; }
 :root[data-theme="dark"] .btn-tema .ic-lua { display: none; }
@@ -568,5 +570,6 @@ button.link.conf-ignorar:hover { color: var(--texto); }
   :root:not([data-theme="light"]) .btn-tema .ic-sol { display: block; }
   :root:not([data-theme="light"]) .btn-tema .ic-lua { display: none; }
 }
-#toast { bottom: 76px; }
 @media print { .btn-tema { display: none; } }
+:root[data-theme="dark"] .login-apresentacao { background: #121417; border-right: 1px solid var(--borda); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .login-apresentacao { background: #121417; border-right: 1px solid var(--borda); } }
