@@ -445,3 +445,14 @@ body:not(.admin) .so-admin { display: none !important; }
   .lista-arquivos .ext-pdf { background: #3a1d19; color: #f0a093; border-color: #4d2620; }
   .lista-arquivos .ext-xlsx, .lista-arquivos .ext-xls, .lista-arquivos .ext-csv { background: #18321f; color: #8fd3a5; border-color: #22452c; }
 }
+
+/* ------------------------------------------------- ajustes de quantidade */
+.tabela-ajustes td { vertical-align: top; }
+.tabela-ajustes th:nth-child(2), .tabela-ajustes td:nth-child(2),
+.tabela-ajustes th:nth-child(6), .tabela-ajustes td:nth-child(6) { text-align: left; }
+.tabela-ajustes td:nth-child(2) { white-space: normal; min-width: 130px; max-width: 180px; }
+.tabela-ajustes td:nth-child(6) { white-space: normal; min-width: 180px; max-width: 220px; }
+.tabela-ajustes td:nth-child(6) select { width: 100%; }
+.tabela-ajustes .explica-ajuste { margin-top: 4px; font-weight: 400; line-height: 1.35; }
+.tabela-ajustes input[type=date] { width: 140px; }
+.tabela-ajustes input:disabled { opacity: .5; }

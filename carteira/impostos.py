@@ -78,7 +78,8 @@ def apurar(operacoes, classes, ate_mes=None):
         cat = CATEGORIA_CLASSE.get(classes.get(ticker, "acao"))
         p = pos[ticker]
         compras = [o for o in ops if o.get("tipo", "compra") == "compra"]
-        vendas = [o for o in ops if o.get("tipo") == "venda"]
+        vendas = [o for o in ops if o.get("tipo") == "venda" and o.get("ajuste") != "baixa"]
+        baixas = [o for o in ops if o.get("ajuste") == "baixa"]
         eventos = [o for o in ops if o.get("tipo") == "evento"]
         qc = sum(float(o["quantidade"]) for o in compras)
         qv = sum(float(o["quantidade"]) for o in vendas)
@@ -111,6 +112,11 @@ def apurar(operacoes, classes, ate_mes=None):
                 mes["resultado"][cat] += venda - custo
                 mes["operacoes"].append({"data": data, "ticker": ticker, "tipo": cat, "quantidade": q,
                                          "venda": venda, "custo": custo, "resultado": venda - custo})
+        for b in baixas:  # saída sem venda: reduz a posição pelo preço médio, fora da apuração
+            q = float(b["quantidade"])
+            medio = p[1] / p[0] if p[0] else 0.0
+            p[1] -= medio * min(q, p[0])
+            p[0] = max(p[0] - q, 0.0)
         for e in eventos:
             p[0] *= e["fator"]
 

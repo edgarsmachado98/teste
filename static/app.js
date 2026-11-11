@@ -777,9 +777,9 @@ async function carregarAportes() {
     $("#tabela-aportes").innerHTML = `<tr><th>Data</th><th>Ativo</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Taxas</th><th>Total</th><th>Obs.</th><th></th></tr>` +
       (aportes.length ? aportes.map(a => `<tr>
         <td>${fmtData(a.data)}</td><td><strong>${esc(a.ticker)}</strong></td>
-        <td class="${a.tipo === "compra" ? "pos" : "neg"}">${a.tipo === "compra" ? "Compra" : "Venda"}</td>
-        <td>${num.format(a.quantidade)}</td><td>${brl.format(a.preco)}</td><td>${brl.format(a.taxas)}</td>
-        <td>${brl.format(a.quantidade * a.preco + (a.tipo === "compra" ? a.taxas : -a.taxas))}</td>
+        <td class="${a.tipo === "compra" ? "pos" : "neg"}">${a.ajuste ? ROTULO_AJUSTE[a.ajuste] || a.ajuste : a.tipo === "compra" ? "Compra" : "Venda"}${a.ajuste ? ` <span class="selo">ajuste</span>` : ""}</td>
+        <td>${num.format(a.quantidade)}</td><td>${a.ajuste === "baixa" ? "—" : brl.format(a.preco)}</td><td>${brl.format(a.taxas)}</td>
+        <td>${a.ajuste === "baixa" ? "—" : brl.format(a.quantidade * a.preco + (a.tipo === "compra" ? a.taxas : -a.taxas))}</td>
         <td>${esc(a.obs)}</td>
         <td><button class="link requer-edicao" data-remover-aporte="${a.id}">excluir</button></td></tr>`).join("")
         : `<tr><td colspan="9">Nenhum aporte registrado.</td></tr>`);
@@ -963,7 +963,8 @@ function renderPreviaB3() {
   const conc = p.conciliacao;
   const iniciais = conc ? conc.posicoes_iniciais : [];
   const origemPos = Object.fromEntries((p.posicao || []).map(x => [x.ticker, x.origem]));
-  const novos = p.aportes.filter(a => !a.ja_registrado).length + p.proventos.filter(x => !x.ja_registrado).length + iniciais.length;
+  const ajustes = p.ajustes || [], anteriores = p.ajustes_anteriores || [];
+  const novos = p.aportes.filter(a => !a.ja_registrado).length + p.proventos.filter(x => !x.ja_registrado).length + iniciais.length + ajustes.length;
   let html = `<div class="resumo-importacao">
       ${p.arquivos.map(a => `<span class="selo">${esc(a.origem || "")} · ${esc(ROTULO_ARQ[a.tipo] || a.tipo)}: ${esc(a.nome)}</span>${
         a.ja_importado ? ` <span class="selo aviso-reimport">já importado em ${fmtData(a.ja_importado.slice(0, 10))}</span>` : ""}`).join(" ")}
@@ -995,6 +996,32 @@ function renderPreviaB3() {
       <input type="checkbox" id="aplicar-ajustes" checked> Atualizar classe de ${p.ajustes_ativos.length} ativo(s) e o valor atual de renda fixa, Tesouro e fundos conforme o relatório (${mudancas.length} alteração(ões))</label>`;
   }
 
+  if (ajustes.length) {
+    html += `<h3 style="margin-top:16px">Ajustes de quantidade</h3>
+      <p class="dica">Ativos cuja quantidade no relatório é diferente da do sistema e que não têm operações nestes arquivos.
+      Escolha como registrar cada diferença. Os ajustes ficam marcados: se depois você importar o extrato de negociação
+      com as operações reais, o sistema propõe substituí-los.</p>
+      ${p.aviso_ajustes ? `<div class="aviso" style="margin:8px 0">${esc(p.aviso_ajustes)}</div>` : ""}
+      <div class="rolagem"><table class="tabela-ajustes"><tr><th></th><th>Ativo</th><th>No sistema</th><th>No relatório</th><th>Diferença</th>
+        <th>Como registrar</th><th>Data</th><th>Preço (R$)</th></tr>
+      ${ajustes.map((a, i) => `<tr data-ajuste="${i}">
+        <td><input type="checkbox" data-lista="ajustes" data-idx="${i}" ${a.marcado ? "checked" : ""}></td>
+        <td><strong>${esc(a.ticker)}</strong><small class="var-sub">${esc(a.motivo)}</small></td>
+        <td>${num.format(a.qtd_sistema)}</td><td>${num.format(a.qtd_relatorio)}</td>
+        <td class="${a.diferenca > 0 ? "pos" : "neg"}"><strong>${a.diferenca > 0 ? "+" : "−"}${num.format(Math.abs(a.diferenca))}</strong></td>
+        <td><select class="acao-ajuste" data-idx="${i}">${opcoesAjuste(a)}</select><small class="var-sub explica-ajuste"></small></td>
+        <td><input type="date" class="data-ajuste" data-idx="${i}" value="${a.data}"></td>
+        <td><input type="number" step="any" min="0" class="preco-ajuste" data-idx="${i}" style="width:110px"></td></tr>`).join("")}
+      </table></div>`;
+  }
+  if (anteriores.length) html += `<h3 style="margin-top:16px">Ajustes anteriores</h3>
+    <p class="dica">Estes ajustes foram lançados antes sem a operação real. Os arquivos atuais trazem as operações desses ativos:
+    os ajustes marcados serão <strong>removidos e substituídos</strong> pelas operações reais.</p>
+    <div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Ajuste</th><th>Qtd.</th></tr>
+    ${anteriores.map((a, i) => `<tr><td><input type="checkbox" data-lista="anteriores" data-idx="${i}" checked></td>
+      <td>${fmtData(a.data)}</td><td><strong>${esc(a.ticker)}</strong></td><td>${esc(ROTULO_AJUSTE[a.ajuste] || a.ajuste)}</td>
+      <td>${num.format(a.quantidade)}</td></tr>`).join("")}</table></div>`;
+
   if (p.aportes.length) html += `<h3 style="margin-top:16px">Operações</h3><div class="rolagem"><table><tr><th></th><th>Data</th><th>Ativo</th><th>Classe</th><th>Tipo</th><th>Qtd.</th><th>Preço</th><th>Total</th><th>Situação</th></tr>
     ${p.aportes.map((a, i) => `<tr class="${a.ja_registrado ? "desativado" : ""}"><td>${marca("aportes", i, a)}</td><td>${fmtData(a.data)}</td>
       <td><strong>${esc(a.ticker)}</strong></td><td>${esc(CLASSES[a.classe] || a.classe)}</td>
@@ -1007,10 +1034,49 @@ function renderPreviaB3() {
   const nadaLido = !p.posicao.length && !p.aportes.length && !p.proventos.length;
   if (p.ignorados.length) html += `<details class="dica" style="margin-top:12px" ${nadaLido ? "open" : ""}><summary>${p.ignorados.length} linha(s) não importada(s)${nadaLido ? ": veja abaixo o que foi lido de cada linha" : ""}</summary>
     <div class="rolagem"><table><tr><th>Arquivo</th><th>Linha</th><th>Descrição</th><th>Motivo</th></tr>${p.ignorados.map(g => `<tr><td>${esc(g.arquivo || "")}</td><td>${g.linha}</td><td>${esc(g.descricao)}</td><td>${esc(g.motivo)}</td></tr>`).join("")}</table></div></details>`;
-  if (novos || (conc && p.ajustes_ativos.length)) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar selecionados</button>
+  if (novos || anteriores.length || (conc && p.ajustes_ativos.length)) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar selecionados</button>
     <span class="dica">Confira as classes depois em “Ativos e metas” (tickers terminados em 11 podem ser FII, ETF ou unit).</span></div>`;
   alvo.innerHTML = html;
+  document.querySelectorAll("#resultado-importar-b3 .acao-ajuste").forEach(atualizarLinhaAjuste);
 }
+
+const ROTULO_AJUSTE = { compra: "Compra", bonificacao: "Bonificação", venda: "Venda", baixa: "Baixa sem resultado",
+  desdobramento: "Desdobramento", grupamento: "Grupamento" };
+
+function opcoesAjuste(a) {
+  const ops = a.diferenca > 0
+    ? [["compra", "Compra"], ["bonificacao", "Bonificação"], ...(a.fator ? [["desdobramento", "Desdobramento"]] : [])]
+    : [["baixa", "Baixa sem resultado"], ["venda", "Venda"], ...(a.fator ? [["grupamento", "Grupamento"]] : [])];
+  return ops.map(([v, r]) => `<option value="${v}" ${v === a.acao ? "selected" : ""}>${r}</option>`).join("");
+}
+
+function atualizarLinhaAjuste(sel) {
+  const i = Number(sel.dataset.idx), a = previaB3.ajustes[i], acao = sel.value;
+  const linha = sel.closest("tr"), preco = linha.querySelector(".preco-ajuste"), txt = linha.querySelector(".explica-ajuste");
+  const fatorTxt = a.fator ? num.format(a.fator) : "";
+  const textos = {
+    compra: "Compra com data aproximada. Informe o preço pago (preço médio da compra).",
+    bonificacao: "Ações recebidas sem pagar. Custo por ação informado pela empresa (pode ser 0).",
+    desdobramento: `Fator ${fatorTxt}: muda a quantidade e mantém o custo total.`,
+    baixa: "Saída sem venda (transferência, ajuste): sai pelo preço médio, sem lucro nem prejuízo e fora do IR.",
+    venda: "Venda com data aproximada: gera lucro/prejuízo e entra na apuração do IR. Informe o preço de venda.",
+    grupamento: `Fator ${fatorTxt}: muda a quantidade e mantém o custo total.`,
+  };
+  txt.textContent = textos[acao];
+  const semPreco = acao === "desdobramento" || acao === "grupamento" || acao === "baixa";
+  preco.disabled = semPreco;
+  if (semPreco) preco.value = "";
+  else if (!preco.dataset.editado) {
+    const sug = acao === "bonificacao" ? 0 : acao === "venda" ? a.cotacao : a.preco_sugerido;
+    preco.value = sug == null ? "" : Number(Number(sug).toFixed(4));
+  }
+  preco.placeholder = semPreco ? "—" : "obrigatório";
+}
+
+$("#resultado-importar-b3").addEventListener("change", ev => {
+  if (ev.target.classList.contains("acao-ajuste")) atualizarLinhaAjuste(ev.target);
+  if (ev.target.classList.contains("preco-ajuste")) ev.target.dataset.editado = "1";
+});
 
 $("#resultado-importar-b3").addEventListener("click", async ev => {
   if (ev.target.id !== "btn-confirmar-b3") return;
@@ -1024,16 +1090,33 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
     if (!(preco >= 0)) return toast(`Informe o preço médio de ${x.ticker} (ou desmarque a linha).`, true);
     iniciais.push({ data: x.data, ticker: x.ticker, tipo: "compra", quantidade, preco, classe: x.classe, obs: "posição inicial (importação)" });
   }
+  const ajustes = [];
+  for (const i of sel("ajustes")) {
+    const a = previaB3.ajustes[i];
+    const acao = document.querySelector(`.acao-ajuste[data-idx="${i}"]`).value;
+    const data = document.querySelector(`.data-ajuste[data-idx="${i}"]`).value;
+    const precoTxt = document.querySelector(`.preco-ajuste[data-idx="${i}"]`).value;
+    if (!data) return toast(`Informe a data do ajuste de ${a.ticker}.`, true);
+    let preco = parseFloat(precoTxt);
+    if (acao === "baixa") preco = a.cotacao ?? a.preco_medio ?? 0;  // só informativo: a baixa sai pelo preço médio
+    else if (acao !== "desdobramento" && acao !== "grupamento" && !(preco >= 0))
+      return toast(`Informe o preço do ajuste de ${a.ticker} (ou desmarque a linha).`, true);
+    ajustes.push({ ticker: a.ticker, classe: a.classe, data, acao, quantidade: Math.abs(a.diferenca), preco, fator: a.fator });
+  }
   const body = {
+    ajustes,
+    remover_ajustes: sel("anteriores").map(i => previaB3.ajustes_anteriores[i].id),
     aportes: [...iniciais, ...sel("aportes").map(i => previaB3.aportes[i])],
     proventos: sel("proventos").map(i => previaB3.proventos[i]),
     ativos: $("#aplicar-ajustes")?.checked ? previaB3.ajustes_ativos : [],
     arquivos: previaB3.arquivos,
   };
-  if (!body.aportes.length && !body.proventos.length && !body.ativos.length) return toast("Nenhum item selecionado.", true);
+  if (!body.aportes.length && !body.proventos.length && !body.ativos.length && !ajustes.length && !body.remover_ajustes.length)
+    return toast("Nenhum item selecionado.", true);
   try {
     const r = await api("/api/importar/b3/confirmar", { method: "POST", body });
-    toast(`Importados: ${r.aportes} operação(ões), ${r.proventos} provento(s)${r.ativos ? `, ${r.ativos} ativo(s) atualizados` : ""}. ` +
+    toast(`Importados: ${r.aportes} operação(ões), ${r.proventos} provento(s)${r.ajustes ? `, ${r.ajustes} ajuste(s) de quantidade` : ""}` +
+      `${r.ajustes_removidos ? `, ${r.ajustes_removidos} ajuste(s) anterior(es) substituído(s)` : ""}${r.ativos ? `, ${r.ativos} ativo(s) atualizados` : ""}. ` +
       `Cópia de segurança feita antes: ${r.copia_seguranca}.`);
     $("#resultado-importar-b3").innerHTML = "";
     $("#form-importar-b3").reset();

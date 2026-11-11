@@ -864,6 +864,57 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         anteriores = [c for d, c in serie if d <= data]
         return anteriores[-1] if anteriores else None
 
+    def propor_ajustes(cid, conc, posicao, existentes, com_ops_novas, estimadas):
+        """Diferenças de quantidade entre o relatório e o sistema em ativos sem operações neste extrato.
+
+        Em vez de virar "posição inicial" (na data de abertura) ou só um aviso de divergência, cada
+        diferença vira um ajuste na data do relatório, que o usuário confirma e classifica.
+        Retira de `conc` os itens transformados em ajuste.
+        """
+        no_relatorio = {p["ticker"]: p for p in posicao}
+        classes = {a["ticker"]: a["classe"] for a in listar_ativos(cid)}
+        posicoes = portfolio.calcular_posicoes(existentes)
+        data, ajustes = hoje(), []
+
+        def elegivel(ticker, classe):
+            return (ticker not in com_ops_novas and ticker not in estimadas
+                    and classe in portfolio.CLASSES_INTEIRAS)
+
+        def item(ticker, classe, qtd_rel, qtd_sis, marcado, motivo):
+            dif = round(qtd_rel - qtd_sis, 8)
+            pos = posicoes.get(ticker) or {}
+            fator = qtd_rel / qtd_sis if qtd_sis > 0 and qtd_rel > 0 else None
+            p = no_relatorio.get(ticker) or {}
+            cotacao = preco_em(ticker, data)
+            return {"ticker": ticker, "classe": classe, "qtd_relatorio": qtd_rel, "qtd_sistema": qtd_sis,
+                    "diferenca": dif, "data": data, "fator": fator, "marcado": marcado, "motivo": motivo,
+                    "preco_medio": pos.get("preco_medio") or 0.0,
+                    "preco_sugerido": p.get("preco_medio") if dif > 0 and p.get("preco_medio") else cotacao,
+                    "cotacao": cotacao,
+                    "acao": "compra" if dif > 0 else "baixa"}
+
+        restantes = []
+        for x in conc["posicoes_iniciais"]:
+            if elegivel(x["ticker"], x["classe"]):
+                qtd_sis = round(x["qtd_b3"] - x["quantidade"], 8)
+                ajustes.append(item(x["ticker"], x["classe"], x["qtd_b3"], qtd_sis, True,
+                                    "O relatório mostra mais do que o sistema."))
+            else:
+                restantes.append(x)
+        conc["posicoes_iniciais"] = restantes
+        restantes = []
+        for x in conc["divergencias"]:
+            classe = (no_relatorio.get(x["ticker"]) or {}).get("classe") or classes.get(x["ticker"], "outro")
+            if elegivel(x["ticker"], classe):
+                presente = x["ticker"] in no_relatorio
+                ajustes.append(item(x["ticker"], classe, x["qtd_b3"], x["qtd_sistema"], presente,
+                                    "O relatório mostra menos do que o sistema." if presente else
+                                    "Não aparece no relatório: marque se o ativo saiu da carteira."))
+            else:
+                restantes.append(x)
+        conc["divergencias"] = restantes
+        return sorted(ajustes, key=lambda a: a["ticker"])
+
     @app.post("/api/importar/b3/previa")
     def api_importar_b3_previa():
         """Lê um ou mais extratos (Posição, Negociação, Movimentação, Eventos) e monta a prévia."""
@@ -923,10 +974,27 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                     p["quantidade"] = round(p["valor_atual"] / pu, 2)
                     p["preco_atual"], p["sem_quantidade"] = pu, False
                     estimadas.add(p["ticker"])
+        previa["ajustes"], previa["ajustes_anteriores"] = [], []
+        com_ops_novas = {a["ticker"] for a in previa["aportes"] if not a.get("ja_registrado")}
+        if com_ops_novas:
+            # ajustes feitos antes sem a operação real: as operações deste extrato os substituem
+            previa["ajustes_anteriores"] = [
+                {k: a[k] for k in ("id", "data", "ticker", "tipo", "quantidade", "preco", "ajuste")}
+                for a in existentes if a.get("ajuste") and a["ticker"] in com_ops_novas]
+            ids_anteriores = {a["id"] for a in previa["ajustes_anteriores"]}
+            existentes = [a for a in existentes if a.get("id") not in ids_anteriores]
         if previa["posicao"]:
             # parcial: o relatório mostra só uma instituição; a posição dele soma ao que já existe
             base = [] if modo == "parcial" else existentes
             conc = conciliar_posicao(previa["posicao"], base, previa["aportes"], hoje())
+            if modo != "parcial" and any(not portfolio.eh_evento(a) for a in existentes):
+                previa["ajustes"] = propor_ajustes(cid, conc, previa["posicao"], existentes, com_ops_novas, estimadas)
+                ausentes = sum(1 for a in previa["ajustes"] if not a["marcado"])
+                if ausentes:
+                    previa["aviso_ajustes"] = (
+                        f"{ausentes} ativo(s) do sistema não aparecem nestes relatórios. Se eles mostram só uma "
+                        "instituição, escolha “Só uma instituição” e leia de novo: no modo atual o sistema entende "
+                        "que os relatórios são toda a sua posição.")
             for item in conc["posicoes_iniciais"]:
                 item["quantidade_estimada"] = item["ticker"] in estimadas
             for item in conc["posicoes_iniciais"]:
@@ -980,11 +1048,47 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                     or item["classe"] not in portfolio.CLASSES:
                 return erro(f"Operação inválida: {item['ticker']} em {item['data']}.")
             validos.append(item)
+        # ajustes de posição (diferenças entre o relatório e o sistema, confirmadas pelo usuário)
+        novos_eventos = []
+        for aj in d.get("ajustes") or []:
+            try:
+                ticker = str(aj["ticker"]).upper().strip()
+                data_aj = dt.date.fromisoformat(aj["data"]).isoformat()
+                acao = aj["acao"]
+                if acao in ("desdobramento", "grupamento"):
+                    fator = float(aj["fator"])
+                    if not ticker or fator <= 0:
+                        raise ValueError
+                    novos_eventos.append({"ticker": ticker, "data": data_aj, "fator": fator,
+                                          "tipo": "desdobramento" if fator >= 1 else "grupamento"})
+                    continue
+                if acao not in portfolio.AJUSTES:
+                    raise ValueError
+                qtd, preco = abs(float(aj["quantidade"])), float(aj.get("preco") or 0)
+                if not ticker or qtd <= 0 or preco < 0:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                return erro(f"Ajuste inválido: {aj.get('ticker')}. Confira a quantidade, o preço e a data.")
+            classe = aj.get("classe") if aj.get("classe") in portfolio.CLASSES else "acao"
+            validos.append({"id": 10**12 + len(validos), "data": data_aj, "ticker": ticker,
+                            "tipo": "compra" if acao in ("compra", "bonificacao") else "venda",
+                            "quantidade": qtd, "preco": preco, "taxas": 0.0, "classe": classe, "ajuste": acao,
+                            "obs": f"ajuste de posição pelo relatório: {portfolio.AJUSTES[acao].split(' (')[0].lower()}"})
+        remover = {int(i) for i in d.get("remover_ajustes") or [] if str(i).isdigit()}
+        if remover:  # só ajustes desta carteira podem ser removidos
+            remover &= {r["id"] for r in conn.execute(
+                "SELECT id FROM aportes WHERE carteira_id = ? AND ajuste IS NOT NULL", (cid,))}
+        base = [a for a in listar_operacoes(cid) if portfolio.eh_evento(a) or a["id"] not in remover]
         try:
-            portfolio.calcular_posicoes(listar_operacoes(cid) + validos)
+            portfolio.calcular_posicoes(base + validos + portfolio.com_eventos([], novos_eventos))
         except ValueError as e:
             return erro(f"{e} Importe um período maior (desde a primeira compra) ou registre a posição "
                         "inicial antes de importar as vendas.", 409)
+        for i in remover:
+            conn.execute("DELETE FROM aportes WHERE id = ? AND carteira_id = ?", (i, cid))
+        for e in novos_eventos:
+            conn.execute("INSERT INTO eventos (carteira_id, ticker, data, tipo, fator, obs) VALUES (?,?,?,?,?,?)",
+                         (cid, e["ticker"], e["data"], e["tipo"], e["fator"], "ajuste de posição pelo relatório"))
         for aj in d.get("ativos") or []:
             ticker = str(aj.get("ticker") or "").upper().strip()
             classe = aj.get("classe") if aj.get("classe") in portfolio.CLASSES else None
@@ -1010,9 +1114,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                              (cid, a["ticker"], a["classe"]))
                 existentes.add(a["ticker"])
             conn.execute(
-                """INSERT INTO aportes (carteira_id, data, ticker, tipo, quantidade, preco, taxas, obs)
-                   VALUES (?,?,?,?,?,?,?,?)""",
-                (cid, a["data"], a["ticker"], a["tipo"], a["quantidade"], a["preco"], a["taxas"], a["obs"]))
+                """INSERT INTO aportes (carteira_id, data, ticker, tipo, quantidade, preco, taxas, obs, ajuste)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (cid, a["data"], a["ticker"], a["tipo"], a["quantidade"], a["preco"], a["taxas"], a["obs"],
+                 a.get("ajuste")))
         try:
             for p in novos_proventos:
                 inserir_provento(cid, {**p, "obs": p.get("obs") or "importado B3"})
@@ -1026,8 +1131,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                                 VALUES (?, ?, ?, ?, ?, ?)""",
                              (cid, a["hash"], (a.get("nome") or "")[:200], a.get("origem"), a.get("tipo"), agora))
         conn.commit()
+        n_ajustes = sum(1 for a in validos if a.get("ajuste"))
         return jsonify({"ok": True, "copia_seguranca": os.path.basename(copia),
-                        "aportes": len(validos), "proventos": len(novos_proventos),
+                        "aportes": len(validos) - n_ajustes, "ajustes": n_ajustes + len(novos_eventos),
+                        "ajustes_removidos": len(remover), "proventos": len(novos_proventos),
                         "ativos": len(d.get("ativos") or [])}), 201
 
     # ---------- Eventos corporativos ----------

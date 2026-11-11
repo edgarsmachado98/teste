@@ -251,6 +251,8 @@ COLUNAS_NOVAS = [
     ("ativos", "isento_ir", "INTEGER NOT NULL DEFAULT 0"),  # LCI, LCA, CRI, CRA, debêntures incentivadas
     ("carteiras", "meta_renda_mensal", "REAL"),  # meta de renda passiva (R$/mês)
     ("ativos", "setor", "TEXT"),
+    # Ajuste de posição feito a partir de um relatório (compra | bonificacao | baixa | venda | NULL = operação real)
+    ("aportes", "ajuste", "TEXT"),
     ("precos_meta", "atualizado_em", "TEXT"),   # data e hora da última busca de cotações                # setor econômico (preenchido pelas fontes ou manualmente)
 ]
 

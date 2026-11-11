@@ -47,6 +47,24 @@ def eh_evento(a):
     return a.get("tipo") == "evento"
 
 
+# Ajustes de posição (lançados a partir de um relatório, sem a operação real):
+#   compra      compra com data aproximada (entra como compra normal)
+#   bonificacao ações recebidas, custo informado (pode ser zero); não é saída de dinheiro
+#   venda       venda com data aproximada (gera resultado e entra no IR)
+#   baixa       saída sem venda (transferência, ajuste): sai pelo preço médio, sem lucro/prejuízo e fora do IR
+AJUSTES = {"compra": "Compra (ajuste)", "bonificacao": "Bonificação (ajuste)",
+           "venda": "Venda (ajuste)", "baixa": "Baixa sem resultado (ajuste)"}
+
+
+def eh_baixa(a):
+    return a.get("ajuste") == "baixa"
+
+
+def sem_caixa(a):
+    """Ajustes que não movimentam dinheiro (não entram no fluxo financeiro)."""
+    return a.get("ajuste") in ("baixa", "bonificacao")
+
+
 def calcular_posicoes(aportes):
     """Consolida a lista de aportes (compras/vendas) em posições por ticker.
 
@@ -75,7 +93,8 @@ def calcular_posicoes(aportes):
                     f"Venda de {qtd} {a['ticker']} em {a['data']} excede a posição "
                     f"({p['quantidade']})")
             medio = p["custo"] / p["quantidade"] if p["quantidade"] else 0
-            p["realizado"] += qtd * (preco - medio) - taxas
+            if not eh_baixa(a):  # a baixa sai pelo preço médio: sem resultado
+                p["realizado"] += qtd * (preco - medio) - taxas
             p["quantidade"] -= qtd
             p["custo"] -= qtd * medio
             if p["quantidade"] < 1e-9:
@@ -415,7 +434,9 @@ def fluxo(aportes, proventos, inicio, fim, hoje):
             p[1] -= medio * min(qtd, p[0])
             p[0] = max(p[0] - qtd, 0.0)
             valor = qtd * preco - taxas
-        if inicio <= a["data"] <= fim:
+        if eh_baixa(a):
+            lucro = None
+        if inicio <= a["data"] <= fim and not sem_caixa(a):
             lancamentos.append({"data": a["data"], "ticker": a["ticker"], "tipo": a.get("tipo", "compra"),
                                 "quantidade": qtd, "preco": preco, "valor": valor, "lucro": lucro,
                                 "obs": a.get("obs") or ""})

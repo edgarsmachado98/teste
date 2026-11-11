@@ -484,7 +484,10 @@ def test_api_varios_relatorios_e_reimportacao(novo_app):
     # outra corretora, importada depois: "parcial" soma ao que já existe
     xp = xlsx_relatorio("XP Investimentos", [["ITUB4", 20, 31, 700]])
     completa = enviar(("xp.xlsx", xp))
-    assert "ITUB4" in {d["ticker"] for d in completa["conciliacao"]["divergencias"]}  # completa: parece que sobra
+    # completa: parece que sobra ITUB4 -> proposto como ajuste (baixa); VALE3/IVVB11 ausentes ficam desmarcados
+    aj = {a["ticker"]: a for a in completa["ajustes"]}
+    assert aj["ITUB4"]["diferenca"] == -30 and aj["ITUB4"]["acao"] == "baixa" and aj["ITUB4"]["marcado"]
+    assert not aj["VALE3"]["marcado"] and completa["aviso_ajustes"]
     parcial = enviar(("xp.xlsx", xp), modo="parcial")
     assert parcial["arquivos"][0]["origem"] == "XP"
     assert {i["ticker"]: i["quantidade"] for i in parcial["conciliacao"]["posicoes_iniciais"]} == {"ITUB4": 20}
@@ -514,3 +517,56 @@ def test_copia_de_seguranca_antes_da_importacao(novo_app, tmp_path, monkeypatch)
     copia = sqlite3.connect(tmp_path / "copias" / nome)
     assert [t for (t,) in copia.execute("SELECT ticker FROM aportes")] == ["PETR4"]  # estado de antes
     assert any(x["nome"] == nome for x in c.get("/api/backup").get_json()["copias"])
+
+
+def test_ajustes_de_quantidade_pelo_relatorio(novo_app):
+    c = cliente_logado(novo_app(lambda t: serie_simulada(t, dias=300)))
+    for t, q, p in (("ITUB4", 100, 30), ("VALE3", 10, 60), ("BBAS3", 20, 25)):
+        assert c.post("/api/aportes", json={"data": "2025-01-02", "ticker": t, "quantidade": q, "preco": p}).status_code == 201
+    rel = xlsx_relatorio("XP Investimentos", [["ITUB4", 60, 30, 1800], ["VALE3", 20, 30, 600], ["WEGE3", 5, 40, 200]])
+    previa = c.post("/api/importar/b3/previa", content_type="multipart/form-data",
+                    data={"arquivo": (io.BytesIO(rel), "xp.xlsx"), "modo": "completa"}).get_json()
+    aj = {a["ticker"]: a for a in previa["ajustes"]}
+    assert (aj["ITUB4"]["diferenca"], aj["ITUB4"]["acao"], aj["ITUB4"]["marcado"]) == (-40, "baixa", True)
+    assert (aj["VALE3"]["diferenca"], aj["VALE3"]["fator"]) == (10, 2)
+    assert aj["WEGE3"]["diferenca"] == 5 and aj["WEGE3"]["fator"] is None and aj["WEGE3"]["marcado"]
+    assert not aj["BBAS3"]["marcado"]  # ausente do relatório: só com confirmação
+    assert previa["conciliacao"]["posicoes_iniciais"] == [] and previa["conciliacao"]["divergencias"] == []
+
+    hoje = aj["ITUB4"]["data"]
+    ajustes = [{"ticker": "ITUB4", "classe": "acao", "data": hoje, "acao": "baixa", "quantidade": 40, "preco": 35},
+               {"ticker": "VALE3", "classe": "acao", "data": hoje, "acao": "desdobramento", "fator": 2},
+               {"ticker": "WEGE3", "classe": "acao", "data": hoje, "acao": "bonificacao", "quantidade": 5, "preco": 0}]
+    r = c.post("/api/importar/b3/confirmar", json={"ajustes": ajustes})
+    assert r.status_code == 201 and r.get_json()["ajustes"] == 3
+    pos = {a["ticker"]: a for a in c.get("/api/carteira").get_json()["ativos"]}
+    assert pos["ITUB4"]["quantidade"] == 60 and pos["ITUB4"]["preco_medio"] == pytest.approx(30)
+    assert pos["ITUB4"]["realizado"] == 0  # baixa: sem lucro nem prejuízo
+    assert pos["VALE3"]["quantidade"] == 20 and pos["VALE3"]["custo"] == pytest.approx(600)
+    assert pos["WEGE3"]["quantidade"] == 5 and pos["WEGE3"]["custo"] == 0
+    imp = c.get(f"/api/impostos?ano={hoje[:4]}").get_json()
+    assert imp["resumo"]["vendas_acoes"] == 0  # a baixa não conta como venda no IR
+    fluxo = c.get(f"/api/fluxo?inicio={hoje}&fim={hoje}").get_json()
+    assert fluxo["totais"]["vendas"] == 0 and fluxo["totais"]["compras"] == 0  # ajustes sem dinheiro
+
+    # Depois chega o extrato de negociação com a venda real de ITUB4: o ajuste anterior é substituído
+    neg = xlsx(NEG_CAB, [["10/03/2025", "Venda", "Mercado à Vista", "-", "CORRETORA X", "ITUB4", 40, 33, 1320]])
+    previa = enviar(c, neg, "neg.xlsx").get_json()
+    assert [(a["ticker"], a["ajuste"]) for a in previa["ajustes_anteriores"]] == [("ITUB4", "baixa")]
+    r = c.post("/api/importar/b3/confirmar", json={
+        "aportes": previa["aportes"], "remover_ajustes": [a["id"] for a in previa["ajustes_anteriores"]]})
+    assert r.status_code == 201 and r.get_json()["ajustes_removidos"] == 1
+    pos = {a["ticker"]: a for a in c.get("/api/carteira").get_json()["ativos"]}
+    assert pos["ITUB4"]["quantidade"] == 60 and pos["ITUB4"]["realizado"] == pytest.approx(120)
+
+
+def test_ajuste_venda_entra_no_ir():
+    from carteira import impostos, portfolio
+    ops = [{"id": 1, "data": "2025-01-02", "ticker": "ITUB4", "tipo": "compra", "quantidade": 100, "preco": 30},
+           {"id": 2, "data": "2025-06-02", "ticker": "ITUB4", "tipo": "venda", "quantidade": 40, "preco": 35,
+            "ajuste": "venda"},
+           {"id": 3, "data": "2025-06-03", "ticker": "ITUB4", "tipo": "venda", "quantidade": 10, "preco": 99,
+            "ajuste": "baixa"}]
+    assert portfolio.calcular_posicoes(ops)["ITUB4"]["realizado"] == pytest.approx(200)
+    meses = {m["mes"]: m for m in impostos.apurar(ops, {"ITUB4": "acao"})}
+    assert meses["2025-06"]["vendas_acoes"] == pytest.approx(1400)
