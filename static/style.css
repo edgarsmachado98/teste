@@ -466,3 +466,13 @@ body:not(.admin) .so-admin { display: none !important; }
 .ajuda-fonte p { margin: 0 0 12px; font-size: .84rem; color: var(--texto-2); line-height: 1.5; }
 .cards-conferencia { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tabela-conferencia td small.var-sub { font-weight: 400; }
+.sugestao-conf { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.sugestao-conf small { color: var(--texto-2); line-height: 1.4; }
+.lanc-conf summary { cursor: pointer; font-size: .76rem; color: var(--suave); }
+.lanc-conf table td { padding: 4px 8px; font-size: .78rem; }
+.lanc-conf tr.destaque-conf td { background: var(--primaria-suave); }
+.tabela-conferencia th:last-child, .tabela-conferencia td:last-child { text-align: left; width: 300px; min-width: 240px; }
+.tabela-conferencia td:last-child { white-space: normal; vertical-align: top; }
+.tabela-conferencia td { vertical-align: top; }
+.lanc-conf table { width: 100%; }
+.lanc-conf table td { text-align: left; white-space: nowrap; }

@@ -763,3 +763,23 @@ def test_conferencia_ignora_tesouro_gravado_sem_instituicao():
     rels = [{"origem": "Tesouro Direto", "nome": "a", "importado_em": "2026-11-11T13:00", "itens": []},
             {"origem": "Tesouro Direto · BB", "nome": "b", "importado_em": "2026-11-11T20:00", "itens": []}]
     assert [r["nome"] for r in conferencia.ultimos_por_origem(rels)] == ["b"]
+
+
+def test_sugestoes_da_conferencia():
+    from carteira.conferencia import sugerir_correcao
+    item = {"qtd_sistema": 47, "qtd_relatorio": 33}
+    ops = [{"id": 1, "data": "2026-03-30", "tipo": "compra", "quantidade": 37, "obs": "posição inicial (importação)"},
+           {"id": 2, "data": "2026-04-01", "tipo": "compra", "quantidade": 14, "obs": "posição inicial (importação)"},
+           {"id": 3, "data": "2026-03-31", "tipo": "venda", "quantidade": 4, "obs": ""}]
+    s = sugerir_correcao(item, ops, "2026-11-11T20:00")
+    assert s["acao"] == "excluir" and s["ids"] == [2]  # a posição inicial de 14 em dobro
+    # sobra explicada por compra dos últimos dias (ainda não liquidada na posição da B3)
+    ops = [{"id": 1, "data": "2026-01-10", "tipo": "compra", "quantidade": 33, "obs": ""},
+           {"id": 2, "data": "2026-11-09", "tipo": "compra", "quantidade": 5, "obs": ""}]
+    s = sugerir_correcao({"qtd_sistema": 38, "qtd_relatorio": 33}, ops, "2026-11-11T20:00")
+    assert s["acao"] == "nada"
+    # sem explicação: ajuste
+    s = sugerir_correcao({"qtd_sistema": 40, "qtd_relatorio": 33}, ops[:1] + [{**ops[1], "data": "2026-06-01", "quantidade": 7}],
+                         "2026-11-11T20:00")
+    assert s["acao"] == "ajustar" and s["quantidade"] == -7
+    assert sugerir_correcao({"qtd_sistema": 30, "qtd_relatorio": 33}, [], None)["quantidade"] == 3

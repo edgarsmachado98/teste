@@ -796,12 +796,50 @@ function renderConferencia() {
         <td>${i.qtd_relatorio ? num.format(i.qtd_relatorio) : "—"}</td>
         <td>${i.qtd_sistema ? num.format(i.qtd_sistema) : "—"}</td><td>${brl.format(i.valor_relatorio)}</td>
         <td>${brl.format(i.valor_sistema)}</td><td>${dif(i.diferenca)}</td>
-        <td style="white-space:normal;min-width:170px"><span class="${SITUACAO_CONF[i.situacao][1]}">${SITUACAO_CONF[i.situacao][0]}</span>
-          ${i.dica ? `<small class="var-sub">${esc(i.dica)}</small>` : ""}</td></tr>`).join("")
+        <td style="white-space:normal;min-width:220px"><span class="${SITUACAO_CONF[i.situacao][1]}">${SITUACAO_CONF[i.situacao][0]}</span>
+          ${i.dica ? `<small class="var-sub">${esc(i.dica)}</small>` : ""}${htmlSugestao(i)}</td></tr>`).join("")
         : `<tr><td colspan="7">Todos os ativos conferem com os relatórios.</td></tr>`}</table></div>
     ${c.sobrepostos.length ? `<p class="dica">${c.sobrepostos.length} ativo(s) aparecem também nos relatórios dos bancos;
       para eles vale a posição da B3 (não são somados).</p>` : ""}`;
 }
+
+function htmlSugestao(i) {
+  const sg = i.sugestao;
+  if (!sg) return "";
+  const botao = sg.acao === "excluir"
+    ? `<button type="button" class="btn-pequeno secundario requer-edicao" data-conf-excluir="${sg.ids.join(",")}" data-ticker="${esc(i.ticker)}">Excluir lançamento em dobro</button>`
+    : sg.acao === "ajustar"
+      ? `<button type="button" class="btn-pequeno secundario requer-edicao" data-conf-ajustar="${esc(i.ticker)}">Ajustar ao relatório</button>`
+      : "";
+  const lanc = i.lancamentos.length ? `<details class="lanc-conf"><summary>${i.lancamentos.length} lançamento(s) no sistema</summary>
+    <table>${i.lancamentos.map(l => `<tr class="${sg.ids?.includes(l.id) ? "destaque-conf" : ""}"><td>${fmtData(l.data)}</td>
+      <td>${l.ajuste ? ROTULO_AJUSTE[l.ajuste] || l.ajuste : l.tipo === "compra" ? "Compra" : "Venda"}</td><td>${num.format(l.quantidade)}</td>
+      <td style="white-space:normal">${esc(l.obs || "")}</td></tr>`).join("")}</table></details>` : "";
+  return `<div class="sugestao-conf"><small>${esc(sg.texto)}</small>${botao}${lanc}</div>`;
+}
+
+$("#resultado-conferencia").addEventListener("click", async ev => {
+  const exc = ev.target.closest("[data-conf-excluir]"), aj = ev.target.closest("[data-conf-ajustar]");
+  if (!exc && !aj) return;
+  try {
+    if (exc) {
+      if (!confirm(`Excluir o lançamento em dobro de ${exc.dataset.ticker} (destacado na lista de lançamentos)?`)) return;
+      for (const id of exc.dataset.confExcluir.split(",")) await api(`/api/aportes/${id}`, { method: "DELETE" });
+      toast(`Lançamento de ${exc.dataset.ticker} excluído.`);
+    } else {
+      const i = conferenciaAtual.itens.find(x => x.ticker === aj.dataset.confAjustar), q = i.sugestao.quantidade;
+      const preco = i.preco_relatorio ?? (i.qtd_sistema ? i.valor_sistema / i.qtd_sistema : 0);
+      const txt = q < 0 ? `baixa sem resultado de ${num.format(-q)} ${i.ticker} (sai pelo preço médio, fora do IR)`
+        : `compra de ${num.format(q)} ${i.ticker} a ${brl.format(preco)} (preço do relatório)`;
+      if (!confirm(`Lançar hoje um ajuste: ${txt}?`)) return;
+      await api("/api/importar/b3/confirmar", { method: "POST", body: { ajustes: [{
+        ticker: i.ticker, classe: i.classe, data: new Date().toLocaleDateString("sv-SE"),
+        acao: q < 0 ? "baixa" : "compra", quantidade: Math.abs(q), preco }] } });
+      toast(`Ajuste de ${i.ticker} lançado.`);
+    }
+    carregarConferencia();
+  } catch (e) { toast(e.message, true); }
+});
 
 $("#btn-conferir").addEventListener("click", carregarConferencia);
 $("#resultado-conferencia").addEventListener("change", ev => {

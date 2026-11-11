@@ -28,8 +28,63 @@ def ultimos_por_origem(relatorios):
     return [r for r in relatorios if r["importado_em"] == mais_recente[r["origem"]]]
 
 
-def conferir(relatorios, linhas_sistema, rotulos_classe):
-    """relatorios: [{origem, nome, importado_em, itens}]; linhas_sistema: linhas do resumo da carteira."""
+CLASSES_BOLSA = ("acao", "fii", "etf", "bdr")
+DIAS_LIQUIDACAO = 5  # compras desses últimos dias podem ainda não constar na posição da B3 (liquidação D+2)
+
+
+def _eh_posicao_inicial(op):
+    return (op.get("obs") or "").startswith("posição inicial (") or op.get("ajuste") == "compra"
+
+
+def _igual(a, b):
+    return abs(a - b) <= TOLERANCIA_QTD * max(1.0, abs(a), abs(b))
+
+
+def sugerir_correcao(item, ops, data_relatorio):
+    """Sugestão para um ativo com quantidade diferente do relatório.
+
+    ops: lançamentos do sistema para o ativo (aportes, sem eventos). Retorna {acao, texto, ids?, quantidade?}:
+      excluir   um lançamento de posição inicial/ajuste com exatamente a quantidade que sobra (em dobro)
+      nada      compras dos últimos dias explicam a sobra (ainda não liquidadas na data do relatório)
+      ajustar   lança um ajuste para igualar ao relatório (baixa sem resultado ou compra)
+    """
+    excesso = round(item["qtd_sistema"] - item["qtd_relatorio"], 8)
+    if abs(excesso) <= TOLERANCIA_QTD:
+        return None
+    def dmy(d):
+        return "/".join(reversed(d.split("-")))
+    if excesso > 0:
+        iniciais = sorted((o for o in ops if o.get("tipo", "compra") == "compra" and _eh_posicao_inicial(o)),
+                          key=lambda o: o["data"])
+        iguais = [o for o in iniciais if _igual(float(o["quantidade"]), excesso)]
+        if iguais and (len(iniciais) > 1 or len(iguais) == len(iniciais)):
+            o = iguais[0]  # a mais antiga: em geral sobra de uma importação anterior
+            return {"acao": "excluir", "ids": [o["id"]],
+                    "texto": f"Sobram {excesso:g} e há uma posição inicial de {float(o['quantidade']):g} em "
+                             f"{dmy(o['data'])} ({o.get('obs') or 'ajuste'}): parece lançada em dobro."}
+        if data_relatorio:
+            limite = data_relatorio[:10]
+            recentes = [o for o in ops if o.get("tipo", "compra") == "compra" and o["data"] >= _menos_dias(limite)]
+            if recentes and _igual(sum(float(o["quantidade"]) for o in recentes), excesso):
+                return {"acao": "nada",
+                        "texto": "Compra recente (" + ", ".join(dmy(o["data"]) for o in recentes) + ") ainda não "
+                                 "liquidada na data do relatório: o sistema está certo, nada a fazer."}
+        return {"acao": "ajustar", "quantidade": -excesso,
+                "texto": f"O sistema tem {excesso:g} a mais. Confira no app da corretora; se o relatório estiver "
+                         "certo, ajuste com uma baixa sem resultado (sai pelo preço médio, fora do IR)."}
+    return {"acao": "ajustar", "quantidade": -excesso,
+            "texto": f"Faltam {-excesso:g} no sistema. Importe a negociação do período ou ajuste com uma compra "
+                     "pelo valor do relatório."}
+
+
+def _menos_dias(data_iso, dias=DIAS_LIQUIDACAO):
+    import datetime as dt
+    return (dt.date.fromisoformat(data_iso) - dt.timedelta(days=dias)).isoformat()
+
+
+def conferir(relatorios, linhas_sistema, rotulos_classe, operacoes=()):
+    """relatorios: [{origem, nome, importado_em, itens}]; linhas_sistema: linhas do resumo da carteira;
+    operacoes: aportes da carteira (para sugerir correções nas diferenças de quantidade)."""
     relatorios = ultimos_por_origem(relatorios)
     esperado, conflitos = mesclar_posicoes([(r["nome"], r["origem"], r["itens"]) for r in relatorios])
     no_rel = {p["ticker"]: p for p in esperado}
@@ -68,6 +123,27 @@ def conferir(relatorios, linhas_sistema, rotulos_classe):
                          "título com outro nome, contado duas vezes.")
         else:
             i["dica"] = "Não está nos relatórios: confira se é de outra instituição ou se foi resgatado."
+
+    # Sugestões de correção para diferenças de quantidade (ativos de bolsa)
+    data_por_origem = {r["origem"]: r["importado_em"] for r in relatorios}
+    data_geral = max(data_por_origem.values(), default=None)
+    ops_por_ticker = defaultdict(list)
+    for o in operacoes:
+        if o.get("tipo") != "evento":
+            ops_por_ticker[o["ticker"]].append(o)
+    for i in itens:
+        i["sugestao"] = None
+        if i["situacao"] in ("quantidade", "so_sistema", "so_relatorio") and i["classe"] in CLASSES_BOLSA:
+            data_ref = data_por_origem.get((i["origem"] or "").split(" + ")[0]) or data_geral
+            i["sugestao"] = sugerir_correcao(i, ops_por_ticker.get(i["ticker"], []), data_ref)
+            ref = no_rel.get(i["ticker"]) or {}
+            i["preco_relatorio"] = ref.get("preco_atual") or (
+                ref.get("valor_atual") / ref["quantidade"] if ref.get("valor_atual") and ref.get("quantidade") else None)
+            if i["situacao"] == "so_sistema" and i["sugestao"]:
+                i["dica"] = None
+        i["lancamentos"] = [{k: o.get(k) for k in ("id", "data", "tipo", "quantidade", "preco", "obs", "ajuste")}
+                            for o in sorted(ops_por_ticker.get(i["ticker"], []), key=lambda o: o["data"])
+                            ] if i["situacao"] in ("quantidade", "so_sistema") else []
 
     por_situacao = defaultdict(float)
     for i in itens:

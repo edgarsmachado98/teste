@@ -669,7 +669,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         if not relatorios:
             return jsonify({"vazio": True})
         resumo = montar_resumo([cid])
-        return jsonify(conferencia.conferir(relatorios, resumo["ativos"], portfolio.CLASSES))
+        return jsonify(conferencia.conferir(relatorios, resumo["ativos"], portfolio.CLASSES, listar_aportes([cid])))
 
     # ---------- Renda fixa ----------
     @app.get("/api/renda-fixa")
