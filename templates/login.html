@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ "Configuração inicial" if configurar else "Entrar" }} · Carteira de Aportes</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0f1a33">
+  <meta name="theme-color" content="#15181c">
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,11 +13,29 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="pagina-login">
+  <aside class="login-apresentacao">
+    <div class="marca">
+      <span class="logo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6 4 4 6-8"/><path d="M14 7h6v6"/></svg></span>
+      <div><strong>Carteira</strong><small>de Aportes</small></div>
+    </div>
+    <div>
+      <h2>Seu patrimônio organizado em um só lugar.</h2>
+      <p>Acompanhe aportes, proventos e rentabilidade das carteiras da família, com cotações atualizadas durante o pregão.</p>
+      <ul>
+        <li>Posição consolidada de ações, FIIs, renda fixa e Tesouro</li>
+        <li>Rentabilidade comparada ao CDI, IPCA e Ibovespa</li>
+        <li>Agenda de proventos e apoio à declaração do IR</li>
+      </ul>
+    </div>
+    <p class="rodape-login">Acesso restrito · uso familiar</p>
+  </aside>
+  <div class="login-form">
   <main class="caixa-login">
     <div class="marca marca-login">
       <span class="logo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6 4 4 6-8"/><path d="M14 7h6v6"/></svg></span>
       <div><strong>Carteira</strong><small>de Aportes</small></div>
     </div>
+    <h1>{{ "Configuração inicial" if configurar else "Entrar na sua conta" }}</h1>
     {% if configurar %}
       <p class="dica">Primeiro acesso: crie a conta de <strong>administrador</strong>. Os dados já existentes
         no sistema passam a pertencer à carteira dele. Depois você cadastra os demais usuários e carteiras.</p>
@@ -39,6 +57,7 @@
     {% endif %}
     <p id="msg-erro" class="erro-login" role="alert"></p>
   </main>
+  </div>
 <script>
 document.getElementById("form-login").addEventListener("submit", async ev => {
   ev.preventDefault();

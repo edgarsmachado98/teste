@@ -158,7 +158,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         return jsonify({
             "name": "Carteira de Aportes", "short_name": "Carteira", "lang": "pt-BR",
             "start_url": "/", "scope": "/", "display": "standalone",
-            "background_color": "#0f1a33", "theme_color": "#0f1a33",
+            "background_color": "#15181c", "theme_color": "#15181c",
             "description": "Gestão de aportes, proventos e análise de investimentos da família",
             "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
                       {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},

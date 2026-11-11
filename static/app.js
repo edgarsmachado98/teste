@@ -12,7 +12,7 @@ const classeSinal = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
 const fmtData = s => s.split("-").reverse().join("/");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const $ = sel => document.querySelector(sel);
-const PALETA = ["#2f5bea", "#e07b39", "#3a9d5d", "#c8312f", "#8457c5", "#1aa3b8", "#c59b24", "#d0558f", "#5f6b7a", "#7fb03a"];
+const PALETA = ["#0c6b58", "#c08a2e", "#3b5b8c", "#b4543a", "#6b5b95", "#4a8a9a", "#8a8f3a", "#a05a7a", "#5f6b78", "#2f7d4f"];
 const graficos = {};
 
 function toast(msg, erro = false) {
@@ -46,6 +46,14 @@ function grafico(id, config) {
   const cor = getComputedStyle(document.documentElement).getPropertyValue("--suave").trim();
   Chart.defaults.color = cor;
   Chart.defaults.borderColor = getComputedStyle(document.documentElement).getPropertyValue("--borda").trim();
+  Chart.defaults.font.family = '"Inter", system-ui, sans-serif';
+  Chart.defaults.font.size = 12;
+  Chart.defaults.plugins.legend.labels.usePointStyle = true;
+  Chart.defaults.plugins.legend.labels.boxWidth = 8;
+  Chart.defaults.plugins.legend.labels.boxHeight = 8;
+  Chart.defaults.plugins.tooltip.backgroundColor = "#15181c";
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 6;
   graficos[id] = new Chart(document.getElementById(id), config);
 }
 
@@ -138,7 +146,7 @@ async function carregarEvolucaoPatrimonio() {
     data: {
       labels: ev.meses.map(m => m.mes),
       datasets: [
-        { label: "Patrimônio", data: ev.meses.map(m => m.patrimonio), borderColor: PALETA[0], backgroundColor: "rgba(47,91,234,.12)", fill: true, tension: .25, pointRadius: 2 },
+        { label: "Patrimônio", data: ev.meses.map(m => m.patrimonio), borderColor: PALETA[0], backgroundColor: "rgba(12,107,88,.08)", fill: true, tension: .25, pointRadius: 2 },
         { label: "Valor investido", data: ev.meses.map(m => m.investido), borderColor: PALETA[1], backgroundColor: PALETA[1], borderDash: [5, 4], tension: .25, pointRadius: 0 },
       ],
     },
@@ -227,7 +235,7 @@ async function carregarAgenda() {
     type: "bar",
     data: { labels: r.meses.map(m => `${MESES_CURTOS[+m.mes.slice(5) - 1]}/${m.mes.slice(2, 4)}`), datasets: [
       { label: "Confirmado", data: r.meses.map(m => m.confirmado), backgroundColor: PALETA[2], stack: "r" },
-      { label: "Projetado", data: r.meses.map(m => m.projetado), backgroundColor: "rgba(47,91,234,.45)", stack: "r" },
+      { label: "Projetado", data: r.meses.map(m => m.projetado), backgroundColor: "rgba(59,91,140,.35)", stack: "r" },
       ...(meta ? [{ type: "line", label: "Meta", data: r.meses.map(() => meta), borderColor: PALETA[1], borderDash: [5, 4], pointRadius: 0, borderWidth: 2 }] : []),
     ] },
     options: { scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => brl.format(v) } } },
@@ -509,7 +517,18 @@ $("#tabela-acompanhamento").addEventListener("click", async ev => {
 });
 
 // ---------------- Alertas (sino) ----------------
-const ICONE_ALERTA = { preco: "R$", queda: "↓", concentracao: "%", desvio: "≠", data_com: "📅", pagamento: "💰", vencimento: "⏳", darf: "🧾" };
+const SVG_ALERTA = d => `<svg class="icone" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICONE_ALERTA = {
+  preco: SVG_ALERTA('<path d="M12 3v18"/><path d="M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3 4.5 1.3 4.5 3-2 3-4.5 3-4.5-1.3-4.5-3"/>'),
+  queda: SVG_ALERTA('<path d="M4 7l6 6 4-4 6 6"/><path d="M20 10v5h-5"/>'),
+  concentracao: SVG_ALERTA('<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/>'),
+  desvio: SVG_ALERTA('<path d="M4 12h16"/><path d="M12 4v4"/><path d="M12 16v4"/>'),
+  data_com: SVG_ALERTA('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>'),
+  pagamento: SVG_ALERTA('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>'),
+  vencimento: SVG_ALERTA('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  darf: SVG_ALERTA('<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/>'),
+};
+const ICONE_ALERTA_PADRAO = SVG_ALERTA('<path d="M12 8v5"/><circle cx="12" cy="16.5" r=".6"/><path d="M10.3 4l-7.6 13.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4a2 2 0 0 0-3.4 0z"/>');
 async function carregarAlertas() {
   if (!carteiraAtual) return;
   let r;
@@ -521,7 +540,7 @@ async function carregarAlertas() {
   c.style.background = n ? "" : "var(--primaria)";
   $("#info-telegram").textContent = r.telegram ? "também enviados pelo Telegram" : "";
   $("#lista-alertas").innerHTML = r.itens.length ? r.itens.map(a => `<div class="alerta-item ${a.nivel}">
-      <span class="ic">${ICONE_ALERTA[a.tipo] || "!"}</span><div><strong>${esc(a.titulo)}</strong><small>${esc(a.texto)}</small></div></div>`).join("")
+      <span class="ic">${ICONE_ALERTA[a.tipo] || ICONE_ALERTA_PADRAO}</span><div><strong>${esc(a.titulo)}</strong><small>${esc(a.texto)}</small></div></div>`).join("")
     : `<p class="dica" style="padding:8px 4px">Nenhum alerta no momento.</p>`;
 }
 $("#btn-sino").addEventListener("click", ev => {
