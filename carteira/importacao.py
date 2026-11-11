@@ -82,8 +82,23 @@ def ler_abas(conteudo, nome_arquivo):
                 warnings.simplefilter("ignore")  # "Workbook contains no default style"
                 wb = openpyxl.load_workbook(io.BytesIO(conteudo), data_only=True)
         except Exception as e:
+            try:
+                brutas = ler_xlsx_bruto(conteudo)
+            except Exception:
+                brutas = []
+            if _celulas(brutas):
+                return brutas
             raise ErroImportacao(f"Não foi possível abrir o Excel: {e}") from e
-        return [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
+        abas = [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
+        # Alguns geradores (ex.: extrato do Tesouro Direto) gravam o XML de um jeito que o openpyxl
+        # lê pela metade. Lê também o XML direto e fica com a leitura que encontrou mais células.
+        try:
+            brutas = ler_xlsx_bruto(conteudo)
+        except Exception:
+            brutas = []
+        if _celulas(brutas) > _celulas(abas):
+            return brutas
+        return abas
     if nome.endswith((".csv", ".txt")):
         texto = _decodificar(conteudo)
         delim = ";" if texto.count(";") > texto.count(",") else ","
@@ -99,6 +114,105 @@ def ler_abas(conteudo, nome_arquivo):
     if nome.endswith(".pdf"):
         return _ler_pdf(conteudo)
     raise ErroImportacao("Envie o relatório em Excel (.xlsx ou .xls), CSV ou PDF.")
+
+
+def _celulas(abas):
+    return sum(1 for _, linhas in abas for l in linhas for c in l if c not in (None, ""))
+
+
+def _local(tag):
+    return tag.rsplit("}", 1)[-1]
+
+
+def _coluna(ref):
+    """'C12' -> 2 (índice da coluna, a partir de 0)."""
+    n = 0
+    for ch in ref:
+        if not ch.isalpha():
+            break
+        n = n * 26 + (ord(ch.upper()) - 64)
+    return n - 1
+
+
+def ler_xlsx_bruto(conteudo):
+    """Lê as planilhas de um .xlsx direto do XML, sem depender do openpyxl.
+
+    Aceita qualquer prefixo de namespace (inclusive o OOXML "strict"), células sem referência,
+    textos compartilhados, textos embutidos e números. Datas ficam como número de série do Excel.
+    """
+    import zipfile
+    import xml.etree.ElementTree as ET
+
+    z = zipfile.ZipFile(io.BytesIO(conteudo))
+    nomes = z.namelist()
+
+    def texto_de(el):
+        return "".join(t.text or "" for t in el.iter() if _local(t.tag) == "t")
+
+    compartilhados = []
+    alvo_ss = next((n for n in nomes if n.lower().endswith("sharedstrings.xml")), None)
+    if alvo_ss:
+        raiz = ET.fromstring(z.read(alvo_ss))
+        compartilhados = [texto_de(si) for si in raiz if _local(si.tag) == "si"]
+
+    # nomes das abas na ordem do workbook
+    rels, titulos = {}, []
+    if "xl/_rels/workbook.xml.rels" in nomes:
+        for r in ET.fromstring(z.read("xl/_rels/workbook.xml.rels")):
+            alvo = r.get("Target", "")
+            alvo = alvo.lstrip("/")
+            rels[r.get("Id")] = alvo if alvo.startswith("xl/") else "xl/" + alvo
+    if "xl/workbook.xml" in nomes:
+        for el in ET.fromstring(z.read("xl/workbook.xml")).iter():
+            if _local(el.tag) == "sheet":
+                rid = next((v for k, v in el.attrib.items() if _local(k) == "id"), None)
+                titulos.append((el.get("name") or "Planilha", rels.get(rid)))
+    caminhos = [c for _, c in titulos if c in nomes] or sorted(
+        n for n in nomes if n.startswith("xl/worksheets/") and n.endswith(".xml"))
+    nome_de = {c: t for t, c in titulos}
+
+    abas = []
+    for caminho in caminhos:
+        linhas = {}
+        proxima_linha = 0
+        for row in ET.fromstring(z.read(caminho)).iter():
+            if _local(row.tag) != "row":
+                continue
+            r = int(row.get("r")) - 1 if (row.get("r") or "").isdigit() else proxima_linha
+            proxima_linha = r + 1
+            celulas, proxima_col = {}, 0
+            for c in row:
+                if _local(c.tag) != "c":
+                    continue
+                col = _coluna(c.get("r")) if c.get("r") else proxima_col
+                proxima_col = col + 1
+                tipo = c.get("t")
+                v = next((x.text for x in c if _local(x.tag) == "v"), None)
+                if tipo == "s" and v is not None:
+                    valor = compartilhados[int(v)] if int(v) < len(compartilhados) else ""
+                elif tipo == "inlineStr":
+                    valor = "".join(texto_de(x) for x in c if _local(x.tag) == "is")
+                elif tipo in ("str", "e"):
+                    valor = v
+                elif tipo == "b":
+                    valor = v == "1"
+                elif v is not None:
+                    try:
+                        f = float(v)
+                        valor = int(f) if f.is_integer() and "." not in v and "E" not in v.upper() else f
+                    except ValueError:
+                        valor = v
+                else:
+                    valor = None
+                celulas[col] = valor
+            if celulas:
+                largura = max(celulas) + 1
+                linhas[r] = [celulas.get(i) for i in range(largura)]
+        if linhas:
+            ultimo = max(linhas)
+            abas.append((nome_de.get(caminho) or caminho.rsplit("/", 1)[-1],
+                         [linhas.get(i, []) for i in range(ultimo + 1)]))
+    return abas
 
 
 def _decodificar(conteudo):

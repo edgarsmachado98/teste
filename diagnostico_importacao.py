@@ -45,6 +45,19 @@ def main():
             print(f"{n:>3} ({len(celulas)} col.) | " + " | ".join(celulas))
         if len(linhas) > 45:
             print(f"... mais {len(linhas) - 45} linha(s)")
+    if caminho.lower().endswith((".xlsx", ".xlsm")) and sum(len(l) for _, l in abas) < 5:
+        # poucas linhas: mostra a estrutura interna do arquivo para ajustar o leitor
+        import io
+        import zipfile
+        z = zipfile.ZipFile(io.BytesIO(conteudo))
+        print("\n=== Estrutura interna do Excel ===")
+        for info in z.infolist():
+            print(f"  {info.filename} ({info.file_size} bytes)")
+        for nome in z.namelist():
+            if nome.startswith("xl/worksheets/") and nome.endswith(".xml"):
+                xml = z.read(nome).decode("utf-8", "ignore")
+                print(f"\n--- {nome} (início) ---")
+                print(mascarar(xml[:2500], mostrar))
     print("\n=== Resultado da leitura ===")
     try:
         r = importacao.analisar_extrato(conteudo, caminho)

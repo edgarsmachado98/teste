@@ -625,3 +625,36 @@ def test_conciliacao_cobre_vendas_anteriores_mesmo_com_total_igual():
     c = importacao.conciliar_posicao([], existentes, novos, "2026-11-05")
     assert [(i["ticker"], i["quantidade"]) for i in c["posicoes_iniciais"]] == [("PETR4", 9)]
     assert [d["ticker"] for d in c["divergencias"]] == ["PETR4"]
+
+
+def _xlsx_strict(linhas_xml):
+    import zipfile
+    ns = "http://purl.oclc.org/ooxml/spreadsheetml/main"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("xl/workbook.xml", f'<workbook xmlns="{ns}" xmlns:r="http://purl.oclc.org/ooxml/officeDocument/'
+                   'relationships"><sheets><sheet name="Extrato" sheetId="1" r:id="rId1"/></sheets></workbook>')
+        z.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/'
+                   '2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>')
+        z.writestr("xl/worksheets/sheet1.xml", f'<worksheet xmlns="{ns}"><dimension ref="A1:G1"/><sheetData>'
+                   f'{linhas_xml}</sheetData></worksheet>')
+    return buf.getvalue()
+
+
+def test_xlsx_que_o_openpyxl_nao_le_inteiro():
+    txt = lambda t: f'<c t="inlineStr"><is><t>{t}</t></is></c>'  # noqa: E731
+    xml = (f'<row r="1">{txt("EXTRATO CONSOLIDADO - 11/2026")}</row>'
+           f'<row>{txt("Título")}{txt("Quantidade")}{txt("Valor bruto")}</row>'
+           f'<row>{txt("Tesouro Selic 2029")}<c><v>1.5</v></c><c><v>24000.5</v></c></row>')
+    abas = importacao.ler_abas(_xlsx_strict(xml), "extrato.xlsx")
+    assert abas == [("Extrato", [["EXTRATO CONSOLIDADO - 11/2026"], ["Título", "Quantidade", "Valor bruto"],
+                                 ["Tesouro Selic 2029", 1.5, 24000.5]])]
+
+
+def test_leitura_bruta_igual_a_do_openpyxl():
+    conteudo = xlsx(NEG_CAB, NEG)
+    wb = openpyxl.load_workbook(io.BytesIO(conteudo), data_only=True)
+    esperado = [[c for c in r] for r in wb.active.iter_rows(values_only=True)]
+    bruto = importacao.ler_xlsx_bruto(conteudo)[0][1]
+    assert [[c for c in l if c is not None] for l in bruto] == [[c for c in l if c is not None] for l in esperado]
