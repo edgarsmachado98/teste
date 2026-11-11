@@ -323,9 +323,11 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     @app.post("/api/carteiras/<int:cid>/zerar")
     def api_zerar_carteira(cid):
         """Apaga os dados lançados/importados da carteira (mantém a carteira, usuários e acessos)."""
+        if not g.usuario["admin"]:
+            raise ErroAcesso("Apenas administradores podem zerar os dados de uma carteira.", 403)
         c = auth.obter_carteira(conn, cid)
-        if c is None or not auth.permissoes(conn, g.usuario, cid)["gerenciar"]:
-            raise ErroAcesso("Só quem gerencia a carteira pode zerar os dados.", 403)
+        if c is None:
+            raise ErroAcesso("Carteira não encontrada.", 404)
         d = request.get_json(silent=True) or {}
         if (d.get("confirmacao") or "").strip().casefold() != c["nome"].strip().casefold():
             return erro("Digite o nome da carteira exatamente como aparece para confirmar.")

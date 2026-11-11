@@ -185,8 +185,9 @@ def test_zerar_dados_da_carteira(novo_app):
     assert com_carteira(edgar, c_edgar).post("/api/aportes", json=APORTE).status_code == 201
     assert com_carteira(eliandra, c_eli).post("/api/aportes", json=APORTE).status_code == 201
     url = f"/api/carteiras/{c_edgar}/zerar"
-    # Eliandra não gerencia a carteira do Edgar
+    # só administrador: nem a Eliandra na própria carteira pode zerar
     assert eliandra.post(url, json={"confirmacao": "Carteira Edgar Machado"}).status_code == 403
+    assert eliandra.post(f"/api/carteiras/{c_eli}/zerar", json={"confirmacao": "Carteira Eliandra"}).status_code == 403
     # confirmação errada não apaga nada
     assert edgar.post(url, json={"confirmacao": "outra"}).status_code == 400
     assert len(com_carteira(edgar, c_edgar).get("/api/aportes").get_json()) == 1

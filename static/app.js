@@ -1288,7 +1288,6 @@ const ROTULO_PERM = p => p.gerenciar && p.editar ? "acesso total" : p.editar ? "
 function aplicarPermissoes() {
   const p = permissao();
   document.body.classList.toggle("somente-leitura", !p.editar);
-  document.body.classList.toggle("sem-gerencia", !p.gerenciar);
   document.body.classList.toggle("admin", !!USUARIO.admin);
   $("#aviso-leitura").classList.toggle("oculto", !carteiraAtual || p.editar);
   $("#aviso-leitura").innerHTML = carteiraAtual === FAMILIA
