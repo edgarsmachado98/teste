@@ -62,7 +62,7 @@ def main():
     try:
         r = importacao.analisar_extrato(conteudo, caminho)
     except importacao.ErroImportacao as e:
-        print("Não reconhecido:", e)
+        print("Não reconhecido:", mascarar(e, mostrar))
         return 0
     print(f"Tipo: {r['tipo_arquivo']} · posição: {len(r['posicao'])} · operações: {len(r['aportes'])} · "
           f"proventos: {len(r['proventos'])} · ignoradas: {len(r['ignorados'])}")
