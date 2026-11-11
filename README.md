@@ -185,6 +185,13 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
   onde foi o dinheiro, contas a pagar, taxa de poupança, custo de vida médio, reserva de emergência
   ideal e quanto das despesas os proventos já pagam; gráfico dos últimos 12 meses.
 
+- **Fatura do cartão:** importação em OFX, CSV ou Excel (Nubank, Itaú, BB, Inter, C6, XP…), com
+  cadastro de cartões. Compras, estornos (entram como reembolso), IOF/anuidade e pagamento da fatura
+  (ignorado) são reconhecidos; compras parceladas ("PARC 03/10") lançam as parcelas futuras e a
+  parcela seguinte não duplica na fatura do mês que vem. As compras já vêm categorizadas pelo nome do
+  estabelecimento, e o sistema aprende com as escolhas e correções do usuário. Faturas em PDF ainda
+  não são lidas.
+
 Ativação: `CARTEIRA_MODULOS=planejamento` no `.env` (ou `todos`). No modo demonstração todos os
 módulos ficam ativos. O controle fica em `carteira/licenca.py`, ponto único para a futura chave de
 licença.

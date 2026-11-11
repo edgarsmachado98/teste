@@ -630,3 +630,16 @@ button.link.conf-ignorar:hover { color: var(--texto); }
   .plan-indicadores { grid-template-columns: 1fr; }
   .plan-totais .dica { margin-left: 0; }
 }
+.fatura-resumo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--borda);
+  border: 1px solid var(--borda); border-radius: var(--raio-p); overflow: hidden; margin: 14px 0 6px; }
+.fatura-resumo div { background: var(--painel); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+.fatura-resumo span { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); font-weight: 600; }
+.fatura-resumo strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.tabela-fatura td:nth-child(3) { white-space: normal; min-width: 220px; }
+.tabela-fatura th:nth-child(3), .tabela-fatura td:nth-child(3), .tabela-fatura th:nth-child(5), .tabela-fatura td:nth-child(5) { text-align: left; }
+.tabela-fatura select { max-width: 220px; height: 32px; }
+.tabela-fatura select.sem-categoria { border-color: #c08a2e; background: color-mix(in srgb, #c08a2e 7%, var(--painel)); }
+.tabela-fatura .selo { font-size: .68rem; margin-left: 4px; }
+.fatura-opcoes { margin-top: 12px; }
+@media (max-width: 600px) { .fatura-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+#nome-arquivo-fatura.escolhido { color: var(--texto); font-weight: 550; }

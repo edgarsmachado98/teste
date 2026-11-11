@@ -30,6 +30,7 @@
         <div id="plan-receitas"></div>
         <h3 style="margin-top:20px">Contas do mês</h3>
         <div id="plan-a-pagar"></div>
+        <div id="plan-cartoes"></div>
       </div>
     </div>
     <div class="grade2">
@@ -61,6 +62,7 @@
         <label><span data-rotulo-valor>Valor (R$)</span> <input type="number" name="valor" step="0.01" min="0" required inputmode="decimal"></label>
         <label class="so-receita oculto">Valor bruto (R$) <input type="number" name="valor_bruto" step="0.01" min="0" inputmode="decimal" placeholder="antes dos descontos"></label>
         <label class="so-despesa">Pagamento <select name="forma"><option value="">—</option></select></label>
+        <label class="campo-cartao oculto">Cartão <select name="cartao_id"></select></label>
         <label class="so-novo">Repetir <select name="repetir">
           <option value="nao">Não repete</option><option value="mensal">Todo mês</option>
           <option value="parcelado" class="so-despesa-opt">Parcelado</option></select></label>
@@ -82,6 +84,38 @@
         </form>
         <datalist id="plan-grupos"></datalist>
       </details>
+    </div>
+
+    <div class="painel requer-edicao" id="painel-fatura">
+      <div class="cabecalho-painel">
+        <div><h3>Importar fatura do cartão</h3>
+          <p class="dica" style="margin:0">Baixe a fatura em <strong>OFX</strong> ou <strong>CSV</strong> no app ou site do banco
+            (Nubank, Itaú, BB, Inter, C6, XP…). As compras já vêm categorizadas e o sistema aprende com as suas correções.</p></div>
+      </div>
+      <form id="form-fatura" class="form-linha">
+        <label>Cartão <select name="cartao_id" id="sel-cartao-fatura" required></select></label>
+        <div class="seletor-arquivos">
+          <span class="rotulo-campo">Arquivo da fatura (OFX, CSV ou Excel)</span>
+          <input type="file" name="arquivo" id="arquivo-fatura" accept=".ofx,.qfx,.csv,.xlsx,.xls,.txt" hidden>
+          <div class="zona-arquivos" id="zona-fatura">
+            <button type="button" class="secundario btn-pequeno" id="btn-arquivo-fatura">
+              <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Escolher arquivo</span></button>
+            <span class="dica" id="nome-arquivo-fatura">ou arraste a fatura para cá</span>
+          </div>
+        </div>
+        <button type="submit">Ler fatura</button>
+      </form>
+      <details class="dica" id="novo-cartao">
+        <summary>Cadastrar cartão</summary>
+        <form id="form-cartao" class="form-linha" style="margin-top:8px">
+          <label>Nome <input name="nome" required placeholder="ex.: Nubank, Itaú Visa"></label>
+          <label>Dia do vencimento <input type="number" name="dia_vencimento" min="1" max="31" placeholder="ex.: 15"></label>
+          <button type="submit" class="secundario">Cadastrar</button>
+        </form>
+        <div id="lista-cartoes"></div>
+      </details>
+      <div id="previa-fatura"></div>
     </div>
 
     <div class="painel">

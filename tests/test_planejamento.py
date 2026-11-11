@@ -132,3 +132,113 @@ def test_isolamento_e_familia(novo_app, com_modulo):
 def test_custo_de_vida():
     assert plan.custo_de_vida({"2026-08": 3000, "2026-09": 0, "2026-10": 5000, "2026-11": 9999}, "2026-11") == 4000
     assert plan.custo_de_vida({}, "2026-11") is None
+
+
+# ------------------------------------------------------------------ fase 2: faturas
+import io  # noqa: E402
+
+from carteira import fatura as fat  # noqa: E402
+
+OFX = """OFXHEADER:100
+DATA:OFXSGML
+<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><BANKTRANLIST>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261003000000[-3:BRT]<TRNAMT>-89.90<FITID>a1<MEMO>IFOOD *PIZZARIA BELLA SAO PAULO</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261005<TRNAMT>-420.00<FITID>a2<MEMO>MAGAZINE LUIZA PARC 03/10</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261007<TRNAMT>-55.20<FITID>a3<MEMO>POSTO SHELL AV BRASIL</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261008<TRNAMT>-13.37<FITID>a4<MEMO>IOF COMPRA INTERNACIONAL</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261009<TRNAMT>30.00<FITID>a5<MEMO>ESTORNO LOJA ABC</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261010<TRNAMT>2500.00<FITID>a6<MEMO>PAGAMENTO RECEBIDO</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261011<TRNAMT>-120.00<FITID>a7<MEMO>LOJA DESCONHECIDA XYZ</STMTTRN>
+</BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>"""
+
+CSV_NUBANK = """date,title,amount
+2026-10-03,Ifood *Pizzaria Bella,89.90
+2026-10-05,Magazine Luiza - Parcela 3/10,420.00
+2026-10-10,Pagamento recebido,-2500.00
+2026-10-12,Netflix.com,55.90
+"""
+
+CSV_ITAU = """data;lançamento;valor
+03/10/2026;UBER *TRIP;-23,50
+04/10/2026;DROGASIL 123;-45,10
+06/10/2026;SUPERMERCADO DIA;-312,77
+"""
+
+
+def test_ler_ofx_e_classificar():
+    itens = fat.ler_fatura(OFX.encode(), "fatura.ofx")
+    tipos = [(i["descricao"][:14], i["tipo"], i["valor"]) for i in itens]
+    assert tipos[0] == ("IFOOD *PIZZARI", "compra", 89.9)
+    assert [i["tipo"] for i in itens] == ["compra", "compra", "compra", "tarifa", "estorno", "pagamento", "compra"]
+    mag = itens[1]
+    assert (mag["parcela_num"], mag["parcela_total"], mag["base"]) == (3, 10, "MAGAZINE LUIZA")
+    assert itens[0]["data"] == "2026-10-03"
+
+
+def test_ler_csv_de_bancos_diferentes():
+    nu = fat.ler_fatura(CSV_NUBANK.encode(), "nubank.csv")
+    assert [(i["tipo"], i["valor"]) for i in nu] == [("compra", 89.9), ("compra", 420.0), ("pagamento", 2500.0),
+                                                    ("compra", 55.9)]
+    itau = fat.ler_fatura(CSV_ITAU.encode("utf-8"), "itau.csv")  # compras negativas: o sinal é invertido
+    assert [(i["tipo"], i["valor"]) for i in itau] == [("compra", 23.5), ("compra", 45.1), ("compra", 312.77)]
+    with pytest.raises(fat.ErroImportacao, match="PDF"):
+        fat.ler_fatura(b"%PDF-1.4", "fatura.pdf")
+
+
+def test_importar_fatura_categoriza_aprende_e_nao_duplica(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    cartao = c.post("/api/plan/cartoes", json={"nome": "Nubank", "dia_vencimento": 15}).get_json()["id"]
+    envio = lambda conteudo, nome: c.post("/api/plan/fatura/previa", content_type="multipart/form-data",  # noqa: E731
+                                          data={"arquivo": (io.BytesIO(conteudo), nome), "cartao_id": cartao}).get_json()
+    p = envio(OFX.encode(), "fatura.ofx")
+    it = {i["descricao"][:12]: i for i in p["itens"]}
+    nomes = {x["id"]: x["nome"] for x in c.get("/api/plan/categorias").get_json()["categorias"]}
+    assert nomes[it["IFOOD *PIZZA"]["categoria_id"]] == "Delivery" and it["IFOOD *PIZZA"]["origem_categoria"] == "padrao"
+    assert nomes[it["POSTO SHELL "]["categoria_id"]] == "Combustível"
+    assert nomes[it["IOF COMPRA I"]["categoria_id"]] == "Tarifas bancárias"
+    assert nomes[it["ESTORNO LOJA"]["categoria_id"]] == "Estornos e reembolsos"
+    assert it["LOJA DESCONH"]["categoria_id"] is None
+    assert nomes[it["MAGAZINE LUI"]["categoria_id"]] == "Compras (lojas e internet)"
+    assert not it["PAGAMENTO RE"]["marcado"]
+    assert p["resumo"]["compras"] == 5 and p["resumo"]["parceladas"] == 1
+    # o usuário escolhe a categoria da loja desconhecida e importa (pagamento fica de fora)
+    it["LOJA DESCONH"]["categoria_id"] = cat(c, "despesa", "Roupas")
+    r = c.post("/api/plan/fatura/confirmar", json={"cartao_id": cartao, "itens": [i for i in p["itens"] if i["marcado"]],
+                                                   "data_modo": "compra", "vencimento": "2026-11-15"})
+    j = r.get_json()
+    assert r.status_code == 201 and j["lancamentos"] == 6 and j["parcelas_futuras"] == 7
+    assert j["regras_aprendidas"] == 1  # só a escolha do usuário; aceitar sugestões não vira regra
+    out = c.get("/api/plan/lancamentos?mes=2026-10").get_json()["lancamentos"]
+    assert {(l["tipo"], l["valor"]) for l in out} >= {("despesa", 89.9), ("receita", 30.0), ("despesa", 420.0)}
+    assert all(l["cartao_id"] == cartao and l["forma"] == "credito" for l in out)
+    # parcelas 4..10 lançadas nos meses seguintes
+    nov = c.get("/api/plan/lancamentos?mes=2026-11").get_json()["lancamentos"]
+    assert [(l["parcela_num"], l["parcela_total"], l["descricao"]) for l in nov] == [(4, 10, "MAGAZINE LUIZA PARC 04/10")]
+    assert {l["data"][:7] for l in out} == {"2026-10"}  # data de cada compra (padrão), mesmo com vencimento enviado
+    # aprendeu: a mesma loja já vem com a categoria escolhida
+    p2 = envio(OFX.encode(), "fatura.ofx")
+    loja = next(i for i in p2["itens"] if i["descricao"].startswith("LOJA DESCONHECIDA"))
+    assert loja["origem_categoria"] == "aprendida" and nomes[loja["categoria_id"]] == "Roupas"
+    # reimportar a mesma fatura: tudo marcado como já importado
+    assert all(i["ja_importado"] for i in p2["itens"] if i["tipo"] != "pagamento")
+    # fatura do mês seguinte com a parcela 4/10: já lançada, não duplica
+    prox = OFX.replace("PARC 03/10", "PARC 04/10").replace("20261005", "20261105")
+    p3 = envio(prox.encode(), "fatura-nov.ofx")
+    assert next(i for i in p3["itens"] if i["parcela_num"] == 4)["ja_importado"]
+    # resumo: gastos por cartão no mês (compras − estornos)
+    res = c.get("/api/plan/resumo?mes=2026-10").get_json()
+    assert res["cartoes"][0]["nome"] == "Nubank"
+    assert res["cartoes"][0]["total"] == pytest.approx(89.9 + 420 + 55.2 + 13.37 + 120 - 30)
+
+
+def test_fatura_na_data_de_vencimento(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    cartao = c.post("/api/plan/cartoes", json={"nome": "Itaú"}).get_json()["id"]
+    p = c.post("/api/plan/fatura/previa", content_type="multipart/form-data",
+               data={"arquivo": (io.BytesIO(CSV_ITAU.encode()), "itau.csv"), "cartao_id": cartao}).get_json()
+    c.post("/api/plan/fatura/confirmar", json={"cartao_id": cartao, "itens": p["itens"], "data_modo": "vencimento",
+                                               "vencimento": "2026-11-10"})
+    datas = {l["data"] for l in c.get("/api/plan/lancamentos?mes=2026-11").get_json()["lancamentos"]}
+    assert datas == {"2026-11-10"}
+    assert c.post("/api/plan/fatura/previa", content_type="multipart/form-data",
+                  data={"arquivo": (io.BytesIO(b"x"), "a.csv"), "cartao_id": 999}).status_code == 400

@@ -4,11 +4,14 @@ Registradas pelo app base com `registrar(app, ctx)`. Todas respondem 403 quando 
 está ativo na licença (ver carteira/licenca.py).
 """
 import datetime as dt
+import re
 
 from flask import jsonify, request
 
 from . import db, licenca
+from . import fatura as fat
 from . import planejamento as plan
+from .importacao import ErroImportacao
 
 MODULO = "planejamento"
 
@@ -59,6 +62,12 @@ def registrar(app, ctx):
             raise ctx.ErroAcesso("Lançamento não encontrado.", 404)
         return dict(row)
 
+    def cartao_valido(cid, cartao_id):
+        if not cartao_id:
+            return None
+        ok = conn.execute("SELECT 1 FROM fin_cartoes WHERE id = ? AND carteira_id = ?", (cartao_id, cid)).fetchone()
+        return cartao_id if ok else None
+
     def numero(v, campo):
         try:
             return float(str(v).replace(".", "").replace(",", ".")) if isinstance(v, str) and "," in v else float(v)
@@ -90,9 +99,11 @@ def registrar(app, ctx):
             descricao = descricao or c["nome"]
         descricao = descricao or ("Receita" if tipo == "receita" else "Despesa")
         forma = d.get("forma") if d.get("forma") in plan.FORMAS else None
+        cartao = d.get("cartao_id")
+        cartao = int(cartao) if forma == "credito" and str(cartao or "").isdigit() else None
         return {"tipo": tipo, "data": data, "descricao": descricao, "valor": round(valor, 2),
                 "valor_bruto": round(bruto, 2) if bruto is not None and tipo == "receita" else None,
-                "categoria_id": cat, "forma": forma, "pago": 1 if d.get("pago", True) else 0}
+                "categoria_id": cat, "forma": forma, "pago": 1 if d.get("pago", True) else 0, "cartao_id": cartao}
 
     # ---------- categorias ----------
     @app.get("/api/plan/categorias")
@@ -169,16 +180,17 @@ def registrar(app, ctx):
             for data, valor, num in plan.parcelas(l["valor"], n, l["data"]):
                 conn.execute(
                     """INSERT INTO fin_lancamentos (carteira_id, tipo, data, descricao, categoria_id, valor, forma, pago,
-                       parcela_grupo, parcela_num, parcela_total) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                       parcela_grupo, parcela_num, parcela_total, cartao_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (cid, l["tipo"], data, l["descricao"], l["categoria_id"], valor, l["forma"],
-                     1 if data <= ctx.hoje() else 0, grupo, num, n))
+                     1 if data <= ctx.hoje() or l["forma"] == "credito" else 0, grupo, num, n,
+                     cartao_valido(cid, l["cartao_id"])))
             conn.commit()
             return jsonify({"ok": True, "parcelas": n}), 201
         cur = conn.execute(
             """INSERT INTO fin_lancamentos (carteira_id, tipo, data, descricao, categoria_id, valor, valor_bruto, forma,
-               pago, obs) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+               pago, obs, cartao_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (cid, l["tipo"], l["data"], l["descricao"], l["categoria_id"], l["valor"], l["valor_bruto"], l["forma"],
-             l["pago"], (d.get("obs") or "")[:200] or None))
+             l["pago"], (d.get("obs") or "")[:200] or None, cartao_valido(cid, l["cartao_id"])))
         conn.commit()
         return jsonify({"ok": True, "id": cur.lastrowid}), 201
 
@@ -196,9 +208,9 @@ def registrar(app, ctx):
         except ValueError as e:
             return erro(str(e))
         conn.execute("""UPDATE fin_lancamentos SET data = ?, descricao = ?, categoria_id = ?, valor = ?, valor_bruto = ?,
-                        forma = ?, pago = ? WHERE id = ?""",
+                        forma = ?, pago = ?, cartao_id = ? WHERE id = ?""",
                      (l["data"], l["descricao"], l["categoria_id"], l["valor"], l["valor_bruto"], l["forma"],
-                      l["pago"], lid))
+                      l["pago"], cartao_valido(cid, l["cartao_id"]), lid))
         if d.get("atualizar_proximos") and atual["recorrencia_id"]:
             # muda também os próximos meses: o modelo da recorrência e as ocorrências futuras ainda não pagas
             conn.execute("""UPDATE fin_recorrencias SET descricao = ?, categoria_id = ?, valor = ?, valor_bruto = ?,
@@ -250,6 +262,162 @@ def registrar(app, ctx):
         conn.commit()
         return jsonify({"ok": True})
 
+    # ---------- cartões ----------
+    def listar_cartoes(cids):
+        marcas = ",".join("?" * len(cids))
+        return db.rows(conn.execute(
+            f"SELECT * FROM fin_cartoes WHERE carteira_id IN ({marcas}) AND ativo = 1 ORDER BY nome", cids))
+
+    @app.get("/api/plan/cartoes")
+    def plan_cartoes():
+        return jsonify(listar_cartoes(ctx.carteiras_leitura()))
+
+    @app.post("/api/plan/cartoes")
+    def plan_criar_cartao():
+        cid = ctx.carteira_atual("editar")
+        d = request.get_json(silent=True) or {}
+        nome = (d.get("nome") or "").strip()[:40]
+        try:
+            dia = int(d.get("dia_vencimento") or 0) or None
+        except ValueError:
+            dia = None
+        if not nome:
+            return erro("Informe o nome do cartão (ex.: Nubank, Itaú Visa).")
+        if dia is not None and not 1 <= dia <= 31:
+            return erro("Dia de vencimento inválido.")
+        cur = conn.execute("INSERT INTO fin_cartoes (carteira_id, nome, dia_vencimento) VALUES (?, ?, ?)", (cid, nome, dia))
+        conn.commit()
+        return jsonify({"ok": True, "id": cur.lastrowid}), 201
+
+    @app.delete("/api/plan/cartoes/<int:cartao_id>")
+    def plan_excluir_cartao(cartao_id):
+        """Desativa o cartão (os lançamentos continuam, sem perder o histórico)."""
+        cid = ctx.carteira_atual("editar")
+        conn.execute("UPDATE fin_cartoes SET ativo = 0 WHERE id = ? AND carteira_id = ?", (cartao_id, cid))
+        conn.commit()
+        return jsonify({"ok": True})
+
+    # ---------- importação de fatura ----------
+    def regras_usuario(cid):
+        rows = conn.execute("SELECT padrao, categoria_id FROM fin_regras WHERE carteira_id = ?", (cid,)).fetchall()
+        return sorted(((r["padrao"], r["categoria_id"]) for r in rows), key=lambda x: -len(x[0]))
+
+    def categorias_por_nome():
+        return {(c["tipo"], c["nome"]): c["id"] for c in categorias().values() if c["ativa"]}
+
+    @app.post("/api/plan/fatura/previa")
+    def plan_fatura_previa():
+        cid = ctx.carteira_atual("editar")
+        arq = request.files.get("arquivo")
+        if not arq or not arq.filename:
+            return erro("Selecione o arquivo da fatura.")
+        cartao_id = cartao_valido(cid, int(request.form.get("cartao_id") or 0))
+        if not cartao_id:
+            return erro("Escolha o cartão desta fatura.")
+        try:
+            itens = fat.ler_fatura(arq.read(), arq.filename)
+        except ErroImportacao as e:
+            return erro(str(e))
+        regras, por_nome = regras_usuario(cid), categorias_por_nome()
+        chaves = {r["chave_import"] for r in conn.execute(
+            "SELECT chave_import FROM fin_lancamentos WHERE carteira_id = ? AND chave_import IS NOT NULL", (cid,))}
+        for it in itens:
+            it["chave"] = fat.chave_importacao(cartao_id, it)
+            it["ja_importado"] = it["chave"] in chaves
+            it["categoria_id"], it["origem_categoria"] = sugerir_categoria_item(it, regras, por_nome)
+            it["categoria_sugerida"] = it["categoria_id"]
+            it["marcado"] = it["tipo"] != "pagamento" and not it["ja_importado"]
+        compras = [i for i in itens if i["tipo"] in ("compra", "tarifa")]
+        return jsonify({
+            "itens": itens, "cartao_id": cartao_id,
+            "resumo": {"compras": len(compras), "total": round(sum(i["valor"] for i in compras), 2),
+                       "estornos": round(sum(i["valor"] for i in itens if i["tipo"] == "estorno"), 2),
+                       "ja_importados": sum(1 for i in itens if i["ja_importado"]),
+                       "categorizados": sum(1 for i in compras if i["categoria_id"]),
+                       "parceladas": sum(1 for i in compras if i["parcela_total"])}})
+
+    def sugerir_categoria_item(it, regras, por_nome):
+        if it["tipo"] == "pagamento":
+            return None, None
+        return fat.sugerir_categoria(it, regras, por_nome)
+
+    @app.post("/api/plan/fatura/confirmar")
+    def plan_fatura_confirmar():
+        cid = ctx.carteira_atual("editar")
+        d = request.get_json(silent=True) or {}
+        cartao_id = cartao_valido(cid, int(d.get("cartao_id") or 0))
+        if not cartao_id:
+            return erro("Escolha o cartão desta fatura.")
+        vencimento = None  # só vale quando o usuário escolhe lançar na data de vencimento
+        if d.get("data_modo") == "vencimento":
+            vencimento = d.get("vencimento")
+            try:
+                vencimento = dt.date.fromisoformat(str(vencimento)[:10]).isoformat()
+            except ValueError:
+                return erro("Informe a data de vencimento da fatura.")
+        futuras = bool(d.get("parcelas_futuras", True))
+        cats = categorias()
+        chaves = {r["chave_import"] for r in conn.execute(
+            "SELECT chave_import FROM fin_lancamentos WHERE carteira_id = ? AND chave_import IS NOT NULL", (cid,))}
+        criados, futuras_criadas, aprendidas = 0, 0, 0
+
+        def inserir(tipo, data, desc, cat, valor, chave, pago, grupo=None, num=None, total=None):
+            conn.execute(
+                """INSERT INTO fin_lancamentos (carteira_id, tipo, data, descricao, categoria_id, valor, forma, pago,
+                   parcela_grupo, parcela_num, parcela_total, cartao_id, chave_import)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (cid, tipo, data, desc, cat, valor, "credito", pago, grupo, num, total, cartao_id, chave))
+            chaves.add(chave)
+
+        for it in d.get("itens") or []:
+            try:
+                valor = round(float(it["valor"]), 2)
+                data = dt.date.fromisoformat(str(it["data"])[:10]).isoformat()
+                tipo_item = it["tipo"]
+            except (KeyError, TypeError, ValueError):
+                return erro("Item inválido na fatura.")
+            if tipo_item == "pagamento" or valor <= 0:
+                continue
+            cat = it.get("categoria_id")
+            cat = int(cat) if str(cat or "").isdigit() and int(cat) in cats else None
+            tipo = "receita" if tipo_item == "estorno" else "despesa"
+            if cat and cats[cat]["tipo"] != tipo:
+                cat = None
+            chave = str(it.get("chave") or "")[:60]
+            if not chave or chave in chaves:
+                continue
+            data_lanc = vencimento if vencimento else data
+            num, total = it.get("parcela_num"), it.get("parcela_total")
+            grupo = chave[2:].split("#")[0] if chave.startswith("p:") else None
+            inserir(tipo, data_lanc, str(it.get("descricao") or "")[:120] or "Compra no cartão", cat, valor, chave, 1,
+                    grupo, num, total)
+            criados += 1
+            if grupo and futuras and num and total and num < total:
+                for k in range(num + 1, total + 1):
+                    ch = f"p:{grupo}#{k}"
+                    if ch in chaves:
+                        continue
+                    data_k = plan.data_no_mes(plan.somar_meses(data_lanc[:7], k - num), int(data_lanc[8:10]))
+                    desc_k = re.sub(rf"\b0?{num}\s*(/|DE|de)\s*0?{total}\b", f"{k:02d}/{total:02d}",
+                                    str(it.get("descricao") or ""), count=1)[:120]
+                    inserir(tipo, data_k, desc_k, cat, valor, ch, 1, grupo, k, total)
+                    futuras_criadas += 1
+            # aprende: estabelecimento -> categoria escolhida
+            est = fat.chave_estabelecimento(it.get("descricao") or "")
+            sugerida = it.get("categoria_sugerida")
+            if cat and est and tipo == "despesa" and (sugerida != cat or it.get("origem_categoria") == "aprendida"):
+                # aprende o que o usuário escolheu ou corrigiu (aceitar a sugestão automática não vira regra)
+                atual = conn.execute("SELECT categoria_id FROM fin_regras WHERE carteira_id = ? AND padrao = ?",
+                                     (cid, est)).fetchone()
+                if atual is None or atual["categoria_id"] != cat:
+                    aprendidas += 1
+                conn.execute("""INSERT INTO fin_regras (carteira_id, padrao, categoria_id) VALUES (?, ?, ?)
+                                ON CONFLICT(carteira_id, padrao) DO UPDATE SET categoria_id = excluded.categoria_id,
+                                usos = usos + 1""", (cid, est, cat))
+        conn.commit()
+        return jsonify({"ok": True, "lancamentos": criados, "parcelas_futuras": futuras_criadas,
+                        "regras_aprendidas": aprendidas}), 201
+
     # ---------- resumo ----------
     @app.get("/api/plan/resumo")
     def plan_resumo():
@@ -277,6 +445,15 @@ def registrar(app, ctx):
                 WHERE tipo = 'despesa' AND carteira_id IN ({marcas}) GROUP BY m""", cids)}
         tem_lancamentos = conn.execute(
             f"SELECT 1 FROM fin_lancamentos WHERE carteira_id IN ({marcas}) LIMIT 1", cids).fetchone() is not None
-        return jsonify({**atual, "anterior": {k: anterior[k] for k in ("receitas", "despesas", "investido", "sobra")},
+        cartoes = []
+        for c in listar_cartoes(cids):
+            row = conn.execute(
+                """SELECT SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE -valor END) AS total,
+                          SUM(CASE WHEN tipo = 'despesa' THEN 1 ELSE 0 END) AS qtd
+                   FROM fin_lancamentos WHERE cartao_id = ? AND substr(data, 1, 7) = ?""", (c["id"], mes)).fetchone()
+            if row["qtd"]:
+                cartoes.append({"id": c["id"], "nome": c["nome"], "total": row["total"] or 0, "compras": row["qtd"],
+                                "dia_vencimento": c["dia_vencimento"]})
+        return jsonify({**atual, "cartoes": cartoes, "anterior": {k: anterior[k] for k in ("receitas", "despesas", "investido", "sobra")},
                         "serie": serie, "custo_de_vida": plan.custo_de_vida(desp_mes, mes_atual()),
                         "mes_atual": mes_atual(), "vazio": not tem_lancamentos})

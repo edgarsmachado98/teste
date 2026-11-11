@@ -60,6 +60,24 @@ CREATE TABLE IF NOT EXISTS fin_lancamentos (
     obs            TEXT
 );
 CREATE INDEX IF NOT EXISTS fin_lanc_data ON fin_lancamentos (carteira_id, data);
+
+CREATE TABLE IF NOT EXISTS fin_cartoes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id    INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    nome           TEXT NOT NULL,
+    dia_vencimento INTEGER CHECK (dia_vencimento BETWEEN 1 AND 31),
+    ativo          INTEGER NOT NULL DEFAULT 1
+);
+
+-- Estabelecimento -> categoria, aprendido com as correções do usuário na importação de faturas.
+CREATE TABLE IF NOT EXISTS fin_regras (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id  INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    padrao       TEXT NOT NULL,
+    categoria_id INTEGER NOT NULL REFERENCES fin_categorias(id) ON DELETE CASCADE,
+    usos         INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (carteira_id, padrao)
+);
 """
 
 FORMAS = {"pix": "Pix", "debito": "Débito", "credito": "Cartão de crédito", "boleto": "Boleto",
@@ -70,7 +88,7 @@ CATEGORIAS_PADRAO = {
         "Trabalho": ["Salário", "13º salário", "Férias", "PLR / bônus", "Pró-labore", "Freelance / autônomo"],
         "Aluguéis": ["Aluguel recebido"],
         "Benefícios": ["Aposentadoria / pensão", "Auxílios"],
-        "Eventuais": ["Restituição do IR", "Venda de bens", "Presentes", "Outras receitas"],
+        "Eventuais": ["Restituição do IR", "Venda de bens", "Presentes", "Estornos e reembolsos", "Outras receitas"],
     },
     "despesa": {
         "Moradia": ["Aluguel / financiamento", "Condomínio", "Energia", "Água", "Gás", "Internet / telefone",
@@ -81,7 +99,7 @@ CATEGORIAS_PADRAO = {
         "Saúde": ["Plano de saúde", "Farmácia", "Consultas / exames", "Academia"],
         "Educação": ["Escola / faculdade", "Cursos", "Livros / material"],
         "Lazer": ["Viagens", "Passeios", "Streaming / assinaturas", "Hobbies"],
-        "Pessoais": ["Roupas", "Beleza / cuidados", "Presentes"],
+        "Pessoais": ["Roupas", "Beleza / cuidados", "Presentes", "Compras (lojas e internet)"],
         "Filhos e pets": ["Filhos", "Pets"],
         "Impostos e taxas": ["Imposto de renda", "Tarifas bancárias", "Outros impostos"],
         "Dívidas": ["Empréstimo", "Juros / multas", "Cartão (parcelamento de fatura)"],
@@ -96,12 +114,18 @@ NOME_PROVENTOS = "Proventos dos investimentos"
 def preparar(conn):
     """Cria as tabelas do módulo e as categorias padrão (idempotente)."""
     conn.executescript(ESQUEMA)
-    if conn.execute("SELECT COUNT(*) FROM fin_categorias").fetchone()[0] == 0:
-        for tipo, grupos in CATEGORIAS_PADRAO.items():
-            for g_i, (grupo, nomes) in enumerate(grupos.items()):
-                for n_i, nome in enumerate(nomes):
-                    conn.execute("INSERT INTO fin_categorias (tipo, grupo, nome, ordem) VALUES (?, ?, ?, ?)",
-                                 (tipo, grupo, nome, g_i * 100 + n_i))
+    colunas = {r["name"] for r in conn.execute("PRAGMA table_info(fin_lancamentos)")}
+    for coluna, definicao in (("cartao_id", "INTEGER REFERENCES fin_cartoes(id) ON DELETE SET NULL"),
+                              ("chave_import", "TEXT")):
+        if coluna not in colunas:
+            conn.execute(f"ALTER TABLE fin_lancamentos ADD COLUMN {coluna} {definicao}")
+    conn.execute("CREATE INDEX IF NOT EXISTS fin_lanc_chave ON fin_lancamentos (carteira_id, chave_import)")
+    # categorias padrão (as que faltarem; novas versões podem trazer categorias novas)
+    for tipo, grupos in CATEGORIAS_PADRAO.items():
+        for g_i, (grupo, nomes) in enumerate(grupos.items()):
+            for n_i, nome in enumerate(nomes):
+                conn.execute("INSERT OR IGNORE INTO fin_categorias (tipo, grupo, nome, ordem) VALUES (?, ?, ?, ?)",
+                             (tipo, grupo, nome, g_i * 100 + n_i))
     conn.commit()
 
 
