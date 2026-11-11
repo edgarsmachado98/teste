@@ -257,10 +257,12 @@ async function carregarAgenda() {
     : `<p class="dica">Nenhum provento a receber ou anunciado para os seus ativos.</p>`;
 
   $("#tabela-magico").innerHTML = r.numero_magico.length
-    ? `<tr><th>FII</th><th>Cotas</th><th>Número mágico</th><th>Progresso</th><th>Faltam</th></tr>` + r.numero_magico.map(m => `<tr>
-        <td><strong>${esc(m.ticker)}</strong><small class="var-sub">${brl.format(m.rendimento_mensal_cota)}/cota/mês · cota ${brl.format(m.preco)}</small></td>
-        <td>${num.format(m.cotas_atuais)}</td><td>${num.format(m.cotas_necessarias)}</td>
-        <td><div class="peso"><div class="barra"><span style="width:${m.progresso_pct}%"></span></div>${pct(m.progresso_pct, 0)}</div></td>
+    ? `<tr><th>FII</th><th>Progresso</th><th>Faltam</th></tr>` + r.numero_magico.map(m => `<tr>
+        <td><strong>${esc(m.ticker)}</strong><small class="var-sub">${brl.format(m.rendimento_mensal_cota)}/cota/mês</small>
+          <small class="var-sub">cota ${brl.format(m.preco)}</small></td>
+        <td><div class="magico-prog"><span><b>${num.format(m.cotas_atuais)}</b> de ${num.format(m.cotas_necessarias)} cotas</span>
+          <span class="magico-pct">${pct(m.progresso_pct, 0)}</span></div>
+          <div class="progresso"><span style="width:${Math.min(m.progresso_pct, 100)}%"></span></div></td>
         <td>${m.faltam ? `${num.format(m.faltam)} cotas<small class="var-sub">${brl.format(m.investimento_faltante)}</small>` : `<span class="pos">atingido</span>`}</td></tr>`).join("")
     : `<tr><td>Nenhum FII com histórico de rendimentos.</td></tr>`;
 }

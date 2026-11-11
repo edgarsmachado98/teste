@@ -573,3 +573,15 @@ button.link.conf-ignorar:hover { color: var(--texto); }
 @media print { .btn-tema { display: none; } }
 :root[data-theme="dark"] .login-apresentacao { background: #121417; border-right: 1px solid var(--borda); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .login-apresentacao { background: #121417; border-right: 1px solid var(--borda); } }
+
+/* ------------------------------------------------- número mágico dos FIIs (sem rolagem lateral) */
+.tabela-magico { width: 100%; table-layout: fixed; }
+.tabela-magico th, .tabela-magico td { white-space: normal; padding: 10px 8px; vertical-align: top; }
+.tabela-magico th:nth-child(1), .tabela-magico td:nth-child(1) { width: 32%; }
+.tabela-magico th:nth-child(2), .tabela-magico td:nth-child(2) { text-align: left; }
+.tabela-magico th:nth-child(3), .tabela-magico td:nth-child(3) { width: 27%; }
+.tabela-magico td small.var-sub { font-weight: 400; }
+.magico-prog { display: flex; justify-content: space-between; gap: 6px; font-size: .84rem; color: var(--texto-2); }
+.magico-prog b { color: var(--texto); font-variant-numeric: tabular-nums; }
+.magico-pct { font-weight: 600; color: var(--texto); }
+.tabela-magico .progresso { margin-top: 6px; }
