@@ -884,6 +884,20 @@ function renderExtratoFluxo() {
 let previaB3 = null;
 
 let arquivosImport = [];
+let fonteImport = "b3";
+
+document.querySelectorAll(".abas-fonte button").forEach(b => b.addEventListener("click", () => {
+  fonteImport = b.dataset.fonte;
+  document.querySelectorAll(".abas-fonte button").forEach(x => x.classList.toggle("ativo", x === b));
+  document.querySelectorAll(".ajuda-fonte").forEach(x => x.classList.toggle("oculto", x.dataset.ajuda !== fonteImport));
+  // B3: a Posição é a posição completa. Tesouro: soma ao que existe. Bancos: o usuário escolhe.
+  $(".modo-importacao").classList.toggle("oculto", fonteImport !== "banco");
+  const modo = $("#form-importar-b3").modo;
+  modo.value = fonteImport === "b3" ? "completa" : "parcial";
+  arquivosImport = [];
+  limparPreviaImport();
+  renderArquivosImport();
+}));
 const tamanhoArquivo = b => b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1048576).toFixed(1).replace(".", ",")} MB`;
 
 function renderArquivosImport() {
@@ -943,6 +957,7 @@ $("#form-importar-b3").addEventListener("submit", async ev => {
   const fd = new FormData();
   arquivosImport.forEach(f => fd.append("arquivo", f, f.name));
   fd.append("modo", ev.target.modo.value);
+  fd.append("fonte", fonteImport);
   alvo.innerHTML = `<p class="dica">Lendo ${arquivosImport.length > 1 ? `${arquivosImport.length} arquivos` : "arquivo"}…</p>`;
   try {
     const r = await fetch("/api/importar/b3/previa", { method: "POST", body: fd,

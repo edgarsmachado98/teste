@@ -937,7 +937,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
             try:
                 r = analisar_extrato(conteudo, arq.filename)
             except ErroImportacao as e:
-                return erro(f"{arq.filename}: {e}")
+                dica = (" Este formato ainda não é lido: rode o diagnóstico (python diagnostico_importacao.py "
+                        "\"caminho do arquivo\") e envie o resultado para o leitor ser ajustado."
+                        if request.form.get("fonte") in ("tesouro", "banco") else "")
+                return erro(f"{arq.filename}: {e}{dica}")
             anterior = conn.execute("SELECT importado_em FROM importacoes WHERE carteira_id = ? AND hash = ?",
                                     (cid, digest)).fetchone()
             previa["arquivos"].append({"nome": arq.filename, "tipo": r["tipo_arquivo"], "origem": r["origem"],

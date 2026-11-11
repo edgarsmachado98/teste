@@ -305,9 +305,29 @@
     </div>
     <div class="painel requer-edicao">
       <h3>Importar extratos e relatórios de investimentos</h3>
+      <div class="abas-fonte" role="tablist" aria-label="Origem dos arquivos">
+        <button type="button" role="tab" class="ativo" data-fonte="b3">B3 · Área do Investidor</button>
+        <button type="button" role="tab" data-fonte="tesouro">Tesouro Direto</button>
+        <button type="button" role="tab" data-fonte="banco">Bancos e corretoras</button>
+      </div>
+      <div class="ajuda-fonte" data-ajuda="b3">
+        <p>Baixe em <strong>investidor.b3.com.br</strong>, em Excel: <strong>Posição</strong> (o que você tem hoje, de todas as
+          corretoras, inclusive Tesouro Direto e renda fixa registrada na B3), e em Extratos: <strong>Negociação</strong>,
+          <strong>Movimentação</strong> e <strong>Eventos</strong>. Envie todos juntos: a Posição é tratada como a sua posição completa na B3.</p>
+      </div>
+      <div class="ajuda-fonte oculto" data-ajuda="tesouro">
+        <p>Em <strong>tesourodireto.com.br</strong> → Extrato consolidado, baixe o extrato de cada instituição (agente de custódia).
+          Use para os títulos do Tesouro quando <strong>não</strong> importar a Posição da B3, que já traz os mesmos títulos:
+          importar os dois duplica o Tesouro.</p>
+      </div>
+      <div class="ajuda-fonte oculto" data-ajuda="banco">
+        <p>Relatório de investimentos do banco ou corretora (BB, XP, Itaú, Nubank...) em PDF ou Excel. Serve para o que
+          <strong>não</strong> aparece na B3: fundos, poupança, previdência e aplicações do próprio banco.
+          Escolha abaixo se o relatório é a sua posição inteira ou de uma instituição só.</p>
+      </div>
       <form id="form-importar-b3" class="form-linha">
         <div class="seletor-arquivos">
-          <span class="rotulo-campo">Arquivos Excel (.xlsx, .xls), CSV ou PDF da B3, bancos e corretoras</span>
+          <span class="rotulo-campo">Arquivos Excel (.xlsx, .xls), CSV ou PDF</span>
           <input type="file" id="input-arquivos" accept=".xlsx,.xls,.csv,.pdf,.htm,.html" multiple hidden>
           <ul id="lista-arquivos" class="lista-arquivos"></ul>
           <div class="zona-arquivos" id="zona-arquivos">
@@ -318,7 +338,7 @@
           </div>
         </div>
         <button type="submit" id="btn-ler-arquivos" disabled>Ler arquivos</button>
-        <fieldset class="modo-importacao">
+        <fieldset class="modo-importacao oculto">
           <legend>Os relatórios de posição desta importação mostram:</legend>
           <label class="check"><input type="radio" name="modo" value="completa" checked>
             <span><strong>Toda a minha posição</strong> (B3 e/ou todas as instituições de uma vez)</span></label>
