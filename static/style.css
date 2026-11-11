@@ -229,6 +229,13 @@ td .check-acesso { width: auto; height: auto; }
 @media (prefers-color-scheme: dark) { #toast { background: #2a2f35; } }
 
 body.somente-leitura .requer-edicao { display: none !important; }
+body.sem-gerencia .requer-gerencia { display: none !important; }
+.zona-perigo { margin-top: 14px; border: 1px solid var(--borda); border-radius: var(--raio-p); padding: 10px 14px; }
+.zona-perigo summary { cursor: pointer; font-size: .86rem; font-weight: 550; color: var(--neg); }
+.zona-perigo[open] { border-color: color-mix(in srgb, var(--neg) 35%, var(--borda)); }
+.zona-perigo .form-linha { margin-top: 8px; }
+button.perigo { background: var(--neg); border-color: var(--neg); color: #fff; }
+button.perigo:hover { filter: brightness(.94); }
 body:not(.admin) .so-admin { display: none !important; }
 
 /* ----------------------------------------------------- visão por categoria */

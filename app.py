@@ -320,6 +320,34 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         conn.commit()
         return jsonify({"ok": True})
 
+    @app.post("/api/carteiras/<int:cid>/zerar")
+    def api_zerar_carteira(cid):
+        """Apaga os dados lançados/importados da carteira (mantém a carteira, usuários e acessos)."""
+        c = auth.obter_carteira(conn, cid)
+        if c is None or not auth.permissoes(conn, g.usuario, cid)["gerenciar"]:
+            raise ErroAcesso("Só quem gerencia a carteira pode zerar os dados.", 403)
+        d = request.get_json(silent=True) or {}
+        if (d.get("confirmacao") or "").strip().casefold() != c["nome"].strip().casefold():
+            return erro("Digite o nome da carteira exatamente como aparece para confirmar.")
+        try:
+            copia = backup.antes_de_importar(conn.path)
+        except Exception as e:
+            return erro(f"Nada foi apagado: não foi possível fazer a cópia de segurança antes ({e}).", 500)
+        tabelas = ["aportes", "proventos", "eventos", "importacoes", "ativos"]
+        if d.get("tudo"):
+            tabelas += ["alertas_preco", "acompanhamento", "metas_classe"]
+        removidos = {}
+        try:
+            for t in tabelas:
+                removidos[t] = conn.execute(f"DELETE FROM {t} WHERE carteira_id = ?", (cid,)).rowcount
+            if d.get("tudo"):
+                conn.execute("UPDATE carteiras SET meta_renda_mensal = NULL WHERE id = ?", (cid,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return jsonify({"ok": True, "removidos": removidos, "backup": os.path.basename(copia)})
+
     def exigir_gerenciar(cid):
         if not auth.permissoes(conn, g.usuario, cid)["gerenciar"]:
             raise ErroAcesso("Você não pode gerenciar os acessos desta carteira.", 403)

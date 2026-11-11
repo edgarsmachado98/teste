@@ -178,3 +178,22 @@ def test_backup(novo_app, tmp_path, monkeypatch):
     r = edgar.get("/api/backup/baixar")
     assert r.status_code == 200 and r.data[:15] == b"SQLite format 3"
     assert len(edgar.get("/api/backup").get_json()["copias"]) == 1  # o arquivo baixado não fica na pasta
+
+
+def test_zerar_dados_da_carteira(novo_app):
+    _, edgar, eliandra, c_edgar, c_eli = preparar(novo_app)
+    assert com_carteira(edgar, c_edgar).post("/api/aportes", json=APORTE).status_code == 201
+    assert com_carteira(eliandra, c_eli).post("/api/aportes", json=APORTE).status_code == 201
+    url = f"/api/carteiras/{c_edgar}/zerar"
+    # Eliandra não gerencia a carteira do Edgar
+    assert eliandra.post(url, json={"confirmacao": "Carteira Edgar Machado"}).status_code == 403
+    # confirmação errada não apaga nada
+    assert edgar.post(url, json={"confirmacao": "outra"}).status_code == 400
+    assert len(com_carteira(edgar, c_edgar).get("/api/aportes").get_json()) == 1
+    r = edgar.post(url, json={"confirmacao": "carteira edgar machado"})
+    assert r.status_code == 200 and r.get_json()["removidos"]["aportes"] == 1
+    assert r.get_json()["backup"].startswith("antes-importacao-")
+    assert com_carteira(edgar, c_edgar).get("/api/aportes").get_json() == []
+    assert com_carteira(edgar, c_edgar).get("/api/carteira").get_json()["ativos"] == []
+    # a outra carteira continua intacta
+    assert len(com_carteira(eliandra, c_eli).get("/api/aportes").get_json()) == 1

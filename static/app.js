@@ -753,6 +753,21 @@ async function carregarHistoricoImportacoes() {
   } catch (e) { /* ignora */ }
 }
 
+$("#form-zerar").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const f = ev.target, d = formDados(f);
+  const nome = carteiras.find(c => c.id === carteiraAtual)?.nome || "";
+  if (!confirm(`Apagar os dados da carteira "${nome}"? Uma cópia de segurança será feita antes.`)) return;
+  try {
+    const r = await api(`/api/carteiras/${carteiraAtual}/zerar`, { method: "POST", body: d });
+    f.reset();
+    $("#zerar-carteira").open = false;
+    const total = Object.values(r.removidos).reduce((a, b) => a + b, 0);
+    toast(`Carteira zerada (${total} registros removidos). Cópia de segurança: ${r.backup}`);
+    recarregarAbaAtual();
+  } catch (e) { toast(e.message, true); }
+});
+
 async function carregarAportes() {
   carregarEventos();
   carregarHistoricoImportacoes();
@@ -1273,6 +1288,7 @@ const ROTULO_PERM = p => p.gerenciar && p.editar ? "acesso total" : p.editar ? "
 function aplicarPermissoes() {
   const p = permissao();
   document.body.classList.toggle("somente-leitura", !p.editar);
+  document.body.classList.toggle("sem-gerencia", !p.gerenciar);
   document.body.classList.toggle("admin", !!USUARIO.admin);
   $("#aviso-leitura").classList.toggle("oculto", !carteiraAtual || p.editar);
   $("#aviso-leitura").innerHTML = carteiraAtual === FAMILIA
