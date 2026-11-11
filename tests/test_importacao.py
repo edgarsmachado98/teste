@@ -684,7 +684,8 @@ def test_extrato_consolidado_do_tesouro_direto():
     ]
     r = importacao.analisar_extrato(xlsx([t] * 7, linhas, titulo=False),
                                     "ExtratoConsolidado_FULANO_2026-11_820_2026-11-11_13-14.xlsx")
-    assert r["tipo_arquivo"] == "posicao" and r["origem"] == "Tesouro Direto" and r["ignorados"] == []
+    assert r["tipo_arquivo"] == "posicao" and r["ignorados"] == []
+    assert r["origem"] == "Tesouro Direto · BB Banco de Investimento S/A"
     pos = {p["ticker"]: p for p in r["posicao"]}
     assert set(pos) == {"TESOURO IPCA+ 2035", "TESOURO SELIC 2029"}
     ipca = pos["TESOURO IPCA+ 2035"]
@@ -738,4 +739,27 @@ def test_conferencia_com_os_relatorios(novo_app):
     # relatório mais recente de cada origem substitui o anterior
     rels = [{"origem": "B3", "nome": "a", "importado_em": "2026-01-01T10:00", "itens": []},
             {"origem": "B3", "nome": "b", "importado_em": "2026-02-01T10:00", "itens": []}]
+    assert [r["nome"] for r in conferencia.ultimos_por_origem(rels)] == ["b"]
+
+
+def test_tesouro_mesmo_titulo_em_duas_instituicoes_soma():
+    def extrato(inst, linhas):
+        cab = [["FULANO - 1 - " + inst + " (Conta ativa desde 01/01/2020)"] * 7,
+               ["Título", "Vencimento", "Valor (R$)", "Valor (R$)", "Valor (R$)", "Quantidade", "Quantidade"],
+               ["Título", "Vencimento", "Investido", "Bruto atual", "Liquído atual", "Total", "Bloqueada"]]
+        return importacao.analisar_extrato(xlsx(["EXTRATO CONSOLIDADO - 11/2026"] * 7, cab + linhas, titulo=False),
+                                           "ExtratoConsolidado_X_2026-11_820_2026-11-11_13-14.xlsx")
+    bb = extrato("BB BANCO DE INVESTIMENTO S/A", [["Tesouro IPCA+ 2029", 47252, 2000.0, 2466.11, 2400.0, 0.7, 0]])
+    nu = extrato("NU INVEST CORRETORA DE VALORES S.A.", [["Tesouro IPCA+ 2029", 47252, 200.0, 239.26, 230.0, 0.07, 0]])
+    assert bb["origem"] != nu["origem"]
+    pos, conflitos = importacao.mesclar_posicoes([("bb.xlsx", bb["origem"], bb["posicao"]),
+                                                  ("nu.xlsx", nu["origem"], nu["posicao"])])
+    assert len(pos) == 1 and pos[0]["quantidade"] == pytest.approx(0.77)
+    assert pos[0]["valor_atual"] == pytest.approx(2705.37)
+
+
+def test_conferencia_ignora_tesouro_gravado_sem_instituicao():
+    from carteira import conferencia
+    rels = [{"origem": "Tesouro Direto", "nome": "a", "importado_em": "2026-11-11T13:00", "itens": []},
+            {"origem": "Tesouro Direto · BB", "nome": "b", "importado_em": "2026-11-11T20:00", "itens": []}]
     assert [r["nome"] for r in conferencia.ultimos_por_origem(rels)] == ["b"]

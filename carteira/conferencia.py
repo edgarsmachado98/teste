@@ -18,6 +18,9 @@ def _tolerancia_valor(valor):
 
 def ultimos_por_origem(relatorios):
     """Mantém só o relatório mais recente de cada origem (e todos os arquivos daquela importação)."""
+    if any(r["origem"].startswith("Tesouro Direto ·") for r in relatorios):
+        # versões antigas gravavam todos os extratos do Tesouro como "Tesouro Direto": substituídos
+        relatorios = [r for r in relatorios if r["origem"] != "Tesouro Direto"]
     mais_recente = {}
     for r in relatorios:
         if r["importado_em"] > mais_recente.get(r["origem"], ""):

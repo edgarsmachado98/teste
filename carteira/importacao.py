@@ -1067,17 +1067,40 @@ def _tesouro_consolidado(abas):
                 it["preco_medio"] = it["custo"] / it["quantidade"] if it["tem_custo"] else None
                 del it["custo"], it["tem_custo"]
                 posicao.append(it)
-            return sorted(posicao, key=lambda x: x["ticker"]), ignorados
+            return sorted(posicao, key=lambda x: x["ticker"]), ignorados, _instituicao_tesouro(linhas[:i])
     return None
+
+
+def _instituicao_tesouro(linhas):
+    """'FULANO - 123 - BB BANCO DE INVESTIMENTO S/A (Conta ativa desde ...)' -> 'BB Banco de Investimento S/A'."""
+    for l in linhas:
+        for c in l:
+            m = re.search(r"-\s*\d+\s*-\s*(.+?)\s*(\(|$)", str(c or ""))
+            if m:
+                nome = m.group(1).strip()
+                return " ".join(p if p in ("S/A", "S.A.", "DTVM", "CTVM") or len(p) <= 3 and p.isupper() and p != "DE"
+                                else p.capitalize() if p not in ("DE", "DO", "DA", "E") else p.lower()
+                                for p in nome.split())[:60]
+    return None
+
+
+def _agente_no_nome(nome_arquivo):
+    """'ExtratoConsolidado_FULANO_2026-11_820_2026-11-11...' -> '820' (código da instituição de custódia)."""
+    m = re.search(r"_\d{4}-\d{2}_(\d+)_", nome_arquivo or "")
+    return m.group(1) if m else None
 
 
 def analisar_extrato(conteudo, nome_arquivo):
     abas = ler_abas(conteudo, nome_arquivo)
     tesouro = _tesouro_consolidado(abas)
     if tesouro is not None:
-        posicao, ignorados = tesouro
+        # Um extrato por instituição de custódia: a origem inclui a instituição, para que o mesmo título
+        # em duas instituições seja somado (e não tomado como arquivo repetido).
+        posicao, ignorados, instituicao = tesouro
+        agente = _agente_no_nome(nome_arquivo)
+        origem = f"Tesouro Direto · {instituicao or (f'instituição {agente}' if agente else 'extrato')}"
         return {"tipo_arquivo": "posicao", "aportes": [], "proventos": [], "ignorados": ignorados,
-                "posicao": posicao, "origem": "Tesouro Direto"}
+                "posicao": posicao, "origem": origem}
     if any(_cabecalho_posicao(linhas) for _, linhas in abas):
         posicao, ignorados = _posicao(abas)
         origem = identificar_origem(abas, "posicao", nome_arquivo)
