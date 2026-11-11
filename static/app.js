@@ -79,7 +79,6 @@ document.querySelectorAll("nav button").forEach(b => b.addEventListener("click",
 async function carregarCarteira() {
   let c;
   try { c = await api("/api/carteira"); } catch (e) { return toast(e.message, true); }
-  carregarConferencia();  // a conferência com os relatórios é refeita sempre que o patrimônio é aberto
   $("#cards-resumo").innerHTML = [
     ["Patrimônio", brl.format(c.total_valor)],
     ["Total investido (custo)", brl.format(c.total_custo)],
@@ -748,6 +747,7 @@ const SITUACAO_CONF = {
   so_sistema: ["Só no sistema", "neg"], so_relatorio: ["Só no relatório", "neg"],
 };
 let conferenciaAtual = null;
+let rolarParaConferencia = false;
 
 async function carregarConferencia() {
   const alvo = $("#resultado-conferencia");
@@ -755,6 +755,10 @@ async function carregarConferencia() {
   alvo.innerHTML = `<p class="dica">Conferindo…</p>`;
   try { conferenciaAtual = await api("/api/conferencia"); } catch (e) { alvo.innerHTML = ""; return toast(e.message, true); }
   renderConferencia();
+  if (rolarParaConferencia) {
+    rolarParaConferencia = false;
+    $("#painel-conferencia").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 const ignoradosConf = () => { try { return new Set(JSON.parse(localStorage.getItem(`conf-ignorados-${carteiraAtual}`) || "[]")); } catch (e) { return new Set(); } };
@@ -916,6 +920,7 @@ $("#form-zerar").addEventListener("submit", async ev => {
 
 async function carregarAportes() {
   carregarEventos();
+  carregarConferencia();
   carregarHistoricoImportacoes();
   try {
     const [aportes, ativos] = await Promise.all([api("/api/aportes"), api("/api/ativos")]);
@@ -1195,7 +1200,7 @@ function renderPreviaB3() {
   const nadaLido = !p.posicao.length && !p.aportes.length && !p.proventos.length;
   if (p.ignorados.length) html += `<details class="dica" style="margin-top:12px" ${nadaLido ? "open" : ""}><summary>${p.ignorados.length} linha(s) não importada(s)${nadaLido ? ": veja abaixo o que foi lido de cada linha" : ""}</summary>
     <div class="rolagem"><table><tr><th>Arquivo</th><th>Linha</th><th>Descrição</th><th>Motivo</th></tr>${p.ignorados.map(g => `<tr><td>${esc(g.arquivo || "")}</td><td>${g.linha}</td><td>${esc(g.descricao)}</td><td>${esc(g.motivo)}</td></tr>`).join("")}</table></div></details>`;
-  if (novos || anteriores.length || (conc && p.ajustes_ativos.length)) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar selecionados</button>
+  if (novos || anteriores.length || (conc && p.ajustes_ativos.length)) html += `<div class="acoes-import"><button type="button" class="btn" id="btn-confirmar-b3">Importar e conferir</button>
     <span class="dica">Confira as classes depois em “Ativos e metas” (tickers terminados em 11 podem ser FII, ETF ou unit).</span></div>`;
   alvo.innerHTML = html;
   document.querySelectorAll("#resultado-importar-b3 .acao-ajuste").forEach(atualizarLinhaAjuste);
@@ -1273,7 +1278,8 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
     ativos: $("#aplicar-ajustes")?.checked ? previaB3.ajustes_ativos : [],
     arquivos: previaB3.arquivos,
   };
-  if (!body.aportes.length && !body.proventos.length && !body.ativos.length && !ajustes.length && !body.remover_ajustes.length)
+  const temPosicao = (body.arquivos || []).some(a => a.posicao?.length);  // o relatório é guardado para a conferência
+  if (!body.aportes.length && !body.proventos.length && !body.ativos.length && !ajustes.length && !body.remover_ajustes.length && !temPosicao)
     return toast("Nenhum item selecionado.", true);
   try {
     const r = await api("/api/importar/b3/confirmar", { method: "POST", body });
@@ -1282,6 +1288,8 @@ $("#resultado-importar-b3").addEventListener("click", async ev => {
       `Cópia de segurança feita antes: ${r.copia_seguranca}.`);
     $("#resultado-importar-b3").innerHTML = "";
     $("#form-importar-b3").reset();
+    // confere o patrimônio com os relatórios logo após a importação e leva o usuário às sugestões
+    rolarParaConferencia = true;  // carregarAportes (abaixo) refaz a conferência
     arquivosImport = [];
     renderArquivosImport();
     carregarAportes();

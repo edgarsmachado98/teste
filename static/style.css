@@ -513,3 +513,4 @@ body:not(.admin) .so-admin { display: none !important; }
 button.link.conf-ignorar { color: var(--suave); }
 button.link.conf-ignorar:hover { color: var(--texto); }
 .conf-cartao .btn-pequeno { height: 32px; padding: 0 14px; }
+#painel-conferencia { scroll-margin-top: 96px; }
