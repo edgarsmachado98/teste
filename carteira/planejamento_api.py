@@ -57,10 +57,45 @@ def registrar(app, ctx):
             reais += plan.projetar_recorrencias(conn, cids, mes)
         return reais
 
-    def do_usuario(lid, cid):
-        row = conn.execute("SELECT * FROM fin_lancamentos WHERE id = ? AND carteira_id = ?", (lid, cid)).fetchone()
+    # ---------- titular / permissões ----------
+    # No planejamento, cada lançamento pertence a uma pessoa (a carteira dela). Quem pode editar
+    # várias carteiras (ex.: o administrador da família) lança para qualquer uma delas, inclusive
+    # na visão da família, escolhendo o titular.
+    def pessoas():
+        return [{"id": c["id"], "nome": c.get("dono_nome") or c["nome"], "carteira": c["nome"],
+                 "editar": bool(c["permissoes"]["editar"]), "minha": c.get("dono_id") == ctx.usuario_id()}
+                for c in ctx.carteiras_visiveis()]
+
+    def editaveis():
+        return [p for p in pessoas() if p["editar"]]
+
+    def cid_escrita(alvo=None):
+        """Carteira onde gravar: a do titular escolhido, a selecionada ou, na visão da família, a própria."""
+        ed = editaveis()
+        if alvo not in (None, ""):
+            try:
+                alvo = int(alvo)
+            except (TypeError, ValueError):
+                alvo = None
+            if alvo not in {p["id"] for p in ed}:
+                raise ctx.ErroAcesso("Você não pode lançar para essa pessoa.", 403)
+            return alvo
+        cabecalho = request.headers.get("X-Carteira") or request.args.get("carteira") or ""
+        if cabecalho and cabecalho != "todas":
+            return ctx.carteira_atual("editar")
+        if not ed:
+            raise ctx.ErroAcesso("Você tem acesso somente de visualização.", 403)
+        return next((p["id"] for p in ed if p["minha"]), ed[0]["id"])
+
+    def exigir_edicao(cid):
+        if cid not in {p["id"] for p in editaveis()}:
+            raise ctx.ErroAcesso("Lançamento não encontrado.", 404)
+
+    def do_usuario(lid, _cid=None):
+        row = conn.execute("SELECT * FROM fin_lancamentos WHERE id = ?", (lid,)).fetchone()
         if row is None:
             raise ctx.ErroAcesso("Lançamento não encontrado.", 404)
+        exigir_edicao(row["carteira_id"])
         return dict(row)
 
     def cartao_valido(cid, cartao_id):
@@ -105,7 +140,7 @@ def registrar(app, ctx):
         return {"tipo": tipo, "data": data, "descricao": descricao, "valor": round(valor, 2),
                 "valor_bruto": round(bruto, 2) if bruto is not None and tipo == "receita" else None,
                 "categoria_id": cat, "forma": forma, "pago": 1 if d.get("pago", True) else 0, "cartao_id": cartao,
-                "compartilhado": 1 if d.get("compartilhado") and tipo == "despesa" else 0}
+                "compartilhado": 1 if d.get("compartilhado") else 0}
 
     # ---------- categorias ----------
     @app.get("/api/plan/categorias")
@@ -115,7 +150,7 @@ def registrar(app, ctx):
 
     @app.post("/api/plan/categorias")
     def plan_criar_categoria():
-        ctx.carteira_atual("editar")
+        cid_escrita()
         d = request.get_json(silent=True) or {}
         tipo, grupo, nome = d.get("tipo"), (d.get("grupo") or "").strip()[:40], (d.get("nome") or "").strip()[:40]
         if tipo not in ("receita", "despesa") or not grupo or not nome:
@@ -143,12 +178,12 @@ def registrar(app, ctx):
         recs = db.rows(conn.execute(
             f"SELECT * FROM fin_recorrencias WHERE carteira_id IN ({marcas}) ORDER BY tipo DESC, descricao", cids))
         return jsonify({"mes": mes, "mes_atual": mes_atual(), "lancamentos": lancamentos_do_mes(cids, mes),
-                        "recorrencias": recs})
+                        "recorrencias": recs, "pessoas": pessoas()})
 
     @app.post("/api/plan/lancamentos")
     def plan_criar_lancamento():
-        cid = ctx.carteira_atual("editar")
         d = request.get_json(silent=True) or {}
+        cid = cid_escrita(d.get("carteira_id"))
         try:
             l = ler_lancamento(d)
         except ValueError as e:
@@ -198,9 +233,17 @@ def registrar(app, ctx):
 
     @app.put("/api/plan/lancamentos/<int:lid>")
     def plan_editar_lancamento(lid):
-        cid = ctx.carteira_atual("editar")
-        atual = do_usuario(lid, cid)
+        atual = do_usuario(lid)
+        cid = atual["carteira_id"]
         d = request.get_json(silent=True) or {}
+        novo_titular = d.get("carteira_id")
+        if novo_titular not in (None, "") and int(novo_titular) != cid:
+            cid = cid_escrita(novo_titular)  # troca o titular (verifica a permissão)
+            conn.execute("UPDATE fin_lancamentos SET carteira_id = ? WHERE id = ?", (cid, lid))
+            if d.get("atualizar_proximos") and atual["recorrencia_id"]:
+                conn.execute("UPDATE fin_recorrencias SET carteira_id = ? WHERE id = ?", (cid, atual["recorrencia_id"]))
+                conn.execute("UPDATE fin_lancamentos SET carteira_id = ? WHERE recorrencia_id = ? AND data > ?",
+                             (cid, atual["recorrencia_id"], atual["data"]))
         if set(d) <= {"pago"}:  # só marcar como pago/recebido
             conn.execute("UPDATE fin_lancamentos SET pago = ? WHERE id = ?", (1 if d.get("pago") else 0, lid))
             conn.commit()
@@ -228,8 +271,8 @@ def registrar(app, ctx):
 
     @app.delete("/api/plan/lancamentos/<int:lid>")
     def plan_excluir_lancamento(lid):
-        cid = ctx.carteira_atual("editar")
-        atual = do_usuario(lid, cid)
+        atual = do_usuario(lid)
+        cid = atual["carteira_id"]
         escopo = request.args.get("escopo") or "este"
         removidos = 1
         if escopo == "proximos" and atual["recorrencia_id"]:
@@ -251,10 +294,10 @@ def registrar(app, ctx):
     @app.delete("/api/plan/recorrencias/<int:rid>")
     def plan_encerrar_recorrencia(rid):
         """Encerra uma conta/receita recorrente: os meses já lançados ficam; os próximos deixam de existir."""
-        cid = ctx.carteira_atual("editar")
-        r = conn.execute("SELECT * FROM fin_recorrencias WHERE id = ? AND carteira_id = ?", (rid, cid)).fetchone()
+        r = conn.execute("SELECT * FROM fin_recorrencias WHERE id = ?", (rid,)).fetchone()
         if r is None:
             return erro("Recorrência não encontrada.", 404)
+        exigir_edicao(r["carteira_id"])
         fim = mes_atual()
         conn.execute("DELETE FROM fin_lancamentos WHERE recorrencia_id = ? AND substr(data, 1, 7) > ?", (rid, fim))
         if r["inicio"] > fim:
@@ -276,8 +319,8 @@ def registrar(app, ctx):
 
     @app.post("/api/plan/cartoes")
     def plan_criar_cartao():
-        cid = ctx.carteira_atual("editar")
         d = request.get_json(silent=True) or {}
+        cid = cid_escrita(d.get("carteira_id"))
         nome = (d.get("nome") or "").strip()[:40]
         try:
             dia = int(d.get("dia_vencimento") or 0) or None
@@ -294,8 +337,11 @@ def registrar(app, ctx):
     @app.delete("/api/plan/cartoes/<int:cartao_id>")
     def plan_excluir_cartao(cartao_id):
         """Desativa o cartão (os lançamentos continuam, sem perder o histórico)."""
-        cid = ctx.carteira_atual("editar")
-        conn.execute("UPDATE fin_cartoes SET ativo = 0 WHERE id = ? AND carteira_id = ?", (cartao_id, cid))
+        c = conn.execute("SELECT carteira_id FROM fin_cartoes WHERE id = ?", (cartao_id,)).fetchone()
+        if c is None:
+            return erro("Cartão não encontrado.", 404)
+        exigir_edicao(c["carteira_id"])
+        conn.execute("UPDATE fin_cartoes SET ativo = 0 WHERE id = ?", (cartao_id,))
         conn.commit()
         return jsonify({"ok": True})
 
@@ -307,13 +353,22 @@ def registrar(app, ctx):
     def categorias_por_nome():
         return {(c["tipo"], c["nome"]): c["id"] for c in categorias().values() if c["ativa"]}
 
+    def carteira_do_cartao(cartao_id):
+        try:
+            c = conn.execute("SELECT carteira_id FROM fin_cartoes WHERE id = ? AND ativo = 1",
+                             (int(cartao_id or 0),)).fetchone()
+        except ValueError:
+            c = None
+        if c is None or c["carteira_id"] not in {p["id"] for p in editaveis()}:
+            return None, None
+        return c["carteira_id"], int(cartao_id)
+
     @app.post("/api/plan/fatura/previa")
     def plan_fatura_previa():
-        cid = ctx.carteira_atual("editar")
         arq = request.files.get("arquivo")
         if not arq or not arq.filename:
             return erro("Selecione o arquivo da fatura.")
-        cartao_id = cartao_valido(cid, int(request.form.get("cartao_id") or 0))
+        cid, cartao_id = carteira_do_cartao(request.form.get("cartao_id"))
         if not cartao_id:
             return erro("Escolha o cartão desta fatura.")
         try:
@@ -345,9 +400,8 @@ def registrar(app, ctx):
 
     @app.post("/api/plan/fatura/confirmar")
     def plan_fatura_confirmar():
-        cid = ctx.carteira_atual("editar")
         d = request.get_json(silent=True) or {}
-        cartao_id = cartao_valido(cid, int(d.get("cartao_id") or 0))
+        cid, cartao_id = carteira_do_cartao(d.get("cartao_id"))
         if not cartao_id:
             return erro("Escolha o cartão desta fatura.")
         vencimento = None  # só vale quando o usuário escolhe lançar na data de vencimento
@@ -481,7 +535,9 @@ def registrar(app, ctx):
         inv = plan.investido_por_mes(ctx.listar_aportes(cids)) if cids else {}
         for c in carteiras:
             lancs = lancamentos_do_mes([c["id"]], mes)
-            renda = sum(l["valor"] for l in lancs if l["tipo"] == "receita")
+            renda = sum(l["valor"] for l in lancs if l["tipo"] == "receita" and not l.get("compartilhado"))
+            totais["receitas_grupo"] = totais.get("receitas_grupo", 0.0) + sum(
+                l["valor"] for l in lancs if l["tipo"] == "receita" and l.get("compartilhado"))
             desp = sum(l["valor"] for l in lancs if l["tipo"] == "despesa")
             comum = sum(l["valor"] for l in lancs if l["tipo"] == "despesa" and l.get("compartilhado"))
             pessoas.append({"id": c["id"], "nome": c.get("dono_nome") or c["nome"], "carteira": c["nome"],
@@ -491,8 +547,9 @@ def registrar(app, ctx):
             totais["compartilhadas"] += comum
         acerto = plan.acerto_familia(pessoas, modo, pesos)
         investido, proventos = inv.get(mes, 0.0), prov.get(mes, 0.0)
+        totais.setdefault("receitas_grupo", 0.0)
         totais.update({"investido": investido, "proventos": proventos,
-                       "sobra": totais["receitas"] + proventos - totais["despesas"] - investido})
+                       "sobra": totais["receitas"] + totais["receitas_grupo"] + proventos - totais["despesas"] - investido})
         return jsonify({"mes": mes, "modo": modo, "modos": plan.MODOS_FAMILIA, "pesos": pesos, "totais": totais,
                         **acerto, "pode_configurar": bool(ctx.eh_admin())})
 

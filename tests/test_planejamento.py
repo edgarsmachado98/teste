@@ -123,9 +123,17 @@ def test_isolamento_e_familia(novo_app, com_modulo):
     eli = cliente_logado(app, "eli@x.com", "senha-eli-123")
     r = eli.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": "2026-11-10", "valor": 50})
     lid = r.get_json()["id"]
-    assert edgar.delete(f"/api/plan/lancamentos/{lid}").status_code == 404  # outra carteira
+    meu = edgar.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": "2026-11-10", "valor": 70}).get_json()["id"]
+    assert eli.delete(f"/api/plan/lancamentos/{meu}").status_code == 404  # carteira que ela não edita
+    # o administrador gerencia a carteira dela: pode lançar como titular "Eliandra" na visão da família
+    eid = [x for x in edgar.get("/api/eu").get_json()["carteiras"] if x["nome"] == "Carteira Eliandra"][0]["id"]
     edgar.environ_base["HTTP_X_CARTEIRA"] = "todas"
-    edgar.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": "2026-11-10", "valor": 1})
+    r2 = edgar.post("/api/plan/lancamentos", json={"tipo": "receita", "data": "2026-11-05", "valor": 10, "carteira_id": eid})
+    assert r2.status_code == 201
+    assert eli.post("/api/plan/lancamentos", json={"tipo": "receita", "data": "2026-11-05", "valor": 10,
+                                                   "carteira_id": 1}).status_code == 403  # não edita a do Edgar
+    edgar.delete(f"/api/plan/lancamentos/{meu}")
+    edgar.delete(f"/api/plan/lancamentos/{r2.get_json()['id']}")
     assert edgar.get("/api/plan/resumo?mes=2026-11").get_json()["despesas"] == 50  # visão da família soma
 
 
@@ -406,3 +414,20 @@ def test_modulos_liberados_na_fase_de_testes(monkeypatch):
     monkeypatch.setattr(licenca, "LIBERADO_EM_TESTE", False)
     monkeypatch.delenv("CARTEIRA_MODULOS", raising=False)
     assert licenca.modulos_ativos() == set()  # depois dos testes: só com a licença
+
+
+def test_receita_do_grupo_familiar(novo_app, com_modulo):
+    app = novo_app(fonte)
+    edgar = cliente_logado(app)
+    edgar.post("/api/usuarios", json={"nome": "Eliandra", "email": "eli@x.com", "senha": "senha-eli-123",
+                                      "criar_carteira": True, "nome_carteira": "Carteira Eliandra"})
+    mes = dt.date.today().isoformat()[:7]
+    edgar.post("/api/plan/lancamentos", json={"tipo": "receita", "data": f"{mes}-05", "valor": 6000})
+    edgar.post("/api/plan/lancamentos", json={"tipo": "receita", "data": f"{mes}-05", "valor": 1800, "compartilhado": True})
+    f = edgar.get(f"/api/plan/familia?mes={mes}").get_json()
+    edg = next(p for p in f["pessoas"] if p["nome"] == "Edgar Machado")
+    assert edg["renda"] == 6000 and f["totais"]["receitas_grupo"] == 1800  # não pesa na divisão proporcional
+    assert f["totais"]["sobra"] == 7800
+    lanc = edgar.get(f"/api/plan/lancamentos?mes={mes}").get_json()
+    assert {p["nome"] for p in lanc["pessoas"]} == {"Edgar Machado", "Eliandra"}
+    assert all(p["editar"] for p in lanc["pessoas"])  # o administrador lança para os dois

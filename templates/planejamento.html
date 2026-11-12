@@ -6,7 +6,7 @@
         <strong class="rotulo-mes"></strong>
         <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       </div>
-      <button type="button" class="btn btn-pequeno requer-edicao" data-ir-aba="plan-lancamentos">Novo lançamento</button>
+      <button type="button" class="btn btn-pequeno plan-editavel" data-ir-aba="plan-lancamentos">Novo lançamento</button>
     </div>
     <div id="plan-boas-vindas" class="painel plan-boas-vindas oculto">
       <h3>Comece pelo básico</h3>
@@ -16,7 +16,7 @@
         <li>No dia a dia, registre os <strong>gastos</strong>. Compras parceladas entram de uma vez, com todas as parcelas.</li>
       </ol>
       <p class="dica">Proventos e aportes da carteira já entram aqui automaticamente.</p>
-      <button type="button" class="btn requer-edicao" data-ir-aba="plan-lancamentos">Fazer o primeiro lançamento</button>
+      <button type="button" class="btn plan-editavel" data-ir-aba="plan-lancamentos">Fazer o primeiro lançamento</button>
     </div>
     <div class="cards" id="plan-cards"></div>
     <div class="grade2">
@@ -47,36 +47,80 @@
   </section>
 
   <section id="tab-plan-lancamentos" class="tab">
-    <div class="painel requer-edicao" id="painel-plan-form">
-      <div class="cabecalho-painel">
+    <div class="painel plan-editavel lanc-form" id="painel-plan-form">
+      <div class="lanc-cab">
         <h3 id="plan-form-titulo">Novo lançamento</h3>
-        <div class="alternador" role="tablist" aria-label="Tipo de lançamento">
-          <button type="button" class="ativo" data-plan-tipo="despesa">Despesa</button>
-          <button type="button" data-plan-tipo="receita">Receita</button>
+        <div class="lanc-tipo" role="tablist" aria-label="Tipo de lançamento">
+          <button type="button" class="ativo" data-plan-tipo="despesa"><span aria-hidden="true">−</span> Despesa</button>
+          <button type="button" data-plan-tipo="receita"><span aria-hidden="true">+</span> Receita</button>
         </div>
       </div>
-      <form id="form-plan" class="form-linha">
+      <form id="form-plan" autocomplete="off">
         <input type="hidden" name="id">
-        <label>Data <input type="date" name="data" required></label>
-        <label class="largo">Descrição <input name="descricao" maxlength="120" placeholder="ex.: Supermercado"></label>
-        <label>Categoria <select name="categoria_id" required></select></label>
-        <label><span data-rotulo-valor>Valor (R$)</span> <input type="number" name="valor" step="0.01" min="0" required inputmode="decimal"></label>
-        <label class="so-receita oculto">Valor bruto (R$) <input type="number" name="valor_bruto" step="0.01" min="0" inputmode="decimal" placeholder="antes dos descontos"></label>
-        <label class="so-despesa">Pagamento <select name="forma"><option value="">—</option></select></label>
-        <label class="campo-cartao oculto">Cartão <select name="cartao_id"></select></label>
-        <label class="so-novo">Repetir <select name="repetir">
-          <option value="nao">Não repete</option><option value="mensal">Todo mês</option>
-          <option value="parcelado" class="so-despesa-opt">Parcelado</option></select></label>
-        <label class="campo-parcelas oculto">Parcelas <input type="number" name="parcelas" min="2" max="120" value="2"></label>
-        <label class="campo-fim oculto">Até (opcional) <input type="month" name="fim"></label>
-        <label class="check"><input type="checkbox" name="pago" checked> <span data-rotulo-pago>Já pago</span></label>
-        <label class="check so-despesa" title="Entra na divisão das contas do casal (tela Família)"><input type="checkbox" name="compartilhado"> Conta da família</label>
-        <label class="check campo-proximos oculto"><input type="checkbox" name="atualizar_proximos"> Aplicar aos próximos meses</label>
-        <button type="submit" id="btn-plan-salvar">Adicionar</button>
-        <button type="button" class="secundario oculto" id="btn-plan-cancelar">Cancelar edição</button>
+        <div class="lanc-principal">
+          <label class="lanc-valor"><span data-rotulo-valor>Quanto?</span>
+            <span class="campo-moeda"><em>R$</em><input type="number" name="valor" step="0.01" min="0" required inputmode="decimal" placeholder="0,00"></span></label>
+          <label class="lanc-desc">Descrição <input name="descricao" maxlength="120" placeholder="ex.: Supermercado"></label>
+          <div class="lanc-data">
+            <label>Quando? <input type="date" name="data" required></label>
+            <div class="pilulas mini"><button type="button" data-data="0">Hoje</button><button type="button" data-data="-1">Ontem</button></div>
+          </div>
+        </div>
+
+        <div class="lanc-bloco">
+          <span class="lanc-rotulo">Categoria</span>
+          <div class="pilulas" id="cat-frequentes"></div>
+          <select name="categoria_id" required aria-label="Todas as categorias"></select>
+          <small class="lanc-ajuda">Não achou? <button type="button" class="link acao" id="btn-abrir-categoria">criar categoria</button></small>
+        </div>
+
+        <div class="lanc-bloco" id="bloco-titular">
+          <span class="lanc-rotulo" data-rotulo-titular>De quem é?</span>
+          <div class="pilulas" id="pilulas-titular"></div>
+          <div class="so-despesa lanc-sub">
+            <span class="lanc-rotulo">A conta é</span>
+            <div class="pilulas">
+              <label><input type="radio" name="conta" value="pessoal" checked><span>Pessoal</span></label>
+              <label><input type="radio" name="conta" value="familia"><span>Da família <small>(dividida entre o casal)</small></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="lanc-bloco so-despesa">
+          <span class="lanc-rotulo">Como pagou?</span>
+          <div class="pilulas" id="pilulas-forma"></div>
+          <label class="campo-cartao oculto lanc-sub">Qual cartão? <select name="cartao_id"></select></label>
+        </div>
+
+        <div class="lanc-bloco so-receita oculto">
+          <button type="button" class="link acao" id="btn-mostrar-bruto">+ Informar o valor bruto (antes dos descontos)</button>
+          <label class="campo-bruto oculto lanc-sub">Valor bruto (R$) <input type="number" name="valor_bruto" step="0.01" min="0" inputmode="decimal" placeholder="ex.: salário no contracheque"></label>
+        </div>
+
+        <div class="lanc-bloco so-novo">
+          <span class="lanc-rotulo">Repete?</span>
+          <div class="pilulas">
+            <label><input type="radio" name="repetir" value="nao" checked><span>Só esta vez</span></label>
+            <label><input type="radio" name="repetir" value="mensal"><span>Todo mês</span></label>
+            <label class="so-despesa"><input type="radio" name="repetir" value="parcelado"><span>Parcelado</span></label>
+          </div>
+          <div class="lanc-sub form-linha">
+            <label class="campo-parcelas oculto">Em quantas parcelas? <input type="number" name="parcelas" min="2" max="120" value="2"></label>
+            <label class="campo-fim oculto">Até quando? (opcional) <input type="month" name="fim"></label>
+          </div>
+        </div>
+
+        <div class="lanc-rodape">
+          <label class="interruptor"><input type="checkbox" name="pago" checked><span></span><b data-rotulo-pago>Já pago</b></label>
+          <label class="check campo-proximos oculto"><input type="checkbox" name="atualizar_proximos"> Aplicar também aos próximos meses</label>
+          <p class="lanc-resumo" id="lanc-resumo"></p>
+          <div class="lanc-botoes">
+            <button type="button" class="secundario oculto" id="btn-plan-cancelar">Cancelar</button>
+            <button type="submit" class="btn" id="btn-plan-salvar">Salvar despesa</button>
+          </div>
+        </div>
       </form>
-      <p class="dica" id="plan-dica-form"></p>
-      <details class="dica">
+      <details class="dica" id="detalhe-categoria">
         <summary>Criar categoria</summary>
         <form id="form-plan-categoria" class="form-linha" style="margin-top:8px">
           <label>Tipo <select name="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>
@@ -88,7 +132,7 @@
       </details>
     </div>
 
-    <div class="painel requer-edicao" id="painel-fatura">
+    <div class="painel plan-editavel" id="painel-fatura">
       <div class="cabecalho-painel">
         <div><h3>Importar fatura do cartão</h3>
           <p class="dica" style="margin:0">Envie a fatura em <strong>PDF</strong> (a que chega por e-mail ou é baixada no app),

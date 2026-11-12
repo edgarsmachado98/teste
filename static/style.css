@@ -716,3 +716,62 @@ button.link.conf-ignorar:hover { color: var(--texto); }
 .tabela-familia td small.var-sub { font-weight: 400; }
 #tab-plan-familia .grade2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 @media (max-width: 900px) { #tab-plan-familia .grade2 { grid-template-columns: 1fr; } }
+
+/* ---------- planejamento: formulário de lançamento */
+body.plan-sem-edicao .plan-editavel { display: none !important; }
+.lanc-form { --cor-tipo: var(--neg); }
+.lanc-form.eh-receita { --cor-tipo: var(--pos); }
+.lanc-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.lanc-cab h3 { margin: 0; }
+.lanc-tipo { display: inline-flex; border: 1px solid var(--borda); border-radius: 999px; padding: 3px; background: var(--painel-2); }
+.lanc-tipo button { border: 0; background: none; padding: 7px 18px; border-radius: 999px; font-weight: 600; color: var(--suave); cursor: pointer; }
+.lanc-tipo button span { font-weight: 700; margin-right: 2px; }
+.lanc-tipo button.ativo[data-plan-tipo="despesa"] { background: var(--neg); color: #fff; }
+.lanc-tipo button.ativo[data-plan-tipo="receita"] { background: var(--pos); color: #fff; }
+#form-plan label { display: flex; flex-direction: column; gap: 6px; font-size: .78rem; color: var(--suave); font-weight: 500; }
+.lanc-principal { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(200px, 2fr) minmax(170px, 1fr); gap: 14px; align-items: start; }
+.lanc-valor span[data-rotulo-valor] { font-weight: 600; color: var(--texto-2); }
+.campo-moeda { display: flex; align-items: center; border: 1.5px solid var(--borda-forte); border-radius: var(--raio-p); background: var(--painel);
+  padding-left: 12px; transition: border-color .15s; }
+.campo-moeda:focus-within { border-color: var(--cor-tipo); }
+.campo-moeda em { font-style: normal; font-weight: 600; color: var(--cor-tipo); }
+.campo-moeda input { border: 0 !important; box-shadow: none !important; background: transparent; font-size: 1.35rem; font-weight: 650;
+  height: 48px; width: 100%; font-variant-numeric: tabular-nums; color: var(--texto); }
+.lanc-desc input, .lanc-data input { height: 48px; }
+.lanc-data { display: flex; flex-direction: column; gap: 6px; }
+.lanc-bloco { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--borda); display: flex; flex-direction: column; gap: 8px; }
+.lanc-bloco select { max-width: 340px; }
+.lanc-rotulo { font-size: .78rem; font-weight: 600; color: var(--texto-2); }
+.lanc-sub { margin-top: 4px; }
+.lanc-ajuda { font-size: .76rem; color: var(--suave); }
+#bloco-titular.so-uma-pessoa > .lanc-rotulo, #bloco-titular.so-uma-pessoa > #pilulas-titular { display: none; }
+#bloco-titular.so-uma-pessoa .lanc-sub { margin-top: 0; }
+.pilulas { display: flex; flex-wrap: wrap; gap: 6px; }
+.pilulas > button, .pilulas > label > span { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--borda-forte);
+  background: var(--painel); color: var(--texto); border-radius: 999px; padding: 6px 13px; font-size: .84rem; font-weight: 500; cursor: pointer;
+  transition: background .12s, border-color .12s; }
+.pilulas > button:hover, .pilulas > label > span:hover { background: var(--painel-2); }
+.pilulas > label { flex-direction: row !important; gap: 0 !important; }
+.pilulas > label > input { position: absolute; opacity: 0; pointer-events: none; }
+.pilulas > button.ativo, .pilulas > label > input:checked + span { border-color: var(--primaria); background: var(--primaria-suave); color: var(--primaria); font-weight: 600; }
+.pilulas > label > input:focus-visible + span { outline: 2px solid var(--primaria); outline-offset: 2px; }
+.pilulas small { font-weight: 400; color: var(--suave); }
+.pilulas.mini > button { padding: 3px 10px; font-size: .76rem; }
+.lanc-rodape { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--borda); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lanc-resumo { flex: 1 1 260px; margin: 0; font-size: .88rem; color: var(--texto-2); }
+.lanc-botoes { display: flex; gap: 8px; margin-left: auto; }
+.lanc-botoes .btn { min-width: 150px; height: 42px; background: var(--cor-tipo); border-color: var(--cor-tipo); }
+.interruptor { flex-direction: row !important; align-items: center; gap: 8px !important; cursor: pointer; }
+.interruptor input { position: absolute; opacity: 0; }
+.interruptor span { width: 36px; height: 20px; border-radius: 999px; background: var(--borda-forte); position: relative; transition: background .15s; flex: none; }
+.interruptor span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.interruptor input:checked + span { background: var(--pos); }
+.interruptor input:checked + span::after { transform: translateX(16px); }
+.interruptor b { font-weight: 600; color: var(--texto); font-size: .86rem; }
+@media (max-width: 760px) {
+  .lanc-principal { grid-template-columns: 1fr; }
+  .lanc-botoes { width: 100%; }
+  .lanc-botoes .btn { flex: 1; }
+}
+.lanc-bloco > button.link, .lanc-ajuda { align-self: flex-start; }

@@ -4,6 +4,7 @@
   const hojeLocal = () => new Date().toLocaleDateString("sv-SE");
   let mesPlan = hojeLocal().slice(0, 7);
   let categoriasPlan = [], formasPlan = {}, dadosLanc = null, tipoForm = "despesa", cartoesPlan = [], previaFatura = null;
+  let pessoasPlan = [];  // titulares possíveis (carteiras visíveis; "editar" = pode lançar para ela)
 
   const somarMes = (m, n) => {
     const d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + n, 1);
@@ -40,8 +41,9 @@
     const r = await api("/api/plan/categorias");
     categoriasPlan = r.categorias;
     formasPlan = r.formas;
-    $("#form-plan").forma.innerHTML = `<option value="">—</option>` +
-      Object.entries(formasPlan).map(([v, n]) => `<option value="${v}">${esc(n)}</option>`).join("");
+    const ordem = ["pix", "debito", "credito", "dinheiro", "boleto", "debito_automatico", "transferencia"];
+    $("#pilulas-forma").innerHTML = ordem.filter(v => formasPlan[v]).map(v =>
+      `<label><input type="radio" name="forma" value="${v}"><span>${esc(formasPlan[v])}</span></label>`).join("");
     preencherCategorias();
   }
 
@@ -135,48 +137,128 @@
   });
 
   // ---------------- Receitas e despesas ----------------
+  const FREQUENTES_PADRAO = {
+    despesa: ["Mercado", "Restaurante", "Delivery", "Combustível", "Farmácia", "Streaming / assinaturas"],
+    receita: ["Salário", "Freelance / autônomo", "13º salário", "Aluguel recebido", "Estornos e reembolsos"],
+  };
+
+  function categoriasFrequentes() {
+    // as mais usadas nos lançamentos do mês; completa com sugestões comuns
+    const cont = {};
+    (dadosLanc?.lancamentos || []).filter(l => l.tipo === tipoForm && l.categoria_id)
+      .forEach(l => (cont[l.categoria_id] = (cont[l.categoria_id] || 0) + 1));
+    const usadas = Object.entries(cont).sort((a, b) => b[1] - a[1]).map(([id]) => +id);
+    const padrao = FREQUENTES_PADRAO[tipoForm].map(n => categoriasPlan.find(c => c.tipo === tipoForm && c.nome === n)?.id).filter(Boolean);
+    return [...new Set([...usadas, ...padrao])].slice(0, 6).map(catPorId).filter(Boolean);
+  }
+
+  function renderPilulasCategoria() {
+    const sel = +$("#form-plan").categoria_id.value || null, caixa = $("#cat-frequentes");
+    const cats = categoriasFrequentes(), ids = cats.map(c => c.id).join(",");
+    // mesma lista: só atualiza a marcação (recriar os botões no meio de um clique faria o clique se perder)
+    if (caixa.dataset.ids !== ids) {
+      caixa.dataset.ids = ids;
+      caixa.innerHTML = cats.map(c => `<button type="button" data-cat="${c.id}">${esc(c.nome)}</button>`).join("");
+    }
+    caixa.querySelectorAll("[data-cat]").forEach(b => b.classList.toggle("ativo", +b.dataset.cat === sel));
+  }
+
+  function renderTitulares(selecionado, familia) {
+    const ed = pessoasPlan.filter(p => p.editar);
+    const receita = tipoForm === "receita";
+    const padrao = selecionado || (ed.find(p => p.id === carteiraAtual) || ed.find(p => p.minha) || ed[0])?.id;
+    let html = ed.map(p => `<label><input type="radio" name="titular" value="${p.id}" ${p.id === padrao && !(receita && familia) ? "checked" : ""}>
+      <span>${esc(p.nome)}</span></label>`).join("");
+    if (receita && pessoasPlan.length > 1) html += `<label><input type="radio" name="titular" value="grupo" ${familia ? "checked" : ""}>
+      <span>Grupo familiar</span></label>`;
+    $("#pilulas-titular").innerHTML = html;
+    // com uma pessoa só e sem família, não há o que escolher
+    $("#bloco-titular").classList.toggle("so-uma-pessoa", ed.length < 2 && pessoasPlan.length < 2);
+  }
+
+  function valorRadio(nome) {
+    return $("#form-plan").querySelector(`input[name="${nome}"]:checked`)?.value || "";
+  }
+
   function ajustarForm() {
     const f = $("#form-plan"), receita = tipoForm === "receita", editando = !!f.id.value;
     document.querySelectorAll("[data-plan-tipo]").forEach(b => b.classList.toggle("ativo", b.dataset.planTipo === tipoForm));
+    $("#painel-plan-form").classList.toggle("eh-receita", receita);
     document.querySelectorAll("#form-plan .so-receita").forEach(e => e.classList.toggle("oculto", !receita));
     document.querySelectorAll("#form-plan .so-despesa").forEach(e => e.classList.toggle("oculto", receita));
     document.querySelectorAll("#form-plan .so-novo").forEach(e => e.classList.toggle("oculto", editando));
-    f.querySelector(".so-despesa-opt").disabled = receita;
-    if (receita && f.repetir.value === "parcelado") f.repetir.value = "nao";
-    f.querySelector(".campo-cartao").classList.toggle("oculto", receita || f.forma.value !== "credito" || !cartoesPlan.length);
-    const rep = editando ? "nao" : f.repetir.value;
+    if (receita && valorRadio("repetir") === "parcelado") f.querySelector('input[name="repetir"][value="nao"]').checked = true;
+    const forma = valorRadio("forma"), rep = editando ? "nao" : valorRadio("repetir");
+    f.querySelector(".campo-cartao").classList.toggle("oculto", receita || forma !== "credito" || !cartoesPlan.length);
     f.querySelector(".campo-parcelas").classList.toggle("oculto", rep !== "parcelado");
     f.querySelector(".campo-fim").classList.toggle("oculto", rep !== "mensal");
-    f.querySelector("[data-rotulo-valor]").textContent = rep === "parcelado" ? "Valor total (R$)" : receita ? "Valor líquido (R$)" : "Valor (R$)";
+    f.querySelector(".campo-bruto").classList.toggle("oculto", !receita || (!f.valor_bruto.value && !f.dataset.bruto));
+    $("#btn-mostrar-bruto").classList.toggle("oculto", !receita || !!f.valor_bruto.value || !!f.dataset.bruto);
+    f.querySelector("[data-rotulo-valor]").textContent = rep === "parcelado" ? "Valor total da compra" : receita ? "Quanto caiu na conta?" : "Quanto?";
     f.querySelector("[data-rotulo-pago]").textContent = receita ? "Já recebido" : "Já pago";
+    f.querySelector("[data-rotulo-titular]").textContent = receita ? "De quem é a receita?" : "Quem pagou?";
     f.descricao.placeholder = receita ? "ex.: Salário da empresa X" : "ex.: Supermercado";
-    const dicas = {
-      mensal: "Será lançado automaticamente todo mês, no mesmo dia. Nos meses seguintes ele aparece como pendente até você marcar.",
-      parcelado: "O valor total é dividido nas parcelas, uma por mês a partir desta data.",
-      nao: receita ? "Informe o valor que cai na conta (líquido). O bruto é opcional e mostra quanto foi descontado." : "",
-    };
-    $("#plan-dica-form").textContent = editando ? "" : dicas[rep];
+    $("#btn-plan-salvar").textContent = editando ? "Salvar alterações" : receita ? "Salvar receita" : "Salvar despesa";
+    renderPilulasCategoria();
+    atualizarResumoForm();
+  }
+
+  function atualizarResumoForm() {
+    const f = $("#form-plan"), receita = tipoForm === "receita";
+    const valor = +f.valor.value || 0, cat = catPorId(+f.categoria_id.value);
+    const tit = valorRadio("titular"), pessoa = pessoasPlan.find(p => String(p.id) === tit);
+    const rep = f.id.value ? "nao" : valorRadio("repetir"), n = +f.parcelas.value || 2;
+    const data = f.data.value ? fmtData(f.data.value) : "";
+    if (!valor) { $("#lanc-resumo").textContent = ""; return; }
+    let txt = receita
+      ? `Receita de ${brl.format(valor)}${cat ? ` (${cat.nome})` : ""} ${tit === "grupo" ? "do grupo familiar" : pessoa ? `de ${pessoa.nome}` : ""}`
+      : `Despesa de ${brl.format(valor)}${cat ? ` em ${cat.nome}` : ""}${pessoa ? `, paga por ${pessoa.nome}` : ""}${valorRadio("conta") === "familia" ? ", conta da família" : ""}`;
+    txt += rep === "mensal" ? `, todo mês a partir de ${data}` : rep === "parcelado" ? `, em ${n}x de ${brl.format(valor / n)} a partir de ${data}` : data ? `, em ${data}` : "";
+    $("#lanc-resumo").textContent = txt + ".";
   }
 
   document.querySelectorAll("[data-plan-tipo]").forEach(b => b.addEventListener("click", () => {
     if ($("#form-plan").id.value) return;  // na edição o tipo não muda
     tipoForm = b.dataset.planTipo;
     preencherCategorias();
+    renderTitulares();
     ajustarForm();
   }));
-  $("#form-plan").repetir.addEventListener("change", ajustarForm);
-  $("#form-plan").forma.addEventListener("change", ajustarForm);
+  $("#form-plan").addEventListener("change", ev => {
+    if (ev.target.name === "categoria_id") renderPilulasCategoria();
+    ajustarForm();
+  });
+  $("#form-plan").addEventListener("input", atualizarResumoForm);
+  $("#form-plan").addEventListener("click", ev => {
+    const c = ev.target.closest("[data-cat]"), dd = ev.target.closest("[data-data]");
+    if (c) { $("#form-plan").categoria_id.value = c.dataset.cat; ajustarForm(); }
+    if (dd) {
+      const d = new Date(); d.setDate(d.getDate() + +dd.dataset.data);
+      $("#form-plan").data.value = d.toLocaleDateString("sv-SE");
+      atualizarResumoForm();
+    }
+  });
+  $("#btn-mostrar-bruto").addEventListener("click", () => {
+    $("#form-plan").dataset.bruto = "1"; ajustarForm(); $("#form-plan").valor_bruto.focus();
+  });
+  $("#btn-abrir-categoria").addEventListener("click", () => {
+    const det = $("#detalhe-categoria"); det.open = true;
+    det.querySelector("select[name=tipo]").value = tipoForm;
+    det.querySelector("input[name=grupo]").focus();
+  });
 
   function limparForm() {
     const f = $("#form-plan");
     f.reset();
     f.id.value = "";
+    delete f.dataset.bruto;
+    delete f.dataset.carteiraOriginal;
     f.data.value = mesPlan === hojeLocal().slice(0, 7) ? hojeLocal() : `${mesPlan}-01`;
     $("#plan-form-titulo").textContent = "Novo lançamento";
-    $("#btn-plan-salvar").textContent = "Adicionar";
     $("#btn-plan-cancelar").classList.add("oculto");
     f.querySelector(".campo-proximos").classList.add("oculto");
     preencherCategorias();
+    renderTitulares();
     ajustarForm();
   }
   $("#btn-plan-cancelar").addEventListener("click", limparForm);
@@ -184,19 +266,26 @@
   $("#form-plan").addEventListener("submit", async ev => {
     ev.preventDefault();
     const f = ev.target, d = formDados(f), id = d.id;
+    const tit = valorRadio("titular"), grupo = tit === "grupo";
+    const titular = grupo ? (f.dataset.carteiraOriginal || (pessoasPlan.find(p => p.editar && p.id === carteiraAtual) ||
+      pessoasPlan.find(p => p.editar && p.minha) || pessoasPlan.find(p => p.editar))?.id) : tit;
+    const forma = tipoForm === "despesa" ? valorRadio("forma") : "";
     const body = { tipo: tipoForm, data: d.data, descricao: d.descricao, categoria_id: d.categoria_id, valor: d.valor,
-      valor_bruto: tipoForm === "receita" ? d.valor_bruto : "", forma: tipoForm === "despesa" ? d.forma : "", pago: d.pago,
-      repetir: d.repetir, parcelas: d.parcelas, fim: d.fim, atualizar_proximos: d.atualizar_proximos,
-      cartao_id: tipoForm === "despesa" && d.forma === "credito" ? d.cartao_id : "",
-      compartilhado: tipoForm === "despesa" && d.compartilhado };
+      valor_bruto: tipoForm === "receita" ? d.valor_bruto : "", forma, pago: d.pago,
+      repetir: valorRadio("repetir"), parcelas: d.parcelas, fim: d.fim, atualizar_proximos: d.atualizar_proximos,
+      cartao_id: forma === "credito" ? d.cartao_id : "", carteira_id: titular || "",
+      compartilhado: tipoForm === "receita" ? grupo : valorRadio("conta") === "familia" };
     try {
       if (id) await api(`/api/plan/lancamentos/${id}`, { method: "PUT", body });
       else await api("/api/plan/lancamentos", { method: "POST", body });
-      toast(id ? "Lançamento atualizado." : d.repetir === "mensal" ? "Lançado para todo mês." :
-        d.repetir === "parcelado" ? `Compra lançada em ${d.parcelas} parcelas.` : "Lançamento adicionado.");
+      const p = pessoasPlan.find(x => String(x.id) === String(titular));
+      const fora = carteiraAtual !== FAMILIA && titular && +titular !== carteiraAtual;
+      toast((id ? "Lançamento atualizado" : body.repetir === "mensal" ? "Lançado para todo mês" :
+        body.repetir === "parcelado" ? `Compra lançada em ${d.parcelas} parcelas` : "Lançamento salvo") +
+        (fora && p ? `, na carteira de ${p.nome} (selecione “Visão da família” para ver tudo junto).` : "."));
       const manterData = f.data.value;
       limparForm();
-      if (!id) f.data.value = manterData;
+      if (!id) { f.data.value = manterData; atualizarResumoForm(); }
       carregarLancamentos();
     } catch (e) { toast(e.message, true); }
   });
@@ -219,6 +308,8 @@
       await garantirCategorias();
       [dadosLanc] = await Promise.all([api(`/api/plan/lancamentos?mes=${mesPlan}`), carregarCartoes()]);
     } catch (e) { return toast(e.message, true); }
+    pessoasPlan = dadosLanc.pessoas || [];
+    document.body.classList.toggle("plan-sem-edicao", !pessoasPlan.some(p => p.editar));
     if (!$("#form-plan").id.value) limparForm();
     renderLancamentos();
   }
@@ -232,21 +323,26 @@
       <span>Despesas <strong>${brl.format(desp)}</strong></span>
       <span>Saldo <strong class="${rec - desp >= 0 ? "pos" : "neg"}">${brl.format(rec - desp)}</strong></span>
       <small class="dica">Proventos e aportes da carteira aparecem no Resumo do mês.</small>`;
-    $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th><th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
+    const varias = new Set(todos.map(l => l.carteira_id)).size > 1 || carteiraAtual === FAMILIA;
+    const nomePessoa = cid => pessoasPlan.find(p => p.id === cid)?.nome || "";
+    const podeEditar = cid => pessoasPlan.some(p => p.id === cid && p.editar);
+    $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th>${varias ? "<th>Titular</th>" : ""}<th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
       lista.map(l => {
         const selos = [l.recorrencia_id ? "todo mês" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
-          l.compartilhado ? "família" : "", l.projetado ? "previsto" : ""]
+          l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "família") : "", l.projetado ? "previsto" : ""]
           .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ");
         const situacao = l.projetado ? `<span class="dica">previsto</span>`
           : l.pago ? `<span class="pos">${l.tipo === "receita" ? "recebido" : "pago"}</span>`
-          : `<button type="button" class="link acao requer-edicao" data-pagar="${l.id}">marcar ${l.tipo === "receita" ? "recebido" : "pago"}</button>`;
+          : podeEditar(l.carteira_id) ? `<button type="button" class="link acao" data-pagar="${l.id}">marcar ${l.tipo === "receita" ? "recebido" : "pago"}</button>`
+          : `<span class="dica">${l.tipo === "receita" ? "a receber" : "a pagar"}</span>`;
         return `<tr class="${l.projetado ? "desativado" : ""}">
           <td>${fmtData(l.data)}</td>
           <td><strong>${esc(l.descricao)}</strong> ${selos}<small class="var-sub">${esc(nomeCat(l.categoria_id))}${l.valor_bruto ? ` · bruto ${brl.format(l.valor_bruto)}` : ""}</small></td>
+          ${varias ? `<td>${l.tipo === "receita" && l.compartilhado ? "Grupo familiar" : esc(nomePessoa(l.carteira_id))}</td>` : ""}
           <td>${l.cartao_id && cartoesPlan.find(c => c.id === l.cartao_id) ? esc(cartoesPlan.find(c => c.id === l.cartao_id).nome) : esc(formasPlan[l.forma] || "—")}</td>
           <td class="${l.tipo === "receita" ? "pos" : ""}">${l.tipo === "receita" ? "+" : "−"}${brl.format(l.valor)}</td>
           <td>${situacao}</td>
-          <td>${l.projetado ? "" : `<span class="requer-edicao"><button class="link editar" data-plan-editar="${l.id}">editar</button><button class="link" data-plan-excluir="${l.id}">excluir</button></span>`}</td></tr>`;
+          <td>${l.projetado || !podeEditar(l.carteira_id) ? "" : `<span><button class="link editar" data-plan-editar="${l.id}">editar</button><button class="link" data-plan-excluir="${l.id}">excluir</button></span>`}</td></tr>`;
       }).join("")
       : `<tr><td>${todos.length ? "Nenhum lançamento com este filtro." : "Nenhum lançamento neste mês."}</td></tr>`;
 
@@ -255,7 +351,7 @@
       recs.map(r => `<tr><td><strong>${esc(r.descricao)}</strong><small class="var-sub">${r.tipo === "receita" ? "Receita" : "Despesa"} · ${esc(nomeCat(r.categoria_id))}</small></td>
         <td>${r.dia}</td><td class="${r.tipo === "receita" ? "pos" : ""}">${brl.format(r.valor)}</td>
         <td>desde ${fmtData(r.inicio + "-01").slice(3)}${r.fim ? ` até ${fmtData(r.fim + "-01").slice(3)}` : ""}</td>
-        <td>${r.fim && r.fim < dadosLanc.mes_atual ? `<span class="dica">encerrada</span>` : `<button class="link requer-edicao" data-plan-encerrar="${r.id}">encerrar</button>`}</td></tr>`).join("")
+        <td>${r.fim && r.fim < dadosLanc.mes_atual ? `<span class="dica">encerrada</span>` : podeEditar(r.carteira_id) ? `<button class="link" data-plan-encerrar="${r.id}">encerrar</button>` : ""}</td></tr>`).join("")
       : `<tr><td>Nenhuma receita ou conta fixa. Ao lançar, escolha “Todo mês”.</td></tr>`;
   }
   $("#plan-filtro").addEventListener("change", renderLancamentos);
@@ -268,13 +364,15 @@
       tipoForm = l.tipo;
       preencherCategorias(l.categoria_id);
       f.id.value = l.id; f.data.value = l.data; f.descricao.value = l.descricao; f.valor.value = l.valor;
-      f.valor_bruto.value = l.valor_bruto || ""; f.forma.value = l.forma || ""; f.pago.checked = !!l.pago;
+      f.dataset.carteiraOriginal = l.carteira_id;
+      f.valor_bruto.value = l.valor_bruto || ""; f.pago.checked = !!l.pago;
+      f.querySelectorAll('input[name="forma"]').forEach(r => (r.checked = r.value === (l.forma || "")));
       f.cartao_id.value = l.cartao_id || "";
-      f.compartilhado.checked = !!l.compartilhado;
+      renderTitulares(l.carteira_id, l.tipo === "receita" && !!l.compartilhado);
+      f.querySelector(`input[name="conta"][value="${l.compartilhado ? "familia" : "pessoal"}"]`).checked = true;
       f.atualizar_proximos.checked = false;
       f.querySelector(".campo-proximos").classList.toggle("oculto", !l.recorrencia_id);
       $("#plan-form-titulo").textContent = "Editar lançamento";
-      $("#btn-plan-salvar").textContent = "Salvar alterações";
       $("#btn-plan-cancelar").classList.remove("oculto");
       ajustarForm();
       $("#painel-plan-form").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -707,7 +805,9 @@
     try { dadosFam = await api(`/api/plan/familia?mes=${mesPlan}`); } catch (e) { return toast(e.message, true); }
     const f = dadosFam, t = f.totais;
     $("#fam-cards").innerHTML = [
-      ["Renda da família", brl.format(t.receitas + t.proventos), t.proventos ? `inclui ${brl.format(t.proventos)} de proventos` : "soma da renda líquida de todos"],
+      ["Renda da família", brl.format(t.receitas + (t.receitas_grupo || 0) + t.proventos),
+        [t.receitas_grupo ? `${brl.format(t.receitas_grupo)} do grupo familiar` : "", t.proventos ? `${brl.format(t.proventos)} de proventos` : ""]
+          .filter(Boolean).join(" · ") || "soma da renda líquida de todos"],
       ["Despesas", brl.format(t.despesas), `${brl.format(t.compartilhadas)} em contas da família`],
       ["Investido", brl.format(t.investido), "aportes nas carteiras"],
       ["Sobra da família", `<span class="${t.sobra >= 0 ? "pos" : "neg"}">${brl.format(t.sobra)}</span>`, "renda − despesas − investido"],
