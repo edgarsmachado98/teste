@@ -322,3 +322,74 @@ def sugerir_categoria(item, regras_usuario, categorias_por_nome):
             if cid:
                 return cid, "padrao"
     return None, None
+
+
+# ------------------------------------------------------------------ conciliação
+
+DIAS_EXATO = 3          # mesma compra: mesmo valor e data até 3 dias de diferença
+DIAS_POSSIVEL = 5       # possível correspondência: valor próximo (câmbio, IOF) e data até 5 dias
+TOLERANCIA_PARCELA = 1.00
+
+
+def _dias(a, b):
+    import datetime as _dt
+    return abs((_dt.date.fromisoformat(a) - _dt.date.fromisoformat(b)).days)
+
+
+def _parecido(desc_a, desc_b):
+    """Quantas palavras (de 3+ letras) as duas descrições têm em comum (só para desempate)."""
+    pa = {p for p in re.sub(r"[^A-Z ]", " ", normalizar(desc_a)).split() if len(p) >= 3}
+    pb = {p for p in re.sub(r"[^A-Z ]", " ", normalizar(desc_b)).split() if len(p) >= 3}
+    return len(pa & pb)
+
+
+def conciliar(itens, manuais):
+    """Marca em cada item da fatura se ele corresponde a uma compra lançada à mão no mesmo cartão.
+
+    itens: linhas da fatura (ainda não importadas); manuais: lançamentos do cartão ainda não conferidos
+    [{id, data, valor, descricao, parcela_num, parcela_total, categoria_id}].
+    Cada item ganha "conciliacao": {tipo: "exato"|"possivel", lancamento: {...}} ou None.
+    Cada lançamento manual casa com no máximo uma linha; os exatos são resolvidos antes dos possíveis.
+    """
+    livres = {m["id"]: m for m in manuais}
+    candidatos = [i for i in itens if i["tipo"] in ("compra", "tarifa") and not i.get("ja_importado")]
+    for i in itens:
+        i["conciliacao"] = None
+
+    def escolher(item, filtro):
+        opcoes = [m for m in livres.values() if filtro(m)]
+        if not opcoes:
+            return None
+        return min(opcoes, key=lambda m: (_dias(m["data"], item["data"]) if not item.get("parcela_total") else 0,
+                                          -_parecido(m["descricao"], item["descricao"]), m["id"]))
+
+    # 1) parcela com parcela (mesmo total de parcelas, mesmo número, valor da parcela igual)
+    for it in candidatos:
+        if it.get("parcela_total"):
+            m = escolher(it, lambda m, it=it: m.get("parcela_total") == it["parcela_total"]
+                         and m.get("parcela_num") == it["parcela_num"]
+                         and abs(m["valor"] - it["valor"]) <= TOLERANCIA_PARCELA)
+            if m:
+                it["conciliacao"] = {"tipo": "exato", "lancamento": m}
+                del livres[m["id"]]
+    # 2) mesmo valor e data próxima
+    for it in candidatos:
+        if it["conciliacao"] is None and not it.get("parcela_total"):
+            m = escolher(it, lambda m, it=it: not m.get("parcela_total") and abs(m["valor"] - it["valor"]) < 0.005
+                         and _dias(m["data"], it["data"]) <= DIAS_EXATO)
+            if m:
+                it["conciliacao"] = {"tipo": "exato", "lancamento": m}
+                del livres[m["id"]]
+    # 3) valor próximo (compra internacional, arredondamento): o usuário confirma
+    for it in candidatos:
+        if it["conciliacao"] is None:
+            def proximo(m, it=it):
+                limite = max(5.0, it["valor"] * 0.10)
+                mesma_parcela = (m.get("parcela_total") or None) == (it.get("parcela_total") or None)
+                return mesma_parcela and abs(m["valor"] - it["valor"]) <= limite and \
+                    (it.get("parcela_total") or _dias(m["data"], it["data"]) <= DIAS_POSSIVEL)
+            m = escolher(it, proximo)
+            if m:
+                it["conciliacao"] = {"tipo": "possivel", "lancamento": m}
+                del livres[m["id"]]
+    return itens

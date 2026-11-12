@@ -392,6 +392,14 @@ def registrar(app, ctx):
             it["categoria_id"], it["origem_categoria"] = sugerir_categoria_item(it, regras, por_nome)
             it["categoria_sugerida"] = it["categoria_id"]
             it["marcado"] = it["tipo"] != "pagamento" and not it["ja_importado"]
+        # conciliação: compras deste cartão lançadas à mão que ainda aguardam a fatura
+        fat.conciliar(itens, compras_aguardando(cartao_id))
+        for it in itens:
+            c = it["conciliacao"]
+            if c:
+                it["acao"] = "unir"
+                if c["lancamento"].get("categoria_id"):  # a categoria escolhida por você prevalece
+                    it["categoria_id"], it["origem_categoria"] = c["lancamento"]["categoria_id"], "sua"
         compras = [i for i in itens if i["tipo"] in ("compra", "tarifa")]
         return jsonify({
             "itens": itens, "cartao_id": cartao_id,
@@ -399,7 +407,17 @@ def registrar(app, ctx):
                        "estornos": round(sum(i["valor"] for i in itens if i["tipo"] == "estorno"), 2),
                        "ja_importados": sum(1 for i in itens if i["ja_importado"]),
                        "categorizados": sum(1 for i in compras if i["categoria_id"]),
-                       "parceladas": sum(1 for i in compras if i["parcela_total"])}})
+                       "parceladas": sum(1 for i in compras if i["parcela_total"]),
+                       "conciliadas": sum(1 for i in itens if (i["conciliacao"] or {}).get("tipo") == "exato"),
+                       "possiveis": sum(1 for i in itens if (i["conciliacao"] or {}).get("tipo") == "possivel"),
+                       "aguardando": len(compras_aguardando(cartao_id))}})
+
+    def compras_aguardando(cartao_id):
+        """Compras no crédito lançadas à mão neste cartão que ainda não foram conferidas com uma fatura."""
+        return db.rows(conn.execute(
+            """SELECT id, data, valor, descricao, parcela_num, parcela_total, parcela_grupo, categoria_id
+               FROM fin_lancamentos WHERE cartao_id = ? AND tipo = 'despesa' AND chave_import IS NULL
+               ORDER BY data, id""", (cartao_id,)))
 
     def sugerir_categoria_item(it, regras, por_nome):
         if it["tipo"] == "pagamento":
@@ -423,7 +441,7 @@ def registrar(app, ctx):
         cats = categorias()
         chaves = {r["chave_import"] for r in conn.execute(
             "SELECT chave_import FROM fin_lancamentos WHERE carteira_id = ? AND chave_import IS NOT NULL", (cid,))}
-        criados, futuras_criadas, aprendidas = 0, 0, 0
+        criados, futuras_criadas, aprendidas, conferidos = 0, 0, 0, 0
 
         def inserir(tipo, data, desc, cat, valor, chave, pago, grupo=None, num=None, total=None):
             conn.execute(
@@ -449,6 +467,26 @@ def registrar(app, ctx):
                 cat = None
             chave = str(it.get("chave") or "")[:60]
             if not chave or chave in chaves:
+                continue
+            unir = it.get("acao") == "unir" and str(it.get("lancamento_id") or "").isdigit()
+            if unir:
+                # mesma compra lançada à mão: confere e fica um lançamento só (valor da fatura, sua categoria)
+                manual = conn.execute(
+                    """SELECT * FROM fin_lancamentos WHERE id = ? AND cartao_id = ? AND chave_import IS NULL
+                       AND tipo = 'despesa'""", (int(it["lancamento_id"]), cartao_id)).fetchone()
+                if manual is None:
+                    return erro("Uma compra a conferir não foi encontrada. Leia a fatura de novo.", 409)
+                conn.execute("""UPDATE fin_lancamentos SET chave_import = ?, conferido_em = ?, valor = ?,
+                                categoria_id = COALESCE(?, categoria_id) WHERE id = ?""",
+                             (chave, ctx.hoje(), valor, cat, manual["id"]))
+                chaves.add(chave)
+                conferidos += 1
+                est = fat.chave_estabelecimento(it.get("descricao") or "")
+                cat_final = cat or manual["categoria_id"]
+                if cat_final and est:  # aprende com a categoria que você deu à compra
+                    conn.execute("""INSERT INTO fin_regras (carteira_id, padrao, categoria_id) VALUES (?, ?, ?)
+                                    ON CONFLICT(carteira_id, padrao) DO UPDATE SET categoria_id = excluded.categoria_id,
+                                    usos = usos + 1""", (cid, est, cat_final))
                 continue
             data_lanc = vencimento if vencimento else data
             num, total = it.get("parcela_num"), it.get("parcela_total")
@@ -480,7 +518,17 @@ def registrar(app, ctx):
                                 usos = usos + 1""", (cid, est, cat))
         conn.commit()
         return jsonify({"ok": True, "lancamentos": criados, "parcelas_futuras": futuras_criadas,
-                        "regras_aprendidas": aprendidas}), 201
+                        "regras_aprendidas": aprendidas, "conferidos": conferidos}), 201
+
+    @app.post("/api/plan/lancamentos/<int:lid>/desfazer-conferencia")
+    def plan_desfazer_conferencia(lid):
+        """Separa a compra lançada à mão da linha da fatura (a linha volta a ser importável)."""
+        atual = do_usuario(lid)
+        if not atual.get("conferido_em"):
+            return erro("Este lançamento não foi conferido com uma fatura.")
+        conn.execute("UPDATE fin_lancamentos SET chave_import = NULL, conferido_em = NULL WHERE id = ?", (lid,))
+        conn.commit()
+        return jsonify({"ok": True})
 
     # ---------- resumo ----------
     @app.get("/api/plan/resumo")
@@ -861,6 +909,16 @@ def registrar(app, ctx):
                         "titulo": f"{l['descricao']}: {'vencida' if vencida else 'vence'} em {'/'.join(reversed(l['data'].split('-')))}",
                         "texto": f"Conta de R$ {l['valor']:,.2f} ainda não marcada como paga.".replace(",", "X").replace(".", ",").replace("X", "."),
                         "chave": f"{chave}:conta:{l['id']}:{'vencida' if vencida else 'vence'}"})
+        limite_fatura = (dt.date.fromisoformat(hoje) - dt.timedelta(days=70)).isoformat()
+        for l in db.rows(conn.execute(
+                f"""SELECT l.*, c.nome AS cartao FROM fin_lancamentos l JOIN fin_cartoes c ON c.id = l.cartao_id
+                    WHERE l.carteira_id IN ({marcas}) AND l.tipo = 'despesa' AND l.chave_import IS NULL
+                    AND l.data <= ? AND l.parcela_total IS NULL""", [*cids, limite_fatura])):
+            out.append({"tipo": "conta", "nivel": "info",
+                        "titulo": f"{l['descricao']} ({l['cartao']}) não apareceu nas faturas",
+                        "texto": "Compra lançada há mais de dois meses e ainda não conferida com a fatura. "
+                                 "Verifique se foi cancelada ou se a fatura foi importada.",
+                        "chave": f"{chave}:cartao-pendente:{l['id']}"})
         orc = orcamento_do_mes(cids, mes)
         for i in orc["itens"]:
             if i["estado"] in ("atencao", "estourado"):

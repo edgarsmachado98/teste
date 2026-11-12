@@ -158,7 +158,8 @@ def preparar(conn):
     conn.executescript(ESQUEMA)
     colunas = {r["name"] for r in conn.execute("PRAGMA table_info(fin_lancamentos)")}
     for coluna, definicao in (("cartao_id", "INTEGER REFERENCES fin_cartoes(id) ON DELETE SET NULL"),
-                              ("chave_import", "TEXT"), ("compartilhado", "INTEGER NOT NULL DEFAULT 0")):
+                              ("chave_import", "TEXT"), ("compartilhado", "INTEGER NOT NULL DEFAULT 0"),
+                              ("conferido_em", "TEXT")):  # compra lançada à mão conferida com a fatura (data)
         if coluna not in colunas:
             conn.execute(f"ALTER TABLE fin_lancamentos ADD COLUMN {coluna} {definicao}")
     if "compartilhado" not in {r["name"] for r in conn.execute("PRAGMA table_info(fin_recorrencias)")}:

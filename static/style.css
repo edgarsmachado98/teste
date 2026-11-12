@@ -790,3 +790,13 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .interruptor { display: inline-flex; }
 .interruptor span { display: inline-block; }
 #detalhe-categoria:not([open]) { display: none; }
+.fatura-conciliacao { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 10px 0; font-size: .86rem; }
+.fatura-conciliacao .ok { color: var(--pos); font-weight: 550; }
+.fatura-conciliacao .atencao { color: #9a6a12; font-weight: 550; }
+.situacao-fatura { white-space: normal !important; min-width: 200px; text-align: left !important; }
+.situacao-fatura select { margin-top: 6px; width: 100%; max-width: 230px; height: 32px; }
+.tabela-fatura th:last-child { text-align: left; }
+.sit-ok { color: var(--pos); font-weight: 600; font-size: .84rem; }
+.sit-atencao { color: #9a6a12; font-weight: 600; font-size: .84rem; }
+.aviso-credito { margin: 2px 0 0; font-size: .82rem; color: var(--texto-2); background: var(--painel-2); border: 1px solid var(--borda);
+  border-radius: var(--raio-p); padding: 8px 12px; }

@@ -194,6 +194,11 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
 
   Também em PDF (inclusive com senha, como a fatura do Ourocard por e-mail); `diagnostico_fatura.py`
   ajuda a ajustar o leitor ao layout de cada banco.
+- **Conciliação com a fatura:** uma compra lançada na hora no crédito (com o cartão informado) fica
+  "aguardando fatura". Ao importar a fatura, o sistema procura a mesma compra (mesmo valor e data até
+  3 dias; parcelas pelo número; valores próximos viram "possível correspondência" para o usuário
+  confirmar) e apenas confere o lançamento — usa o valor da fatura, mantém a categoria escolhida e não
+  duplica. A conferência pode ser desfeita na lista, e compras que nunca aparecem na fatura geram alerta.
 - **Família (casal):** despesas marcadas como "conta da família" são divididas pela regra escolhida
   pelo administrador (proporcional à renda, meio a meio, percentuais próprios ou tudo junto), com o
   acerto do mês ("Fulana transfere R$ X para Fulano") e os totais da família.

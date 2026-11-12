@@ -463,3 +463,78 @@ def test_membros_da_familia(novo_app, com_modulo):
     eli = cliente_logado(app, "eli@x.com", "senha-eli-123")
     assert eli.put("/api/plan/membros", json={"membros": []}).status_code == 403
     assert eli.post("/api/plan/membros", json={"nome": "X"}).status_code == 403
+
+
+# ------------------------------------------------------------------ conciliação com a fatura
+def test_regras_de_conciliacao():
+    item = lambda d, desc, v, n=None, t=None: {"data": d, "descricao": desc, "valor": v, "tipo": "compra",  # noqa: E731
+                                                "parcela_num": n, "parcela_total": t}
+    manuais = [
+        {"id": 1, "data": "2026-11-05", "valor": 312.45, "descricao": "Supermercado", "parcela_num": None, "parcela_total": None},
+        {"id": 2, "data": "2026-11-06", "valor": 8.0, "descricao": "Café", "parcela_num": None, "parcela_total": None},
+        {"id": 3, "data": "2026-11-06", "valor": 8.0, "descricao": "Café", "parcela_num": None, "parcela_total": None},
+        {"id": 4, "data": "2026-12-07", "valor": 420.0, "descricao": "Geladeira", "parcela_num": 2, "parcela_total": 10},
+        {"id": 5, "data": "2026-11-18", "valor": 52.0, "descricao": "Amazon", "parcela_num": None, "parcela_total": None},
+        {"id": 6, "data": "2026-10-01", "valor": 99.0, "descricao": "Antiga", "parcela_num": None, "parcela_total": None},
+    ]
+    itens = [item("2026-11-07", "BOM PRECO SUPERMERC", 312.45),        # +2 dias: mesma compra
+             item("2026-11-06", "CAFETERIA", 8.0), item("2026-11-06", "CAFETERIA", 8.0), item("2026-11-06", "CAFETERIA", 8.0),
+             item("2026-11-07", "MAGAZINE PARC 02/10", 419.99, 2, 10),   # parcela com parcela
+             item("2026-11-18", "AMAZON US", 54.13),                     # câmbio: possível
+             item("2026-11-20", "OUTRA LOJA", 99.0)]                     # mesmo valor, data longe: nova
+    fat.conciliar(itens, manuais)
+    res = [(i["conciliacao"] or {}).get("tipo") and (i["conciliacao"]["tipo"], i["conciliacao"]["lancamento"]["id"]) for i in itens]
+    assert res[0] == ("exato", 1)
+    assert sorted(r[1] for r in res[1:4] if r) == [2, 3] and res[1:4].count(None) == 1  # 3 cafés, 2 lançados
+    assert res[4] == ("exato", 4) and res[5] == ("possivel", 5) and res[6] is None
+
+
+def test_api_conciliacao_com_a_fatura(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    cartao = c.post("/api/plan/cartoes", json={"nome": "Nubank"}).get_json()["id"]
+    mercado = cat(c, "despesa", "Mercado")
+    # compras lançadas na hora, no crédito
+    lid = c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": "2026-10-06", "descricao": "Pizza de sexta",
+                                                "valor": 89.90, "forma": "credito", "cartao_id": cartao,
+                                                "categoria_id": cat(c, "despesa", "Restaurante")}).get_json()["id"]
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": "2026-10-05", "descricao": "Magazine", "valor": 4200,
+                                          "forma": "credito", "cartao_id": cartao, "repetir": "parcelado", "parcelas": 10,
+                                          "categoria_id": cat(c, "despesa", "Compras (lojas e internet)")})
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": "2026-10-11", "descricao": "Loja", "valor": 118.0,
+                                          "forma": "credito", "cartao_id": cartao, "categoria_id": mercado})
+    # fatura com PARC 03/10 (a 3ª parcela manual é de 05/12, mas parcela casa por número)
+    p = c.post("/api/plan/fatura/previa", content_type="multipart/form-data",
+               data={"arquivo": (io.BytesIO(OFX.encode()), "fatura.ofx"), "cartao_id": cartao}).get_json()
+    por = {i["descricao"][:12]: i for i in p["itens"]}
+    assert por["IFOOD *PIZZA"]["conciliacao"]["tipo"] == "exato" and por["IFOOD *PIZZA"]["conciliacao"]["lancamento"]["id"] == lid
+    assert por["IFOOD *PIZZA"]["origem_categoria"] == "sua"  # mantém a categoria que você escolheu
+    assert por["MAGAZINE LUI"]["conciliacao"]["tipo"] == "exato"
+    assert por["LOJA DESCONH"]["conciliacao"]["tipo"] == "possivel"  # 118 x 120
+    assert por["POSTO SHELL "]["conciliacao"] is None
+    assert p["resumo"]["conciliadas"] == 2 and p["resumo"]["possiveis"] == 1
+    # o usuário diz que a "Loja" é outra compra; importa o resto
+    itens = []
+    for i in p["itens"]:
+        if not i["marcado"]:
+            continue
+        i = {**i}
+        if i["conciliacao"]:
+            i["lancamento_id"] = i["conciliacao"]["lancamento"]["id"]
+            i["acao"] = "nova" if i["descricao"].startswith("LOJA DESCONHECIDA") else "unir"
+        itens.append(i)
+    r = c.post("/api/plan/fatura/confirmar", json={"cartao_id": cartao, "itens": itens}).get_json()
+    assert r["conferidos"] == 2 and r["lancamentos"] == 4 and r["parcelas_futuras"] == 0  # parcelas já existiam
+    out = c.get("/api/plan/lancamentos?mes=2026-10").get_json()["lancamentos"]
+    pizza = next(l for l in out if l["id"] == lid)
+    assert pizza["conferido_em"] and pizza["descricao"] == "Pizza de sexta" and pizza["valor"] == 89.9
+    assert sum(1 for l in out if l["valor"] == 89.9) == 1  # não duplicou
+    assert {l["valor"] for l in out if l["descricao"] == "Loja" or l["descricao"].startswith("LOJA DESC")} == {118.0, 120.0}
+    # reimportar a fatura: as conferidas aparecem como já importadas
+    p2 = c.post("/api/plan/fatura/previa", content_type="multipart/form-data",
+                data={"arquivo": (io.BytesIO(OFX.encode()), "fatura.ofx"), "cartao_id": cartao}).get_json()
+    assert next(i for i in p2["itens"] if i["descricao"].startswith("IFOOD"))["ja_importado"]
+    # desfazer a conferência separa de novo
+    assert c.post(f"/api/plan/lancamentos/{lid}/desfazer-conferencia").status_code == 200
+    p3 = c.post("/api/plan/fatura/previa", content_type="multipart/form-data",
+                data={"arquivo": (io.BytesIO(OFX.encode()), "fatura.ofx"), "cartao_id": cartao}).get_json()
+    assert next(i for i in p3["itens"] if i["descricao"].startswith("IFOOD"))["conciliacao"]["tipo"] == "exato"

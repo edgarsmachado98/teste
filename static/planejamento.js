@@ -190,6 +190,11 @@
     if (receita && valorRadio("repetir") === "parcelado") f.querySelector('input[name="repetir"][value="nao"]').checked = true;
     const forma = valorRadio("forma"), rep = editando ? "nao" : valorRadio("repetir");
     f.querySelector(".campo-cartao").classList.toggle("oculto", receita || forma !== "credito" || !cartoesPlan.length);
+    f.cartao_id.required = !receita && forma === "credito" && cartoesPlan.length > 0;
+    $("#aviso-credito").classList.toggle("oculto", receita || forma !== "credito");
+    $("#aviso-credito").innerHTML = !cartoesPlan.length
+      ? `Cadastre o cartão em “Importar fatura do cartão” para que esta compra seja conferida com a fatura e não fique em duplicidade.`
+      : `A compra fica como <strong>aguardando fatura</strong>. Ao importar a fatura, o sistema a reconhece e não lança de novo.`;
     f.querySelector(".campo-parcelas").classList.toggle("oculto", rep !== "parcelado");
     f.querySelector(".campo-fim").classList.toggle("oculto", rep !== "mensal");
     f.querySelector(".campo-bruto").classList.toggle("oculto", !receita || (!f.valor_bruto.value && !f.dataset.bruto));
@@ -331,7 +336,9 @@
     const podeEditar = cid => pessoasPlan.some(p => p.id === cid && p.editar);
     $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th>${varias ? "<th>Titular</th>" : ""}<th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
       lista.map(l => {
-        const selos = [l.recorrencia_id ? "mensal" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
+        const aguardando = l.tipo === "despesa" && l.cartao_id && !l.chave_import && !l.projetado;
+        const selos = [aguardando ? "aguardando fatura" : "", l.conferido_em ? "✓ conferido com a fatura" : "",
+          l.recorrencia_id ? "mensal" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
           l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "compartilhada") : "", l.projetado ? "previsto" : ""]
           .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ");
         const situacao = l.projetado ? `<span class="dica">previsto</span>`
@@ -345,7 +352,8 @@
           <td>${l.cartao_id && cartoesPlan.find(c => c.id === l.cartao_id) ? esc(cartoesPlan.find(c => c.id === l.cartao_id).nome) : esc(formasPlan[l.forma] || "—")}</td>
           <td class="${l.tipo === "receita" ? "pos" : ""}">${l.tipo === "receita" ? "+" : "−"}${brl.format(l.valor)}</td>
           <td>${situacao}</td>
-          <td>${l.projetado || !podeEditar(l.carteira_id) ? "" : `<span><button class="link editar" data-plan-editar="${l.id}">editar</button><button class="link" data-plan-excluir="${l.id}">excluir</button></span>`}</td></tr>`;
+          <td>${l.projetado || !podeEditar(l.carteira_id) ? "" : `<span><button class="link editar" data-plan-editar="${l.id}">editar</button><button class="link" data-plan-excluir="${l.id}">excluir</button>${
+            l.conferido_em ? `<button class="link acao" data-desfazer-conf="${l.id}" title="Separa esta compra da linha da fatura">desfazer conferência</button>` : ""}</span>`}</td></tr>`;
       }).join("")
       : `<tr><td>${todos.length ? "Nenhum lançamento com este filtro." : "Nenhum lançamento neste mês."}</td></tr>`;
 
@@ -360,6 +368,13 @@
   $("#plan-filtro").addEventListener("change", renderLancamentos);
 
   document.addEventListener("click", async ev => {
+    const dc = ev.target.closest("[data-desfazer-conf]");
+    if (dc) {
+      if (!confirm("Desfazer a conferência? A compra continua lançada; ao importar a fatura de novo, a linha dela poderá ser conferida ou lançada.")) return;
+      try { await api(`/api/plan/lancamentos/${dc.dataset.desfazerConf}/desfazer-conferencia`, { method: "POST" }); toast("Conferência desfeita."); carregarLancamentos(); }
+      catch (e) { toast(e.message, true); }
+      return;
+    }
     const ed = ev.target.closest("[data-plan-editar]"), ex = ev.target.closest("[data-plan-excluir]"),
       enc = ev.target.closest("[data-plan-encerrar]");
     if (ed) {
@@ -415,7 +430,7 @@
     const sel = $("#sel-cartao-fatura"), atual = sel.value;
     sel.innerHTML = cartoesPlan.length ? opcoes : `<option value="">Cadastre um cartão abaixo</option>`;
     if (atual) sel.value = atual;
-    $("#form-plan").cartao_id.innerHTML = `<option value="">—</option>` + opcoes;
+    $("#form-plan").cartao_id.innerHTML = `<option value="">Selecione o cartão</option>` + opcoes;
     $("#lista-cartoes").innerHTML = cartoesPlan.length ? `<ul class="plan-lista">${cartoesPlan.map(c => `<li>
         <span class="plan-nome">${esc(c.nome)}<small>${c.dia_vencimento ? `vence dia ${c.dia_vencimento}` : "sem dia de vencimento"}</small></span>
         <button type="button" class="link" data-remover-cartao="${c.id}">remover</button></li>`).join("")}</ul>` : "";
@@ -501,9 +516,13 @@
         <div><span>Categorizadas</span><strong>${r.categorizados} de ${r.compras}</strong></div>
         <div><span>Já importadas</span><strong>${r.ja_importados}</strong></div>
       </div>
+      ${r.conciliadas || r.possiveis ? `<div class="fatura-conciliacao">
+          ${r.conciliadas ? `<span class="ok">✓ ${r.conciliadas} compra(s) que você já tinha lançado serão conferidas, sem duplicar</span>` : ""}
+          ${r.possiveis ? `<span class="atencao">${r.possiveis} possível(is) correspondência(s): confirme na coluna Situação</span>` : ""}
+        </div>` : ""}
       ${semCat ? `<p class="aviso" style="margin:10px 0">${semCat} compra(s) sem categoria: escolha abaixo. O sistema lembra da escolha para as próximas faturas.</p>` : ""}
       <div class="rolagem"><table class="tabela-fatura"><tr><th><input type="checkbox" id="fatura-todos" checked aria-label="Marcar todos"></th>
-        <th>Data</th><th>Descrição</th><th>Valor</th><th>Categoria</th></tr>
+        <th>Data</th><th>Descrição</th><th>Valor</th><th>Categoria</th><th>Situação</th></tr>
         ${p.itens.map((i, n) => `<tr class="${i.ja_importado || i.tipo === "pagamento" ? "desativado" : ""}">
           <td><input type="checkbox" data-fatura-item="${n}" ${i.marcado ? "checked" : ""} ${i.ja_importado || i.tipo === "pagamento" ? "disabled" : ""}></td>
           <td>${fmtData(i.data)}</td>
@@ -514,7 +533,8 @@
           <td class="${i.tipo === "estorno" ? "pos" : ""}">${i.tipo === "estorno" ? "+" : ""}${brl.format(i.valor)}</td>
           <td>${i.tipo === "pagamento" ? `<span class="dica">ignorado</span>` : `<select data-fatura-cat="${n}" class="${i.categoria_id ? "" : "sem-categoria"}">
               ${opcoesCategoria(i.tipo === "estorno" ? "receita" : "despesa", i.categoria_id)}</select>
-            ${i.origem_categoria ? `<small class="var-sub">${i.origem_categoria === "aprendida" ? "como da última vez" : "sugestão automática"}</small>` : ""}`}</td></tr>`).join("")}
+            ${i.origem_categoria ? `<small class="var-sub">${{ aprendida: "como da última vez", sua: "a que você escolheu", padrao: "sugestão automática" }[i.origem_categoria] || ""}</small>` : ""}`}</td>
+          <td class="situacao-fatura">${situacaoFatura(i, n)}</td></tr>`).join("")}
       </table></div>
       <div class="form-linha fatura-opcoes">
         <label>Lançar na data <select id="fatura-data-modo"><option value="compra">de cada compra</option>
@@ -524,6 +544,18 @@
         <button type="button" class="btn" id="btn-importar-fatura"></button>
       </div>`;
     atualizarBotaoFatura();
+  }
+
+  function situacaoFatura(i, n) {
+    if (i.ja_importado) return `<span class="dica">já importada</span>`;
+    if (i.tipo === "pagamento") return "";
+    const c = i.conciliacao;
+    if (!c) return `<span class="dica">nova</span>`;
+    const m = c.lancamento, ref = `${fmtData(m.data)} · ${esc(m.descricao)} · ${brl.format(m.valor)}`;
+    if (c.tipo === "exato") return `<span class="sit-ok">✓ Já lançada por você</span><small class="var-sub">${ref}</small>`;
+    return `<span class="sit-atencao">Possível correspondência</span><small class="var-sub">${ref}</small>
+      <select data-fatura-acao="${n}"><option value="unir" ${i.acao === "unir" ? "selected" : ""}>É a mesma compra</option>
+        <option value="nova" ${i.acao === "nova" ? "selected" : ""}>É outra compra (lançar)</option></select>`;
   }
 
   function atualizarBotaoFatura() {
@@ -548,18 +580,23 @@
         }
       });
     }
+    if (t.dataset.faturaAcao !== undefined) previaFatura.itens[+t.dataset.faturaAcao].acao = t.value;
     if (t.id === "fatura-data-modo") $("#campo-vencimento").classList.toggle("oculto", t.value !== "vencimento");
     atualizarBotaoFatura();
   });
 
   $("#previa-fatura").addEventListener("click", async ev => {
     if (ev.target.id !== "btn-importar-fatura") return;
-    const itens = [...document.querySelectorAll("[data-fatura-item]:checked")].map(c => previaFatura.itens[+c.dataset.faturaItem]);
+    const itens = [...document.querySelectorAll("[data-fatura-item]:checked")].map(c => {
+      const i = previaFatura.itens[+c.dataset.faturaItem];
+      return i.conciliacao ? { ...i, lancamento_id: i.conciliacao.lancamento.id, acao: i.acao || "unir" } : i;
+    });
     try {
       const r = await api("/api/plan/fatura/confirmar", { method: "POST", body: {
         cartao_id: previaFatura.cartao_id, itens, data_modo: $("#fatura-data-modo").value,
         vencimento: $("#fatura-vencimento").value, parcelas_futuras: $("#fatura-futuras").checked } });
-      toast(`Fatura importada: ${r.lancamentos} lançamento(s)` + (r.parcelas_futuras ? `, ${r.parcelas_futuras} parcela(s) futura(s)` : "") +
+      toast(`Fatura importada: ${r.lancamentos} lançamento(s) novo(s)` + (r.conferidos ? `, ${r.conferidos} conferido(s) com o que você já tinha lançado` : "") +
+        (r.parcelas_futuras ? `, ${r.parcelas_futuras} parcela(s) futura(s)` : "") +
         (r.regras_aprendidas ? `. ${r.regras_aprendidas} categoria(s) aprendida(s) para as próximas faturas.` : "."));
       previaFatura = null;
       $("#previa-fatura").innerHTML = "";
