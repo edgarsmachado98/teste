@@ -86,6 +86,20 @@ def registrar(app, ctx):
         h = dt.date.fromisoformat(ctx.hoje())
         return h.year - n.year - ((h.month, h.day) < (n.month, n.day))
 
+    def cids_plan():
+        """O planejamento é da família: considera todos os membros visíveis (ou só um, com ?pessoa=id).
+
+        Não depende da carteira escolhida no menu de investimentos: um lançamento feito para outro membro
+        precisa aparecer na lista, senão parece que não foi salvo (e acaba lançado duas vezes).
+        """
+        ids = [p["id"] for p in pessoas()]
+        if not ids:
+            raise ctx.ErroAcesso("Nenhuma carteira disponível.", 404)
+        pessoa = request.args.get("pessoa")
+        if pessoa and pessoa.isdigit() and int(pessoa) in ids:
+            return [int(pessoa)]
+        return ids
+
     def editaveis():
         return [p for p in pessoas() if p["editar"]]
 
@@ -199,7 +213,7 @@ def registrar(app, ctx):
     # ---------- lançamentos ----------
     @app.get("/api/plan/lancamentos")
     def plan_lancamentos():
-        cids = ctx.carteiras_leitura()
+        cids = cids_plan()
         mes = mes_param()
         plan.materializar(conn, cids, mes_atual())
         marcas = ",".join("?" * len(cids))
@@ -207,6 +221,23 @@ def registrar(app, ctx):
             f"SELECT * FROM fin_recorrencias WHERE carteira_id IN ({marcas}) ORDER BY tipo DESC, descricao", cids))
         return jsonify({"mes": mes, "mes_atual": mes_atual(), "lancamentos": lancamentos_do_mes(cids, mes),
                         "recorrencias": recs, "pessoas": pessoas()})
+
+    def possivel_duplicado(cid, l, repetir):
+        """Mesmo titular, tipo e valor, com a mesma categoria ou descrição: no mesmo mês (ou já fixo todo mês)."""
+        def parecido(row):
+            return (abs(row["valor"] - l["valor"]) < 0.005 and
+                    ((l["categoria_id"] and row["categoria_id"] == l["categoria_id"]) or
+                     (row["descricao"] or "").strip().lower() == l["descricao"].strip().lower()))
+        mes = plan.mes_de(l["data"])
+        for row in conn.execute("""SELECT * FROM fin_lancamentos WHERE carteira_id = ? AND tipo = ?
+                                   AND substr(data, 1, 7) = ?""", (cid, l["tipo"], mes)):
+            if parecido(row):
+                return dict(row)
+        for row in conn.execute("""SELECT * FROM fin_recorrencias WHERE carteira_id = ? AND tipo = ?
+                                   AND inicio <= ? AND (fim IS NULL OR fim >= ?)""", (cid, l["tipo"], mes, mes)):
+            if parecido(row):
+                return {**dict(row), "mensal": True}
+        return None
 
     @app.post("/api/plan/lancamentos")
     def plan_criar_lancamento():
@@ -217,6 +248,14 @@ def registrar(app, ctx):
         except ValueError as e:
             return erro(str(e))
         repetir = d.get("repetir") or "nao"
+        if not d.get("confirmar_duplicado"):
+            igual = possivel_duplicado(cid, l, repetir)
+            if igual:
+                nome = next((p["nome"] for p in pessoas() if p["id"] == cid), "")
+                quando = "todo mês" if igual.get("mensal") else "em " + "/".join(reversed(igual["data"].split("-")))
+                valor = f"{igual['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                return jsonify({"erro": f"Já existe “{igual['descricao']}” de R$ {valor} {quando} para {nome}. "
+                                        "Lançar de novo vai somar duas vezes.", "duplicado": True}), 409
         if repetir == "mensal":
             fim = (d.get("fim") or "")[:7] or None
             if fim and fim < plan.mes_de(l["data"]):
@@ -329,6 +368,11 @@ def registrar(app, ctx):
         if r is None:
             return erro("Recorrência não encontrada.", 404)
         exigir_edicao(r["carteira_id"])
+        if request.args.get("tudo"):  # lançada por engano: some com todos os meses, inclusive os já lançados
+            n = conn.execute("DELETE FROM fin_lancamentos WHERE recorrencia_id = ?", (rid,)).rowcount
+            conn.execute("DELETE FROM fin_recorrencias WHERE id = ?", (rid,))
+            conn.commit()
+            return jsonify({"ok": True, "removidos": n})
         fim = mes_atual()
         conn.execute("DELETE FROM fin_lancamentos WHERE recorrencia_id = ? AND substr(data, 1, 7) > ?", (rid, fim))
         if r["inicio"] > fim:
@@ -346,7 +390,7 @@ def registrar(app, ctx):
 
     @app.get("/api/plan/cartoes")
     def plan_cartoes():
-        return jsonify(listar_cartoes(ctx.carteiras_leitura()))
+        return jsonify(listar_cartoes(cids_plan()))
 
     @app.post("/api/plan/cartoes")
     def plan_criar_cartao():
@@ -556,7 +600,7 @@ def registrar(app, ctx):
     # ---------- resumo ----------
     @app.get("/api/plan/resumo")
     def plan_resumo():
-        cids = ctx.carteiras_leitura()
+        cids = cids_plan()
         mes, hoje = mes_param(), ctx.hoje()
         plan.materializar(conn, cids, mes_atual())
         cats = categorias()
@@ -806,7 +850,7 @@ def registrar(app, ctx):
 
     @app.get("/api/plan/objetivos")
     def plan_objetivos():
-        cids = ctx.carteiras_leitura()
+        cids = cids_plan()
         objs, cv = avaliar_todos(cids)
         # sobra média dos últimos 3 meses fechados, para comparar com o aporte necessário
         cats, prov = categorias(), plan.proventos_por_mes(ctx.listar_proventos(cids), ctx.hoje())
@@ -895,7 +939,7 @@ def registrar(app, ctx):
 
     @app.get("/api/plan/orcamento")
     def plan_orcamento():
-        return jsonify(orcamento_do_mes(ctx.carteiras_leitura(), mes_param()))
+        return jsonify(orcamento_do_mes(cids_plan(), mes_param()))
 
     @app.put("/api/plan/orcamento")
     def plan_salvar_orcamento():
@@ -915,7 +959,7 @@ def registrar(app, ctx):
     @app.get("/api/plan/projecao")
     def plan_projecao():
         """Próximos meses: receitas e despesas já previstas (fixas e parcelas) e o aporte planejado nos objetivos."""
-        cids = ctx.carteiras_leitura()
+        cids = cids_plan()
         plan.materializar(conn, cids, mes_atual())
         objs, _ = avaliar_todos(cids)
         aporte_obj = sum(o["aporte_planejado"] for o in objs if o["situacao"] != "atingido")
@@ -935,7 +979,7 @@ def registrar(app, ctx):
     @app.get("/api/plan/ir")
     def plan_ir():
         """Totais do ano para a declaração: rendimentos do trabalho e despesas que costumam ser dedutíveis."""
-        cids = ctx.carteiras_leitura()
+        cids = cids_plan()
         try:
             ano = int(request.args.get("ano") or ctx.hoje()[:4])
         except ValueError:
@@ -961,7 +1005,7 @@ def registrar(app, ctx):
 
     # ================================================================ nota fiscal (NFC-e) pelo QR Code
     def nota_ja_lancada(chave):
-        cids = ctx.carteiras_leitura()
+        cids = cids_plan()
         marcas = ",".join("?" * len(cids))
         r = conn.execute(f"""SELECT n.id, n.criado_em, MIN(l.data) AS data, SUM(l.valor) AS valor FROM fin_notas n
                              LEFT JOIN fin_lancamentos l ON l.nota_id = n.id
@@ -1063,7 +1107,7 @@ def registrar(app, ctx):
     @app.get("/api/plan/notas/<int:nid>")
     def plan_nota(nid):
         n = conn.execute("SELECT * FROM fin_notas WHERE id = ?", (nid,)).fetchone()
-        if n is None or n["carteira_id"] not in ctx.carteiras_leitura():
+        if n is None or n["carteira_id"] not in cids_plan():
             return erro("Nota não encontrada.", 404)
         n = dict(n)
         n["itens"] = json.loads(n["itens"] or "[]")

@@ -200,20 +200,30 @@
           <strong class="rotulo-mes"></strong>
           <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
         </div>
+        <div class="filtros-plan"><select id="plan-pessoa" aria-label="Membro da família" class="oculto"></select>
         <select id="plan-filtro" aria-label="Filtrar lançamentos">
           <option value="">Receitas e despesas</option><option value="receita">Só receitas</option>
           <option value="despesa">Só despesas</option><option value="pendente">Pendentes</option>
-        </select>
+        </select></div>
       </div>
       <div class="plan-totais" id="plan-totais"></div>
       <div class="rolagem"><table id="tabela-plan" class="tabela-plan"></table></div>
     </div>
 
-    <div class="painel">
-      <h3>Receitas e contas fixas</h3>
-      <p class="dica" style="margin-top:0">Lançadas automaticamente todo mês. Encerrar mantém os meses já lançados.</p>
-      <div class="rolagem"><table id="tabela-plan-fixas"></table></div>
+    <div class="fixas">
+      <div class="painel">
+        <h3>Receitas fixas</h3>
+        <p class="dica" style="margin-top:0">Salários e rendas que entram todo mês, lançadas automaticamente.</p>
+        <div class="rolagem"><table id="tabela-fixas-receitas" class="tabela-fixas"></table></div>
+      </div>
+      <div class="painel">
+        <h3>Contas fixas</h3>
+        <p class="dica" style="margin-top:0">Aluguel, escola, internet, assinaturas… lançadas automaticamente todo mês.</p>
+        <div class="rolagem"><table id="tabela-fixas-despesas" class="tabela-fixas"></table></div>
+      </div>
     </div>
+    <p class="dica fixas-dica"><strong>Encerrar</strong> para de lançar a partir do próximo mês e mantém os meses já lançados.
+      <strong>Excluir</strong> apaga tudo, para quando foi lançada por engano.</p>
 
     <dialog id="dialogo-plan-excluir" class="dialogo">
       <form method="dialog">

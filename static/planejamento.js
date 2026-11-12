@@ -291,12 +291,19 @@
       compartilhado: tipoForm === "receita" ? grupo : valorRadio("conta") === "familia" };
     try {
       if (id) await api(`/api/plan/lancamentos/${id}`, { method: "PUT", body });
-      else await api("/api/plan/lancamentos", { method: "POST", body });
+      else {
+        try { await api("/api/plan/lancamentos", { method: "POST", body }); }
+        catch (e) {
+          if (!e.dados?.duplicado || !confirm(e.message + "\n\nLançar mesmo assim?")) throw e.dados?.duplicado ? new Error("Lançamento não repetido.") : e;
+          await api("/api/plan/lancamentos", { method: "POST", body: { ...body, confirmar_duplicado: true } });
+        }
+      }
       const p = pessoasPlan.find(x => String(x.id) === String(titular));
-      const fora = carteiraAtual !== FAMILIA && titular && +titular !== carteiraAtual;
-      toast((id ? "Lançamento atualizado" : body.repetir === "mensal" ? "Lançamento mensal criado" :
-        body.repetir === "parcelado" ? `Compra lançada em ${d.parcelas} parcelas` : "Lançamento salvo") +
-        (fora && p ? `, na carteira de ${p.nome} (selecione “Visão da família” para ver tudo junto).` : "."));
+      const praQuem = grupo ? " para o grupo familiar" : p && pessoasPlan.length > 1 ? ` para ${p.nome.split(" ")[0]}` : "";
+      toast((id ? "Lançamento atualizado" : body.repetir === "mensal" ? `${tipoForm === "receita" ? "Receita" : "Conta"} fixa criada` :
+        body.repetir === "parcelado" ? `Compra lançada em ${d.parcelas} parcelas` : `${tipoForm === "receita" ? "Receita" : "Despesa"} lançada`) + praQuem + ".");
+      const filtroPessoa = $("#plan-pessoa").value;
+      if (filtroPessoa && titular && String(titular) !== filtroPessoa) $("#plan-pessoa").value = "";  // não some da lista
       const manterData = f.data.value;
       limparForm();
       if (!id) { f.data.value = manterData; atualizarResumoForm(); }
@@ -320,9 +327,14 @@
     atualizarSeletoresMes();
     try {
       await garantirCategorias();
-      [dadosLanc] = await Promise.all([api(`/api/plan/lancamentos?mes=${mesPlan}`), carregarCartoes()]);
+      const pessoa = $("#plan-pessoa").value;
+      [dadosLanc] = await Promise.all([api(`/api/plan/lancamentos?mes=${mesPlan}${pessoa ? `&pessoa=${pessoa}` : ""}`), carregarCartoes()]);
     } catch (e) { return toast(e.message, true); }
     pessoasPlan = dadosLanc.pessoas || [];
+    const selP = $("#plan-pessoa"), atualP = selP.value;
+    selP.innerHTML = `<option value="">Toda a família</option>` + pessoasPlan.map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join("");
+    selP.value = pessoasPlan.some(p => String(p.id) === atualP) ? atualP : "";
+    selP.classList.toggle("oculto", pessoasPlan.length < 2);
     document.body.classList.toggle("plan-sem-edicao", !pessoasPlan.some(p => p.editar));
     // primeiro acesso do administrador: convida a cadastrar os membros da família
     $("#aviso-membros").classList.toggle("oculto", !USUARIO.admin || pessoasPlan.some(p => p.cadastrado));
@@ -345,7 +357,7 @@
       <span>Despesas <strong>${brl.format(desp)}</strong></span>
       <span>Saldo <strong class="${rec - desp >= 0 ? "pos" : "neg"}">${brl.format(rec - desp)}</strong></span>
       <small class="dica">Proventos e aportes da carteira aparecem no Resumo do mês.</small>`;
-    const varias = new Set(todos.map(l => l.carteira_id)).size > 1 || carteiraAtual === FAMILIA;
+    const varias = pessoasPlan.length > 1 && !$("#plan-pessoa").value;
     const nomePessoa = cid => pessoasPlan.find(p => p.id === cid)?.nome || "";
     const podeEditar = cid => pessoasPlan.some(p => p.id === cid && p.editar);
     $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th>${varias ? "<th>Titular</th>" : ""}<th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
@@ -372,15 +384,25 @@
       }).join("")
       : `<tr><td>${todos.length ? "Nenhum lançamento com este filtro." : "Nenhum lançamento neste mês."}</td></tr>`;
 
-    const recs = dadosLanc.recorrencias;
-    $("#tabela-plan-fixas").innerHTML = recs.length ? `<tr><th>Descrição</th><th>Dia</th><th>Valor</th><th>Período</th><th></th></tr>` +
-      recs.map(r => `<tr><td><strong>${esc(r.descricao)}</strong><small class="var-sub">${r.tipo === "receita" ? "Receita" : "Despesa"} · ${esc(nomeCat(r.categoria_id))}</small></td>
-        <td>${r.dia}</td><td class="${r.tipo === "receita" ? "pos" : ""}">${brl.format(r.valor)}</td>
-        <td>desde ${fmtData(r.inicio + "-01").slice(3)}${r.fim ? ` até ${fmtData(r.fim + "-01").slice(3)}` : ""}</td>
-        <td>${r.fim && r.fim < dadosLanc.mes_atual ? `<span class="dica">encerrada</span>` : podeEditar(r.carteira_id) ? `<span><button class="link editar" data-editar-rec="${r.id}">editar</button><button class="link" data-plan-encerrar="${r.id}">encerrar</button></span>` : ""}</td></tr>`).join("")
-      : `<tr><td>Nenhuma receita ou conta fixa. Ao lançar, escolha “Todo mês”.</td></tr>`;
+    const recs = dadosLanc.recorrencias, nomesP = pessoasPlan.length > 1;
+    const ativa = r => !(r.fim && r.fim < dadosLanc.mes_atual);
+    const tabelaFixas = (tipo, vazio) => {
+      const lista = recs.filter(r => r.tipo === tipo);
+      if (!lista.length) return `<tr><td class="dica">${vazio}</td></tr>`;
+      const total = lista.filter(ativa).reduce((s, r) => s + r.valor, 0);
+      return `<tr><th>Descrição</th>${nomesP ? `<th>${tipo === "receita" ? "Para quem" : "Quem paga"}</th>` : ""}<th>Dia</th><th>Valor</th><th>Período</th><th></th></tr>` +
+        lista.map(r => `<tr class="${ativa(r) ? "" : "desativado"}"><td><strong>${esc(r.descricao)}</strong><small class="var-sub">${esc(nomeCat(r.categoria_id))}${r.compartilhado ? (tipo === "receita" ? " · grupo familiar" : " · compartilhada") : ""}</small></td>
+          ${nomesP ? `<td>${tipo === "receita" && r.compartilhado ? "Grupo familiar" : esc(nomePessoa(r.carteira_id))}</td>` : ""}
+          <td>${r.dia}</td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(r.valor)}</td>
+          <td>desde ${fmtData(r.inicio + "-01").slice(3)}${r.fim ? ` até ${fmtData(r.fim + "-01").slice(3)}` : ""}</td>
+          <td>${!podeEditar(r.carteira_id) ? "" : `<span>${ativa(r) ? `<button class="link editar" data-editar-rec="${r.id}">editar</button><button class="link acao" data-plan-encerrar="${r.id}">encerrar</button>` : `<span class="dica">encerrada</span> `}<button class="link" data-excluir-rec="${r.id}" title="Lançada por engano: apaga todos os meses">excluir</button></span>`}</td></tr>`).join("") +
+        `<tr class="linha-total"><td>Total por mês</td>${nomesP ? "<td></td>" : ""}<td></td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(total)}</td><td></td><td></td></tr>`;
+    };
+    $("#tabela-fixas-receitas").innerHTML = tabelaFixas("receita", "Nenhuma receita fixa. Ao lançar um salário, escolha a recorrência “Mensal”.");
+    $("#tabela-fixas-despesas").innerHTML = tabelaFixas("despesa", "Nenhuma conta fixa. Ao lançar aluguel, escola, internet…, escolha “Mensal”.");
   }
   $("#plan-filtro").addEventListener("change", renderLancamentos);
+  $("#plan-pessoa").addEventListener("change", carregarLancamentos);
 
   document.addEventListener("click", async ev => {
     const er = ev.target.closest("[data-editar-rec]");
@@ -436,6 +458,17 @@
         toast("Lançamento excluído.");
         carregarLancamentos();
       } catch (e) { toast(e.message, true); }
+    }
+    const exr = ev.target.closest("[data-excluir-rec]");
+    if (exr) {
+      const r = dadosLanc.recorrencias.find(x => x.id === +exr.dataset.excluirRec);
+      if (!confirm(`Excluir “${r.descricao}” de vez? Apaga também os meses já lançados dela. Use quando foi lançada por engano (para parar só daqui para frente, use encerrar).`)) return;
+      try {
+        await api(`/api/plan/recorrencias/${r.id}?tudo=1`, { method: "DELETE" });
+        toast(`“${r.descricao}” excluída.`);
+        carregarLancamentos();
+      } catch (e) { toast(e.message, true); }
+      return;
     }
     if (enc) {
       if (!confirm("Encerrar esta repetição? Os meses já lançados continuam; os próximos deixam de ser lançados.")) return;
@@ -1135,13 +1168,23 @@
       </div>`).join("");
     const minha = m.membros.find(p => p.minha);
     $("#dica-membros").innerHTML = !pode ? "Só o administrador altera os membros da família."
-      : minha && minha.login && minha.parentesco !== "titular" && minha.nome.split(" ")[0] !== minha.login.split(" ")[0]
-        ? `<span class="neg">Atenção:</span> o cadastro ligado ao seu login (${esc(minha.login)}) está com o nome <strong>${esc(minha.nome)}</strong>. Se foi engano, clique em editar e corrija; para cadastrar outra pessoa use “Cadastrar membro”.`
+      : minha && minha.login && minha.parentesco !== "titular" && minha.nome.split(" ")[0] !== minha.login.split(" ")[0] && !avisoNomeDispensado(minha)
+        ? `<span class="neg">Atenção:</span> o cadastro ligado ao seu login (${esc(minha.login)}) está com o nome <strong>${esc(minha.nome)}</strong>. Se foi engano, clique em editar e corrija; para cadastrar outra pessoa use “Cadastrar membro”.
+           <button type="button" class="link acao" data-dispensar-nome="${minha.id}:${esc(minha.nome)}">Está certo assim</button>`
         : !m.configurado ? "Confira o seu cadastro e cadastre os demais membros da família. Para dar login a alguém, use Acessos e conta → Usuários." : "";
   }
 
   // o cadastro abre também a partir do lançamento: o diálogo não pode ficar dentro da aba Família (oculta)
   document.body.appendChild($("#dialogo-membro"));
+  function avisoNomeDispensado(m) {
+    try { return localStorage.getItem("aviso-nome-membro") === `${m.id}:${m.nome}`; } catch { return false; }
+  }
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-dispensar-nome]");
+    if (!b) return;
+    try { localStorage.setItem("aviso-nome-membro", b.dataset.dispensarNome); } catch { /* sem armazenamento */ }
+    $("#dica-membros").textContent = "";
+  });
   function abrirMembro(p) {
     const f = $("#form-membro"), m = dadosMembros;
     f.reset();

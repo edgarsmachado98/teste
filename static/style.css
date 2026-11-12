@@ -873,3 +873,8 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .linha-interruptor small { color: var(--texto-2); font-size: .78rem; }
 .pilulas > .pilula-nova { border-style: dashed !important; color: var(--primaria); background: transparent; }
 :root[data-theme="dark"] .membro-avatar[class*="par-"] { filter: brightness(.8) saturate(.9); }
+.filtros-plan { display: flex; gap: 8px; flex-wrap: wrap; }
+.fixas { display: grid; gap: 0; }
+.tabela-fixas .linha-total td { font-weight: 650; border-top: 1px solid var(--borda-forte); }
+.tabela-fixas td:last-child { text-align: right; white-space: nowrap; }
+.fixas-dica { margin: -6px 2px 18px; }

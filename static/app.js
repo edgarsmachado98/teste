@@ -36,7 +36,7 @@ async function api(url, opts = {}) {
   const r = await fetch(url, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
   if (r.status === 401) { location.href = "/login"; throw new Error("Sessão expirada."); }
   const dados = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(dados.erro || `Erro ${r.status}`), { status: r.status, dados });
   if (opts.method && opts.method !== "GET") dadosVersao++;  // dados mudaram: recalcula a evolução
   return dados;
 }

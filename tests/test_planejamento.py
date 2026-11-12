@@ -558,3 +558,26 @@ def test_cadastro_de_membros(novo_app, com_modulo):
     assert "login" in c.delete(f"/api/plan/membros/{minha['id']}").get_json()["erro"]  # quem tem login não sai por aqui
     assert c.delete(f"/api/plan/membros/{lid}").status_code == 200
     assert lid not in {p["id"] for p in c.get("/api/plan/membros").get_json()["membros"]}
+
+
+def test_lancamento_repetido_e_lista_da_familia(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    filho = c.post("/api/plan/membros", json={"nome": "Edgar Filho", "parentesco": "filho"}).get_json()["id"]
+    sal = cat(c, "receita", "Salário")
+    corpo = {"tipo": "receita", "data": "2026-11-05", "descricao": "Salario Edgar", "valor": 7200, "categoria_id": sal,
+             "carteira_id": filho, "repetir": "mensal"}
+    assert c.post("/api/plan/lancamentos", json=corpo).status_code == 201
+    r = c.post("/api/plan/lancamentos", json={**corpo, "repetir": "nao"})  # o mesmo salário de novo
+    assert r.status_code == 409 and r.get_json()["duplicado"] and "Salario Edgar" in r.get_json()["erro"]
+    assert c.post("/api/plan/lancamentos", json={**corpo, "confirmar_duplicado": True}).status_code == 201
+    # aparece na lista mesmo com outra carteira escolhida no menu de investimentos
+    d = c.get("/api/plan/lancamentos?mes=2026-11").get_json()
+    assert sum(1 for l in d["lancamentos"] if l["carteira_id"] == filho) == 2
+    assert len([r for r in d["recorrencias"] if r["carteira_id"] == filho]) == 2
+    so_filho = c.get(f"/api/plan/lancamentos?mes=2026-11&pessoa={filho}").get_json()["lancamentos"]
+    assert {l["carteira_id"] for l in so_filho} == {filho}
+    # a repetida, lançada por engano, sai de vez (com o mês já lançado)
+    rid = max(r["id"] for r in d["recorrencias"] if r["carteira_id"] == filho)
+    assert c.delete(f"/api/plan/recorrencias/{rid}?tudo=1").get_json()["removidos"] == 1
+    d = c.get("/api/plan/lancamentos?mes=2026-11").get_json()
+    assert sum(1 for l in d["lancamentos"] if l["carteira_id"] == filho) == 1
