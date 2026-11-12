@@ -204,9 +204,9 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
   (sino e Telegram), projeção dos próximos 12 meses (com os aportes planejados nos objetivos) e
   totais do ano para o IR (rendimentos do trabalho e despesas de saúde e educação).
 
-Ativação: `CARTEIRA_MODULOS=planejamento` no `.env` (ou `todos`). No modo demonstração todos os
-módulos ficam ativos. O controle fica em `carteira/licenca.py`, ponto único para a futura chave de
-licença.
+Ativação: **na fase de testes o módulo fica liberado** sem configurar nada (e é atualizado junto
+com o sistema). Para desligar, `CARTEIRA_MODULOS=nenhum` no `.env`. O controle fica em
+`carteira/licenca.py` (`LIBERADO_EM_TESTE`), ponto único para a futura chave de licença.
 
 ## Como executar
 

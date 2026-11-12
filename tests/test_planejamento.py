@@ -24,7 +24,7 @@ def cat(c, tipo, nome):
 
 def test_modulo_bloqueado_sem_licenca(novo_app, monkeypatch):
     monkeypatch.delenv("CARTEIRA_DEMO", raising=False)
-    monkeypatch.delenv("CARTEIRA_MODULOS", raising=False)
+    monkeypatch.setenv("CARTEIRA_MODULOS", "nenhum")
     c = cliente_logado(novo_app(fonte))
     r = c.get("/api/plan/resumo")
     assert r.status_code == 403 and r.get_json()["modulo"] == "planejamento"
@@ -391,6 +391,18 @@ def test_orcamento_projecao_ir_e_alertas(novo_app, com_modulo):
 
 def test_alertas_do_modulo_somem_sem_licenca(novo_app, monkeypatch):
     monkeypatch.delenv("CARTEIRA_DEMO", raising=False)
-    monkeypatch.delenv("CARTEIRA_MODULOS", raising=False)
+    monkeypatch.setenv("CARTEIRA_MODULOS", "nenhum")
     c = cliente_logado(novo_app(fonte))
     assert not any(a["tipo"] in ("orcamento", "conta") for a in c.get("/api/alertas").get_json()["itens"])
+
+
+def test_modulos_liberados_na_fase_de_testes(monkeypatch):
+    from carteira import licenca
+    monkeypatch.delenv("CARTEIRA_DEMO", raising=False)
+    monkeypatch.delenv("CARTEIRA_MODULOS", raising=False)
+    assert licenca.modulos_ativos() == {"planejamento"}  # sem configurar nada: liberado
+    monkeypatch.setenv("CARTEIRA_MODULOS", "nenhum")
+    assert licenca.modulos_ativos() == set()
+    monkeypatch.setattr(licenca, "LIBERADO_EM_TESTE", False)
+    monkeypatch.delenv("CARTEIRA_MODULOS", raising=False)
+    assert licenca.modulos_ativos() == set()  # depois dos testes: só com a licença
