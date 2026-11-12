@@ -70,6 +70,8 @@
     ].map(([rot, val, sub]) => `<div class="card"><div class="rotulo">${rot}</div><div class="valor">${val}</div>${sub}</div>`).join("");
 
     const grupos = r.despesas_por_grupo;
+    // sem despesas: esconde a pizza vazia (fica só a mensagem)
+    $("#graf-plan-despesas").closest(".plan-pizza").classList.toggle("oculto", !grupos.length);
     grafico("graf-plan-despesas", {
       type: "doughnut",
       data: { labels: grupos.map(g => g.grupo), datasets: [{ data: grupos.map(g => g.valor), backgroundColor: grupos.map((_, i) => PALETA[i % PALETA.length]), borderWidth: 0 }] },
@@ -105,6 +107,9 @@
     ];
     $("#plan-indicadores").innerHTML = ind.map(([n, v, d]) => `<div><span>${n}</span><strong>${v}</strong><small>${d}</small></div>`).join("");
 
+    const serieVazia = r.serie.every(x => !x.receitas && !x.despesas && !x.investido);
+    $("#graf-plan-serie").classList.toggle("oculto", serieVazia);
+    $("#plan-serie-vazia").classList.toggle("oculto", !serieVazia);
     grafico("graf-plan-serie", {
       type: "bar",
       data: {
@@ -585,9 +590,13 @@
   async function carregarObjetivos() {
     try { dadosObj = await api("/api/plan/objetivos"); } catch (e) { return toast(e.message, true); }
     const d = dadosObj;
+    const semObjetivos = !d.objetivos.length;
     $("#obj-cards").innerHTML = [
-      ["Aporte necessário / mês", brl.format(d.total_necessario), "soma dos objetivos ainda não atingidos"],
-      ["Você planeja guardar", brl.format(d.total_planejado), d.total_planejado >= d.total_necessario - 0.01 ? "suficiente para todos os prazos" : `faltam ${brl.format(d.total_necessario - d.total_planejado)} por mês`],
+      ["Aporte necessário / mês", semObjetivos ? "—" : brl.format(d.total_necessario),
+        semObjetivos ? "crie um objetivo para calcular" : "soma dos objetivos ainda não atingidos"],
+      ["Você planeja guardar", semObjetivos ? "—" : brl.format(d.total_planejado),
+        semObjetivos ? "informado em cada objetivo" : d.total_planejado >= d.total_necessario - 0.01
+          ? "suficiente para todos os prazos" : `faltam ${brl.format(d.total_necessario - d.total_planejado)} por mês`],
       ["Sobra média antes de investir", d.sobra_media == null ? "—" : brl.format(d.sobra_media), "últimos 3 meses lançados no planejamento"],
       ["Custo de vida médio", d.custo_de_vida == null ? "—" : brl.format(d.custo_de_vida), "base da reserva de emergência"],
     ].map(([r, v, sub]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div><small class="var-sub">${sub}</small></div>`).join("");
