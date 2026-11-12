@@ -9,6 +9,7 @@
   const hojeLocal = () => new Date().toLocaleDateString("sv-SE");
   let mesPlan = hojeLocal().slice(0, 7);
   let categoriasPlan = [], formasPlan = {}, dadosLanc = null, tipoForm = "despesa", cartoesPlan = [], previaFatura = null;
+  let membroRecemCadastrado = null;
   let pessoasPlan = [];  // titulares possíveis (carteiras visíveis; "editar" = pode lançar para ela)
 
   const somarMes = (m, n) => {
@@ -176,9 +177,11 @@
       <span>${esc(p.nome)}</span></label>`).join("");
     if (receita && pessoasPlan.length > 1) html += `<label><input type="radio" name="titular" value="grupo" ${familia ? "checked" : ""}>
       <span>Grupo familiar</span></label>`;
+    if (USUARIO.admin) html += `<button type="button" class="pilula-nova" data-novo-membro title="Cadastrar filhos, cônjuge, pais…">+ Cadastrar membro</button>`;
     $("#pilulas-titular").innerHTML = html;
-    // com uma pessoa só e sem família, não há o que escolher
-    $("#bloco-titular").classList.toggle("so-uma-pessoa", ed.length < 2 && pessoasPlan.length < 2);
+    $("#ajuda-titular").textContent = receita
+      ? (pessoasPlan.length > 1 ? "“Grupo familiar”: renda que é da família toda (ex.: aluguel recebido)." : "")
+      : "Quem fez o pagamento. Despesas da casa podem ser marcadas como compartilhadas abaixo.";
   }
 
   function valorRadio(nome) {
@@ -207,7 +210,7 @@
     f.querySelector("[data-rotulo-valor]").textContent = rep === "parcelado" ? "Valor total da compra" : receita ? "Valor líquido recebido" : "Valor";
     f.querySelector("[data-rotulo-data]").textContent = rep === "parcelado" ? "Data da 1ª parcela" : receita ? "Data do recebimento" : "Data";
     f.querySelector("[data-rotulo-pago]").textContent = receita ? "Recebido" : "Pago";
-    f.querySelector("[data-rotulo-titular]").textContent = receita ? "Titular da receita" : "Pago por";
+    f.querySelector("[data-rotulo-titular]").textContent = receita ? "Para quem é esta receita" : "Quem pagou";
     f.descricao.placeholder = receita ? "Ex.: Salário — Empresa X" : "Ex.: Supermercado";
     $("#btn-plan-salvar").textContent = editando ? "Salvar alterações" : receita ? "Salvar receita" : "Salvar despesa";
     renderPilulasCategoria();
@@ -323,7 +326,13 @@
     document.body.classList.toggle("plan-sem-edicao", !pessoasPlan.some(p => p.editar));
     // primeiro acesso do administrador: convida a cadastrar os membros da família
     $("#aviso-membros").classList.toggle("oculto", !USUARIO.admin || pessoasPlan.some(p => p.cadastrado));
-    if (!$("#form-plan").id.value) limparForm();
+    if (membroRecemCadastrado) {  // cadastrou alguém no meio do lançamento: mantém o que foi digitado e já seleciona
+      const sel = valorRadio("titular");
+      renderTitulares(membroRecemCadastrado.id, false);
+      if (sel === "grupo") renderTitulares(null, true);
+      membroRecemCadastrado = null;
+      atualizarResumoForm();
+    } else if (!$("#form-plan").id.value) limparForm();
     renderLancamentos();
   }
 
@@ -368,12 +377,21 @@
       recs.map(r => `<tr><td><strong>${esc(r.descricao)}</strong><small class="var-sub">${r.tipo === "receita" ? "Receita" : "Despesa"} · ${esc(nomeCat(r.categoria_id))}</small></td>
         <td>${r.dia}</td><td class="${r.tipo === "receita" ? "pos" : ""}">${brl.format(r.valor)}</td>
         <td>desde ${fmtData(r.inicio + "-01").slice(3)}${r.fim ? ` até ${fmtData(r.fim + "-01").slice(3)}` : ""}</td>
-        <td>${r.fim && r.fim < dadosLanc.mes_atual ? `<span class="dica">encerrada</span>` : podeEditar(r.carteira_id) ? `<button class="link" data-plan-encerrar="${r.id}">encerrar</button>` : ""}</td></tr>`).join("")
+        <td>${r.fim && r.fim < dadosLanc.mes_atual ? `<span class="dica">encerrada</span>` : podeEditar(r.carteira_id) ? `<span><button class="link editar" data-editar-rec="${r.id}">editar</button><button class="link" data-plan-encerrar="${r.id}">encerrar</button></span>` : ""}</td></tr>`).join("")
       : `<tr><td>Nenhuma receita ou conta fixa. Ao lançar, escolha “Todo mês”.</td></tr>`;
   }
   $("#plan-filtro").addEventListener("change", renderLancamentos);
 
   document.addEventListener("click", async ev => {
+    const er = ev.target.closest("[data-editar-rec]");
+    if (er) {  // edita a ocorrência deste mês já marcando "aplicar aos próximos meses"
+      const rid = +er.dataset.editarRec;
+      const l = dadosLanc.lancamentos.find(x => x.recorrencia_id === rid && !x.projetado);
+      if (!l) return toast("Vá até um mês em que este lançamento aparece para editá-lo.", true);
+      document.querySelector(`[data-plan-editar="${l.id}"]`)?.click();
+      $("#form-plan").atualizar_proximos.checked = true;
+      return;
+    }
     const dc = ev.target.closest("[data-desfazer-conf]");
     if (dc) {
       if (!confirm("Desfazer a conferência? A compra continua lançada; ao importar a fatura de novo, a linha dela poderá ser conferida ou lançada.")) return;
@@ -1097,37 +1115,85 @@
 
   // ================= Família =================
   let dadosMembros = null;
+  const iniciais = nome => nome.trim().split(/\s+/).filter(p => p.length > 2 || p === p.toUpperCase()).slice(0, 2)
+    .map(p => p[0]).join("").toUpperCase() || nome.slice(0, 1).toUpperCase();
   async function carregarMembros() {
     dadosMembros = await api("/api/plan/membros");
     const m = dadosMembros, pode = m.pode_configurar;
-    const opcoes = sel => Object.entries(m.parentescos).map(([v, n]) => `<option value="${v}" ${v === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
-    $("#tabela-membros").innerHTML = `<tr><th>Nome</th><th>Parentesco</th><th>Divide as contas</th><th>Acesso ao sistema</th></tr>` +
-      m.membros.map(p => `<tr data-membro="${p.id}">
-        <td><input name="nome" value="${esc(p.nome)}" maxlength="60" ${pode ? "" : "disabled"}></td>
-        <td><select name="parentesco" ${pode ? "" : "disabled"}>${opcoes(p.parentesco)}</select></td>
-        <td><label class="interruptor"><input type="checkbox" name="divide" ${p.divide ? "checked" : ""} ${pode ? "" : "disabled"}><span></span></label></td>
-        <td>${p.tem_login ? `<span class="selo">com login</span>` : `<span class="dica">sem login</span>`}<small class="var-sub">${esc(p.carteira)}</small></td></tr>`).join("");
-    $("#form-membro").parentesco.innerHTML = opcoes("filho");
     document.querySelectorAll(".plan-admin").forEach(e => e.classList.toggle("oculto", !pode));
-    $("#dica-membros").textContent = pode ? (m.configurado ? "" :
-      "Confira os nomes e o parentesco e clique em Salvar membros. Para dar acesso a alguém, use Acessos e conta → Usuários.")
-      : "Só o administrador altera os membros da família.";
+    $("#lista-membros").innerHTML = m.membros.map(p => `
+      <div class="membro-card">
+        <span class="membro-avatar par-${esc(p.parentesco)}">${esc(iniciais(p.nome))}</span>
+        <div class="membro-info">
+          <strong>${esc(p.nome)} ${p.minha ? `<span class="selo">você</span>` : ""}</strong>
+          <small>${esc(m.parentescos[p.parentesco] || "Outro")}${p.idade != null ? ` · ${p.idade} ${p.idade === 1 ? "ano" : "anos"}` : ""}</small>
+          <small class="membro-tags">
+            <span class="${p.divide ? "pos" : ""}">${p.divide ? "divide as contas" : "não entra na divisão"}</span> ·
+            <span>${p.tem_login ? `login: ${esc(p.login || p.carteira)}` : "sem acesso ao sistema"}</span></small>
+        </div>
+        ${pode ? `<button type="button" class="link acao" data-editar-membro="${p.id}">editar</button>` : ""}
+      </div>`).join("");
+    const minha = m.membros.find(p => p.minha);
+    $("#dica-membros").innerHTML = !pode ? "Só o administrador altera os membros da família."
+      : minha && minha.login && minha.parentesco !== "titular" && minha.nome.split(" ")[0] !== minha.login.split(" ")[0]
+        ? `<span class="neg">Atenção:</span> o cadastro ligado ao seu login (${esc(minha.login)}) está com o nome <strong>${esc(minha.nome)}</strong>. Se foi engano, clique em editar e corrija; para cadastrar outra pessoa use “Cadastrar membro”.`
+        : !m.configurado ? "Confira o seu cadastro e cadastre os demais membros da família. Para dar login a alguém, use Acessos e conta → Usuários." : "";
   }
-  $("#btn-salvar-membros").addEventListener("click", async () => {
-    const membros = [...document.querySelectorAll("[data-membro]")].map(tr => ({ id: +tr.dataset.membro,
-      nome: tr.querySelector("[name=nome]").value, parentesco: tr.querySelector("[name=parentesco]").value,
-      divide: tr.querySelector("[name=divide]").checked }));
-    try { await api("/api/plan/membros", { method: "PUT", body: { membros } }); toast("Membros da família salvos."); carregarFamilia(); }
-    catch (e) { toast(e.message, true); }
+
+  // o cadastro abre também a partir do lançamento: o diálogo não pode ficar dentro da aba Família (oculta)
+  document.body.appendChild($("#dialogo-membro"));
+  function abrirMembro(p) {
+    const f = $("#form-membro"), m = dadosMembros;
+    f.reset();
+    f.parentesco.innerHTML = Object.entries(m.parentescos).map(([v, n]) => `<option value="${v}">${esc(n)}</option>`).join("");
+    f.id.value = p?.id || "";
+    f.nome.value = p?.nome || "";
+    f.parentesco.value = p?.parentesco || (m.membros.some(x => x.parentesco === "conjuge") ? "filho" : "conjuge");
+    f.nascimento.value = p?.nascimento || "";
+    f.divide.checked = p ? p.divide : f.parentesco.value === "conjuge";
+    $("#titulo-membro").textContent = p ? "Editar membro da família" : "Cadastrar membro da família";
+    $("#sub-membro").textContent = p ? (p.minha ? "Este é o seu cadastro." : "")
+      : "Filhos, pais e quem não usa o sistema também podem ser cadastrados.";
+    $("#login-membro").textContent = p?.tem_login ? `Acessa o sistema com o login de ${p.login || p.carteira}. Para mudar o acesso, use Acessos e conta.`
+      : p ? "Não tem acesso ao sistema: os lançamentos dele são feitos por quem tem login." : "";
+    $("#btn-remover-membro").classList.toggle("oculto", !p || p.tem_login);
+    $("#dialogo-membro").showModal();
+    f.nome.focus();
+  }
+  $("#form-membro").parentesco?.addEventListener("change", ev => {
+    if (!$("#form-membro").id.value) $("#form-membro").divide.checked = ev.target.value === "conjuge" || ev.target.value === "titular";
   });
+  document.addEventListener("click", ev => {
+    const ed = ev.target.closest("[data-editar-membro]");
+    if (ed) abrirMembro(dadosMembros.membros.find(p => p.id === +ed.dataset.editarMembro));
+    if (ev.target.closest("[data-novo-membro]") || ev.target.closest("#btn-novo-membro")) {
+      if (dadosMembros) abrirMembro(null);
+      else api("/api/plan/membros").then(r => { dadosMembros = r; abrirMembro(null); });
+    }
+  });
+  $("#btn-cancelar-membro").addEventListener("click", () => $("#dialogo-membro").close());
   $("#form-membro").addEventListener("submit", async ev => {
     ev.preventDefault();
+    const d = formDados(ev.target);
     try {
-      await api("/api/plan/membros", { method: "POST", body: formDados(ev.target) });
-      ev.target.reset(); $("#novo-membro").open = false;
-      toast("Membro adicionado. Ele já pode ser escolhido como titular nos lançamentos.");
-      await carregarCarteiras?.(carteiraAtual);
-      carregarFamilia();
+      if (d.id) await api(`/api/plan/membros/${d.id}`, { method: "PUT", body: d });
+      else membroRecemCadastrado = await api("/api/plan/membros", { method: "POST", body: d });
+      $("#dialogo-membro").close();
+      toast(d.id ? "Cadastro atualizado." : `${d.nome} foi cadastrado(a) e já aparece nos lançamentos.`);
+      if (!d.id) await carregarCarteiras?.(carteiraAtual);
+      dadosMembros = null;
+      recarregar();
+    } catch (e) { toast(e.message, true); }
+  });
+  $("#btn-remover-membro").addEventListener("click", async () => {
+    const f = $("#form-membro");
+    if (!confirm(`Remover ${f.nome.value} da família? Os lançamentos já feitos continuam guardados.`)) return;
+    try {
+      await api(`/api/plan/membros/${f.id.value}`, { method: "DELETE" });
+      $("#dialogo-membro").close();
+      toast("Membro removido da família.");
+      dadosMembros = null;
+      recarregar();
     } catch (e) { toast(e.message, true); }
   });
 

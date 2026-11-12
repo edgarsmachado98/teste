@@ -68,12 +68,23 @@ def registrar(app, ctx):
         out = []
         for c in ctx.carteiras_visiveis():
             m = membros.get(c["id"])
+            if m is not None and not m["ativo"]:
+                continue  # removido da família (os lançamentos continuam guardados)
             out.append({"id": c["id"], "nome": (m["nome"] if m else None) or c.get("dono_nome") or c["nome"],
                         "carteira": c["nome"], "parentesco": m["parentesco"] if m else "titular",
                         "divide": bool(m["divide"]) if m else True, "cadastrado": m is not None,
-                        "tem_login": c.get("dono_id") is not None,
+                        "nascimento": m["nascimento"] if m else None, "idade": idade(m["nascimento"] if m else None),
+                        "tem_login": c.get("dono_id") is not None, "login": c.get("dono_nome"),
                         "editar": bool(c["permissoes"]["editar"]), "minha": c.get("dono_id") == ctx.usuario_id()})
         return out
+
+    def idade(nascimento):
+        try:
+            n = dt.date.fromisoformat(nascimento or "")
+        except ValueError:
+            return None
+        h = dt.date.fromisoformat(ctx.hoje())
+        return h.year - n.year - ((h.month, h.day) < (n.month, n.day))
 
     def editaveis():
         return [p for p in pessoas() if p["editar"]]
@@ -670,21 +681,68 @@ def registrar(app, ctx):
         conn.commit()
         return jsonify({"ok": True})
 
+    def ler_membro(d):
+        nome = (d.get("nome") or "").strip()[:60]
+        if not nome:
+            raise ValueError("Informe o nome do membro da família.")
+        nasc = (d.get("nascimento") or "").strip()[:10] or None
+        if nasc:
+            try:
+                if dt.date.fromisoformat(nasc) > dt.date.fromisoformat(ctx.hoje()):
+                    raise ValueError
+            except ValueError:
+                raise ValueError("Data de nascimento inválida.") from None
+        return {"nome": nome, "parentesco": d.get("parentesco") if d.get("parentesco") in plan.PARENTESCOS else "outro",
+                "nascimento": nasc, "divide": 1 if d.get("divide") else 0}
+
     @app.post("/api/plan/membros")
     def plan_novo_membro():
         """Membro da família sem login (filhos, pais...): ganha uma carteira própria para os lançamentos."""
         if not ctx.eh_admin():
             return erro("Apenas o administrador cadastra os membros da família.", 403)
-        d = request.get_json(silent=True) or {}
-        nome = (d.get("nome") or "").strip()[:60]
-        if not nome:
-            return erro("Informe o nome do membro da família.")
-        parentesco = d.get("parentesco") if d.get("parentesco") in plan.PARENTESCOS else "outro"
-        cid = ctx.criar_carteira(f"Carteira {nome}", None)
-        conn.execute("INSERT INTO fin_membros (carteira_id, nome, parentesco, divide) VALUES (?, ?, ?, ?)",
-                     (cid, nome, parentesco, 1 if d.get("divide") else 0))
+        try:
+            m = ler_membro(request.get_json(silent=True) or {})
+        except ValueError as e:
+            return erro(str(e))
+        cid = ctx.criar_carteira(f"Carteira {m['nome']}", None)
+        conn.execute("INSERT INTO fin_membros (carteira_id, nome, parentesco, divide, nascimento) VALUES (?, ?, ?, ?, ?)",
+                     (cid, m["nome"], m["parentesco"], m["divide"], m["nascimento"]))
+        salvar_config("membros_configurados", True)
         conn.commit()
         return jsonify({"ok": True, "id": cid}), 201
+
+    @app.put("/api/plan/membros/<int:cid>")
+    def plan_editar_membro(cid):
+        if not ctx.eh_admin():
+            return erro("Apenas o administrador cadastra os membros da família.", 403)
+        if cid not in {p["id"] for p in pessoas()}:
+            return erro("Membro não encontrado.", 404)
+        try:
+            m = ler_membro(request.get_json(silent=True) or {})
+        except ValueError as e:
+            return erro(str(e))
+        conn.execute("""INSERT INTO fin_membros (carteira_id, nome, parentesco, divide, nascimento) VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(carteira_id) DO UPDATE SET nome = excluded.nome, parentesco = excluded.parentesco,
+                        divide = excluded.divide, nascimento = excluded.nascimento, ativo = 1""",
+                     (cid, m["nome"], m["parentesco"], m["divide"], m["nascimento"]))
+        salvar_config("membros_configurados", True)
+        conn.commit()
+        return jsonify({"ok": True})
+
+    @app.delete("/api/plan/membros/<int:cid>")
+    def plan_remover_membro(cid):
+        """Tira o membro da família. Os lançamentos dele ficam guardados; quem tem login sai em Acessos e conta."""
+        if not ctx.eh_admin():
+            return erro("Apenas o administrador cadastra os membros da família.", 403)
+        p = next((x for x in pessoas() if x["id"] == cid), None)
+        if p is None:
+            return erro("Membro não encontrado.", 404)
+        if p["tem_login"]:
+            return erro("Este membro tem login no sistema. Para tirar o acesso dele, use Acessos e conta.")
+        conn.execute("""INSERT INTO fin_membros (carteira_id, nome, parentesco, divide, ativo) VALUES (?, ?, ?, 0, 0)
+                        ON CONFLICT(carteira_id) DO UPDATE SET ativo = 0, divide = 0""", (cid, p["nome"], p["parentesco"]))
+        conn.commit()
+        return jsonify({"ok": True})
 
     # ================================================================ fase 4: objetivos
     CAMPOS_OBJ = ("tipo", "nome", "valor_alvo", "data_alvo", "valor_guardado", "aporte_mensal", "rentabilidade",

@@ -178,6 +178,10 @@ def preparar(conn):
                               ("nota_id", "INTEGER REFERENCES fin_notas(id) ON DELETE SET NULL")):  # veio de uma NFC-e
         if coluna not in colunas:
             conn.execute(f"ALTER TABLE fin_lancamentos ADD COLUMN {coluna} {definicao}")
+    cols_membros = {r["name"] for r in conn.execute("PRAGMA table_info(fin_membros)")}
+    for coluna, definicao in (("nascimento", "TEXT"), ("ativo", "INTEGER NOT NULL DEFAULT 1")):
+        if coluna not in cols_membros:
+            conn.execute(f"ALTER TABLE fin_membros ADD COLUMN {coluna} {definicao}")
     if "compartilhado" not in {r["name"] for r in conn.execute("PRAGMA table_info(fin_recorrencias)")}:
         conn.execute("ALTER TABLE fin_recorrencias ADD COLUMN compartilhado INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS fin_lanc_chave ON fin_lancamentos (carteira_id, chave_import)")

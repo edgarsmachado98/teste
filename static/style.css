@@ -844,3 +844,32 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .aviso-reiniciar { position: sticky; top: 0; z-index: 200; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center;
   padding: 12px 20px; background: #fff4d6; color: #5c4300; border-bottom: 1px solid #e8c56a; font-size: .9rem; }
 .aviso-reiniciar kbd, .aviso-reiniciar code { background: rgba(0,0,0,.07); border-radius: 4px; padding: 1px 5px; font-size: .84rem; }
+
+/* ---------- Membros da família ---------- */
+.lista-membros { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+.membro-card { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio);
+  background: var(--painel); text-align: left; font: inherit; color: inherit; }
+.membro-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.membro-info strong { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.membro-info small { color: var(--texto-2); font-size: .8rem; }
+.membro-tags { font-size: .76rem !important; }
+.membro-avatar { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 650;
+  font-size: .9rem; background: var(--painel-2); color: var(--texto-2); border: 1px solid var(--borda); }
+.membro-avatar.par-titular { background: #e3efe9; color: #0f5c45; border-color: #c4ddd1; }
+.membro-avatar.par-conjuge { background: #f6e6ea; color: #8a2e47; border-color: #ebcbd4; }
+.membro-avatar.par-filho { background: #e6edf8; color: #2b4f8a; border-color: #cbd8ef; }
+.membro-avatar.par-pai_mae { background: #f5efe0; color: #7a5a12; border-color: #e7dcbd; }
+.membro-novo { border-style: dashed; cursor: pointer; background: transparent; }
+.membro-novo:hover { background: var(--painel-2); }
+.membro-novo > span:last-child { display: flex; flex-direction: column; font-weight: 600; }
+.membro-novo small { font-weight: 400; color: var(--texto-2); font-size: .8rem; }
+.membro-novo .membro-avatar { font-size: 1.3rem; font-weight: 400; }
+#painel-membros .cabecalho-painel .btn { display: inline-flex; align-items: center; gap: 6px; }
+.form-membro-campos { display: grid; gap: 12px; margin-bottom: 18px; }
+.form-membro-campos > label { display: grid; gap: 4px; font-size: .86rem; color: var(--texto-2); }
+.linha-interruptor { display: flex !important; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer;
+  padding: 10px 12px; border: 1px solid var(--borda); border-radius: var(--raio-p); }
+.linha-interruptor > span:first-child { display: flex; flex-direction: column; gap: 2px; color: var(--texto); }
+.linha-interruptor small { color: var(--texto-2); font-size: .78rem; }
+.pilulas > .pilula-nova { border-style: dashed !important; color: var(--primaria); background: transparent; }
+:root[data-theme="dark"] .membro-avatar[class*="par-"] { filter: brightness(.8) saturate(.9); }

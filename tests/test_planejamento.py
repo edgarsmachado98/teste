@@ -538,3 +538,23 @@ def test_api_conciliacao_com_a_fatura(novo_app, com_modulo):
     p3 = c.post("/api/plan/fatura/previa", content_type="multipart/form-data",
                 data={"arquivo": (io.BytesIO(OFX.encode()), "fatura.ofx"), "cartao_id": cartao}).get_json()
     assert next(i for i in p3["itens"] if i["descricao"].startswith("IFOOD"))["conciliacao"]["tipo"] == "exato"
+
+
+def test_cadastro_de_membros(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    r = c.post("/api/plan/membros", json={"nome": "Lucas Machado", "parentesco": "filho", "nascimento": "2015-03-10"})
+    lid = r.get_json()["id"]
+    m = next(p for p in c.get("/api/plan/membros").get_json()["membros"] if p["id"] == lid)
+    assert (m["nome"], m["parentesco"], m["divide"], m["tem_login"]) == ("Lucas Machado", "filho", False, False)
+    assert m["idade"] >= 10
+    assert c.post("/api/plan/membros", json={"nome": "X", "nascimento": "2999-01-01"}).status_code == 400
+    assert c.put(f"/api/plan/membros/{lid}", json={"nome": "Lucas", "parentesco": "filho", "divide": True}).status_code == 200
+    m = next(p for p in c.get("/api/plan/membros").get_json()["membros"] if p["id"] == lid)
+    assert m["nome"] == "Lucas" and m["divide"] and m["nascimento"] is None
+    # despesa paga pelo membro
+    assert c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": "2026-11-05", "valor": 50,
+                                                 "carteira_id": lid}).status_code == 201
+    minha = next(p for p in c.get("/api/plan/membros").get_json()["membros"] if p["minha"])
+    assert "login" in c.delete(f"/api/plan/membros/{minha['id']}").get_json()["erro"]  # quem tem login não sai por aqui
+    assert c.delete(f"/api/plan/membros/{lid}").status_code == 200
+    assert lid not in {p["id"] for p in c.get("/api/plan/membros").get_json()["membros"]}

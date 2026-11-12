@@ -82,6 +82,7 @@
         <div class="lanc-bloco" id="bloco-titular">
           <span class="lanc-rotulo" data-rotulo-titular>Titular</span>
           <div class="pilulas" id="pilulas-titular"></div>
+          <small class="lanc-ajuda" id="ajuda-titular"></small>
           <div class="so-despesa lanc-sub">
             <span class="lanc-rotulo">Tipo de despesa</span>
             <div class="pilulas">
@@ -314,24 +315,36 @@
     <div class="painel" id="painel-membros">
       <div class="cabecalho-painel">
         <div><h3>Membros da família</h3>
-          <p class="dica" style="margin:0">Quem faz parte do planejamento. Cada membro é titular das próprias receitas e despesas.
-            Membros sem acesso ao sistema (filhos, pais) também podem ser cadastrados.</p></div>
+          <p class="dica" style="margin:0">Quem faz parte do planejamento. Cada membro aparece como opção de “quem pagou” nas despesas
+            e de “para quem é” nas receitas.</p></div>
+        <button type="button" class="btn plan-admin" id="btn-novo-membro">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Cadastrar membro</button>
       </div>
-      <div class="rolagem"><table id="tabela-membros" class="tabela-membros"></table></div>
-      <div class="membros-acoes plan-admin">
-        <button type="button" class="btn btn-pequeno" id="btn-salvar-membros">Salvar membros</button>
-        <details id="novo-membro">
-          <summary class="link acao">+ Adicionar membro sem acesso ao sistema</summary>
-          <form id="form-membro" class="form-linha" style="margin-top:10px">
-            <label>Nome <input name="nome" required maxlength="60" placeholder="Ex.: Lucas"></label>
-            <label>Parentesco <select name="parentesco"></select></label>
-            <label class="check"><input type="checkbox" name="divide"> Participa da divisão das contas</label>
-            <button type="submit" class="secundario">Adicionar</button>
-          </form>
-        </details>
-      </div>
+      <div class="lista-membros" id="lista-membros"></div>
       <p class="dica" id="dica-membros"></p>
     </div>
+    <dialog id="dialogo-membro" class="dialogo">
+      <form id="form-membro" method="dialog" autocomplete="off">
+        <h3 id="titulo-membro">Cadastrar membro da família</h3>
+        <p id="sub-membro">Filhos, pais e quem não usa o sistema também podem ser cadastrados.</p>
+        <input type="hidden" name="id">
+        <div class="form-membro-campos">
+          <label>Nome completo <input name="nome" required maxlength="60" placeholder="Ex.: Lucas Machado"></label>
+          <label>Parentesco <select name="parentesco"></select></label>
+          <label><span>Data de nascimento <small class="dica">(opcional)</small></span> <input type="date" name="nascimento"></label>
+          <label class="linha-interruptor"><span><strong>Participa da divisão das contas</strong>
+            <small>As despesas compartilhadas são divididas entre quem participa.</small></span>
+            <span class="interruptor"><input type="checkbox" name="divide"><span></span></span></label>
+          <p class="dica" id="login-membro"></p>
+        </div>
+        <div class="dialogo-acoes">
+          <button type="button" class="link" id="btn-remover-membro">Remover da família</button>
+          <span style="flex:1"></span>
+          <button type="button" class="secundario" id="btn-cancelar-membro">Cancelar</button>
+          <button type="submit" class="btn">Salvar</button>
+        </div>
+      </form>
+    </dialog>
     <div class="cards" id="fam-cards"></div>
     <div class="grade2">
       <div class="painel">
