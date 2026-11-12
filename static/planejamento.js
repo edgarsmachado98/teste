@@ -1,6 +1,11 @@
 // Módulo adicional: Planejamento financeiro (carregado só quando o módulo está ativo na licença).
 // Usa as funções do app base (api, brl, esc, grafico, toast...).
 (function () {
+  // a página veio de uma versão anterior do programa (servidor não reiniciado após a atualização)
+  if (!document.getElementById("painel-nfce") || !document.getElementById("pilulas-forma")) {
+    if (typeof avisoReiniciar === "function") avisoReiniciar();
+    return;
+  }
   const hojeLocal = () => new Date().toLocaleDateString("sv-SE");
   let mesPlan = hojeLocal().slice(0, 7);
   let categoriasPlan = [], formasPlan = {}, dadosLanc = null, tipoForm = "despesa", cartoesPlan = [], previaFatura = null;

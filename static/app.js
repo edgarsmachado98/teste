@@ -1633,8 +1633,18 @@ function aplicarPermissoes() {
   $("#selo-permissao").textContent = carteiraAtual === FAMILIA ? "visão consolidada" : carteiraAtual ? ROTULO_PERM(p) : "";
 }
 
+// Atualização baixada com o programa ainda aberto: telas antigas na memória do servidor e scripts novos no disco
+function avisoReiniciar() {
+  if (document.getElementById("aviso-reiniciar")) return;
+  document.body.insertAdjacentHTML("afterbegin", `<div id="aviso-reiniciar" class="aviso-reiniciar" role="alert">
+    <strong>Há uma atualização baixada que ainda não está em uso.</strong>
+    <span>Feche o programa (na janela preta, aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>), abra de novo com <code>python app.py</code>
+      e recarregue esta página com <kbd>Ctrl</kbd>+<kbd>F5</kbd>.</span></div>`);
+}
+
 async function carregarCarteiras(preferida) {
   const r = await api("/api/eu");
+  if (r.reiniciar) avisoReiniciar();
   carteiras = r.carteiras;
   let salva = null;
   try { salva = localStorage.getItem("carteira"); salva = salva === FAMILIA ? FAMILIA : Number(salva); }

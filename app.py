@@ -67,8 +67,30 @@ LIMITE_DESVIO = float(os.environ.get("CARTEIRA_LIMITE_DESVIO") or 5)        # po
 BLOQUEIO_SEG = 300
 
 
+RAIZ = os.path.dirname(os.path.abspath(__file__))
+
+
+def versao_codigo():
+    """Assinatura dos arquivos do sistema (data da última alteração). Muda a cada atualização baixada."""
+    maior = 0.0
+    for pasta, exts in (("", (".py",)), ("carteira", (".py",)), ("templates", (".html",)), ("static", (".js", ".css"))):
+        caminho = os.path.join(RAIZ, pasta)
+        try:
+            nomes = os.listdir(caminho)
+        except OSError:
+            continue
+        for n in nomes:
+            if n.endswith(exts):
+                try:
+                    maior = max(maior, os.path.getmtime(os.path.join(caminho, n)))
+                except OSError:
+                    pass
+    return str(int(maior))
+
+
 def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None, fonte_tesouro=None):
     app = Flask(__name__)
+    versao_inicio = versao_codigo()  # se os arquivos mudarem com o programa aberto, ele avisa para reiniciar
     app.secret_key = secret_key or chave_secreta(db_path)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                       PERMANENT_SESSION_LIFETIME=dt.timedelta(days=14),
@@ -221,7 +243,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     def api_eu():
         return jsonify({"usuario": auth.publico(g.usuario),
                         "carteiras": auth.carteiras_do_usuario(conn, g.usuario),
-                        "modulos": licenca.descrever()})
+                        "modulos": licenca.descrever(),
+                        "reiniciar": versao_codigo() != versao_inicio})
 
     @app.post("/api/eu/senha")
     def api_alterar_senha():
@@ -522,7 +545,8 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     def index():
         return render_template("index.html", classes=portfolio.CLASSES, indexadores=rendafixa.INDEXADORES,
                                tipos_provento=portfolio.TIPOS_PROVENTO, demo=modo_demo(),
-                               usuario=auth.publico(g.usuario), modulos=licenca.modulos_ativos())
+                               usuario=auth.publico(g.usuario), modulos=licenca.modulos_ativos(),
+                               versao=versao_inicio)
 
     # ---------- Ativos ----------
     @app.get("/api/ativos")
@@ -1740,12 +1764,26 @@ def cotacoes_automaticas(app):
     threading.Thread(target=laco, name="cotacoes", daemon=True).start()
 
 
+def porta_ocupada(porta):
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", porta)) == 0
+
+
 if __name__ == "__main__":
+    porta = int(os.environ.get("PORT", 5000))
+    if porta_ocupada(porta):
+        # no Windows dois servidores podem ficar na mesma porta e o antigo continua respondendo
+        print(f"\nJá existe uma Carteira de Aportes aberta na porta {porta}.\n"
+              "Feche a outra janela do programa (Ctrl+C nela) ou finalize o python.exe no Gerenciador de Tarefas,\n"
+              "e rode python app.py de novo. Assim a versão nova é a que fica no ar.\n")
+        raise SystemExit(1)
     aplicacao = create_app()
     if os.environ.get("CARTEIRA_BACKUP", "1") != "0":
         backup.iniciar_automatico(aplicacao.config["conn"].path)
     notificacoes.iniciar_automatico(aplicacao)
     if os.environ.get("CARTEIRA_ATUALIZACAO_AUTOMATICA", "1") != "0":
         cotacoes_automaticas(aplicacao)
-    aplicacao.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
+    aplicacao.run(host="0.0.0.0", port=porta,
                   debug=os.environ.get("FLASK_DEBUG") == "1")

@@ -11,8 +11,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Carteira">
   <script>try { var t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="{{ url_for('static', filename='tema.js') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=versao) }}">
+  <script src="{{ url_for('static', filename='tema.js', v=versao) }}" defer></script>
   <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 </head>
 <body>
@@ -693,7 +693,7 @@
 </div>
 <div id="toast"></div>
 <script>window.USUARIO = {{ usuario|tojson }}; window.CLASSES = {{ classes|tojson }}; window.TIPOS_PROVENTO = {{ tipos_provento|tojson }};</script>
-<script src="{{ url_for('static', filename='app.js') }}"></script>
-{% if "planejamento" in modulos %}<script src="{{ url_for('static', filename='planejamento.js') }}"></script>{% endif %}
+<script src="{{ url_for('static', filename='app.js', v=versao) }}"></script>
+{% if "planejamento" in modulos %}<script src="{{ url_for('static', filename='planejamento.js', v=versao) }}"></script>{% endif %}
 </body>
 </html>

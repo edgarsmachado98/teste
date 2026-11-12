@@ -840,3 +840,7 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
   .nfce-total { text-align: left; }
   .nfce-entrada > button { width: 100%; justify-content: center; }
 }
+
+.aviso-reiniciar { position: sticky; top: 0; z-index: 200; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center;
+  padding: 12px 20px; background: #fff4d6; color: #5c4300; border-bottom: 1px solid #e8c56a; font-size: .9rem; }
+.aviso-reiniciar kbd, .aviso-reiniciar code { background: rgba(0,0,0,.07); border-radius: 4px; padding: 1px 5px; font-size: .84rem; }
