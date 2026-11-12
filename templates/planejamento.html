@@ -138,6 +138,26 @@
       </details>
     </div>
 
+    <div class="painel plan-editavel" id="painel-nfce">
+      <div class="cabecalho-painel">
+        <div><h3>Lançar pela nota fiscal</h3>
+          <p class="dica" style="margin:0">Fotografe o <strong>QR Code</strong> do cupom (mercado, posto, farmácia…). O sistema
+            consulta a nota na Sefaz e já traz a loja, o valor, os itens e a forma de pagamento.</p></div>
+      </div>
+      <div class="nfce-entrada">
+        <input type="file" id="foto-nfce" accept="image/*" multiple hidden>
+        <button type="button" class="btn" id="btn-foto-nfce">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <span>Fotografar ou escolher fotos</span></button>
+        <form id="form-nfce-texto" class="nfce-colar">
+          <input name="texto" placeholder="ou cole o link do QR Code / a chave de acesso (44 números)" autocomplete="off">
+          <button type="submit" class="secundario">Ler</button>
+        </form>
+      </div>
+      <p class="dica nfce-dica">Dica: pode enviar várias fotos de uma vez, uma por cupom. Basta o QR Code aparecer inteiro e nítido.</p>
+      <div id="previa-nfce"></div>
+    </div>
+
     <div class="painel plan-editavel" id="painel-fatura">
       <div class="cabecalho-painel">
         <div><h3>Importar fatura do cartão</h3>

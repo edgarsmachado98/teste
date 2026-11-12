@@ -340,7 +340,8 @@
         const selos = [aguardando ? "aguardando fatura" : "", l.conferido_em ? "✓ conferido com a fatura" : "",
           l.recorrencia_id ? "mensal" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
           l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "compartilhada") : "", l.projetado ? "previsto" : ""]
-          .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ");
+          .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ") +
+          (l.nota_id ? ` <button type="button" class="selo selo-nota" data-ver-nota="${l.nota_id}" title="Ver os itens da nota">🧾 nota fiscal</button>` : "");
         const situacao = l.projetado ? `<span class="dica">previsto</span>`
           : l.pago ? `<span class="pos">${l.tipo === "receita" ? "recebido" : "pago"}</span>`
           : podeEditar(l.carteira_id) ? `<button type="button" class="link acao" data-pagar="${l.id}">marcar ${l.tipo === "receita" ? "recebido" : "pago"}</button>`
@@ -421,6 +422,258 @@
         carregarLancamentos();
       } catch (e) { toast(e.message, true); }
     }
+  });
+
+  // ---------------- Nota fiscal (NFC-e) pelo QR Code ----------------
+  let notasNfce = [], falhasNfce = [], promessaJsQR = null;
+  const valorBR = v => (v == null ? "" : Number(v).toFixed(2).replace(".", ","));
+
+  function carregarJsQR() {
+    return (promessaJsQR ||= new Promise((ok, falha) => {
+      const s = document.createElement("script");
+      s.src = "/static/vendor/jsQR.js";
+      s.onload = () => ok(window.jsQR);
+      s.onerror = () => { promessaJsQR = null; falha(new Error("jsQR")); };
+      document.head.appendChild(s);
+    }));
+  }
+
+  // lê o QR Code no próprio aparelho (a foto nem precisa ser enviada); se não achar, a foto vai para o servidor
+  async function lerQrNoAparelho(arquivo) {
+    let bmp;
+    try { bmp = await createImageBitmap(arquivo, { imageOrientation: "from-image" }); } catch { return null; }
+    if ("BarcodeDetector" in window) {
+      try {
+        const r = await new BarcodeDetector({ formats: ["qr_code"] }).detect(bmp);
+        if (r[0]?.rawValue) return r[0].rawValue;
+      } catch { /* sem suporte: segue com o jsQR */ }
+    }
+    let jsQR;
+    try { jsQR = await carregarJsQR(); } catch { return null; }
+    const tela = document.createElement("canvas"), g = tela.getContext("2d", { willReadFrequently: true });
+    // [x, y, largura, altura] em fração da foto e o tamanho máximo do recorte
+    for (const [fx, fy, fw, fh, alvo] of [[0, 0, 1, 1, 1200], [0, 0.45, 1, 0.55, 1500], [0, 0, 1, 1, 2000], [0, 0, 1, 1, 800]]) {
+      const sw = bmp.width * fw, sh = bmp.height * fh, f = Math.min(1, alvo / Math.max(sw, sh));
+      tela.width = Math.round(sw * f); tela.height = Math.round(sh * f);
+      g.drawImage(bmp, bmp.width * fx, bmp.height * fy, sw, sh, 0, 0, tela.width, tela.height);
+      const img = g.getImageData(0, 0, tela.width, tela.height);
+      const r = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" });
+      if (r?.data) return r.data;
+    }
+    return null;
+  }
+
+  // fotos do celular têm vários MB: reduz antes de enviar (o servidor tenta de novo com outro leitor)
+  async function reduzirFoto(arquivo) {
+    try {
+      const bmp = await createImageBitmap(arquivo, { imageOrientation: "from-image" });
+      const f = Math.min(1, 2600 / Math.max(bmp.width, bmp.height));
+      const tela = document.createElement("canvas");
+      tela.width = Math.round(bmp.width * f); tela.height = Math.round(bmp.height * f);
+      tela.getContext("2d").drawImage(bmp, 0, 0, tela.width, tela.height);
+      const blob = await new Promise(ok => tela.toBlob(ok, "image/jpeg", 0.9));
+      return blob || arquivo;
+    } catch { return arquivo; }
+  }
+
+  async function lerNotas(arquivos, textos = []) {
+    if (!arquivos.length && !textos.length) return;
+    const destino = $("#previa-nfce");
+    const status = document.createElement("p");
+    status.className = "dica nfce-lendo";
+    status.textContent = arquivos.length ? `Procurando o QR Code em ${arquivos.length} foto(s)…` : "Consultando a nota na Sefaz…";
+    destino.prepend(status);
+    const fd = new FormData();
+    textos.forEach(t => fd.append("texto", t));
+    for (const a of arquivos) {
+      const t = await lerQrNoAparelho(a);
+      if (t) fd.append("texto", t);
+      else fd.append("foto", await reduzirFoto(a), a.name || "foto.jpg");
+    }
+    status.textContent = "Consultando a nota na Sefaz…";
+    try {
+      await garantirCategorias();
+      if (!cartoesPlan.length) await carregarCartoes().catch(() => {});
+      const r = await fetch("/api/plan/nfce/ler", { method: "POST", body: fd,
+        headers: { "X-Requested-With": "fetch", "X-Carteira": String(carteiraAtual) } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.erro || `Erro ${r.status}`);
+      const chaves = new Set(notasNfce.map(n => n.chave));
+      j.notas.filter(n => !chaves.has(n.chave)).forEach(n => {
+        n.pagamentos = n.pagamentos.length ? n.pagamentos : [{ forma: null, valor: n.total }];
+        if (n.pagamentos.length === 1 && n.pagamentos[0].valor == null) n.pagamentos[0].valor = n.total;
+        notasNfce.push(n);
+      });
+      falhasNfce = j.falhas;
+      renderNotas();
+      if (j.notas.length) toast(`${j.notas.length} nota(s) lida(s). Confira e clique em Lançar.`);
+    } catch (e) { toast(e.message, true); }
+    finally { status.remove(); }
+  }
+
+  function opcoesForma(sel) {
+    return `<option value="">Forma de pagamento…</option>` + Object.entries(formasPlan).map(([v, n]) =>
+      `<option value="${v}" ${v === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
+  }
+
+  function linhaPagamento(p, k, j) {
+    const cartaoUnico = cartoesPlan.length === 1 ? cartoesPlan[0].id : null;
+    return `<div class="nfce-pag" data-pag="${j}">
+      <select data-campo="forma" aria-label="Forma de pagamento">${opcoesForma(p.forma)}</select>
+      <label class="nfce-valor"><span>R$</span><input data-campo="valor" inputmode="decimal" value="${valorBR(p.valor)}" aria-label="Valor"></label>
+      <select data-campo="cartao_id" class="${p.forma === "credito" ? "" : "oculto"}" aria-label="Cartão">
+        <option value="">${cartoesPlan.length ? "Qual cartão?" : "Cadastre o cartão na fatura abaixo"}</option>
+        ${cartoesPlan.map(c => `<option value="${c.id}" ${c.id === (p.cartao_id || cartaoUnico) ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>
+      ${p.forma_texto && !p.forma ? `<small class="dica">no cupom: ${esc(p.forma_texto)}</small>` : ""}
+      ${j > 0 ? `<button type="button" class="link" data-nfce-tirar-pag="${k}:${j}">remover</button>` : ""}
+    </div>`;
+  }
+
+  function renderNotas() {
+    const ed = pessoasPlan.filter(p => p.editar);
+    const minha = (ed.find(p => p.id === carteiraAtual) || ed.find(p => p.minha) || ed[0])?.id;
+    $("#previa-nfce").innerHTML = (falhasNfce.length ? `<div class="aviso nfce-falhas">${falhasNfce.map(f =>
+        `<div><strong>${esc(f.origem)}</strong>: ${esc(f.motivo)}</div>`).join("")}</div>` : "") +
+      notasNfce.map((n, k) => {
+        const credito = n.pagamentos.some(p => p.forma === "credito");
+        const comb = n.combustivel;
+        return `<div class="nfce-card" data-nfce="${k}">
+          <div class="nfce-topo">
+            <div><strong>${esc(n.descricao)}</strong>
+              <small class="var-sub">${n.cnpj_formatado ? `CNPJ ${esc(n.cnpj_formatado)} · ` : ""}${esc(n.uf)} · cupom nº ${n.numero}${n.data ? ` · ${fmtData(n.data.slice(0, 10))}${n.data.length > 10 ? " às " + n.data.slice(11, 16) : ""}` : ""}</small></div>
+            <div class="nfce-total">${n.total != null ? brl.format(n.total) : "valor a conferir"}
+              ${n.desconto ? `<small class="var-sub pos">desconto de ${brl.format(n.desconto)}</small>` : ""}</div>
+          </div>
+          ${n.ja_lancada ? `<p class="aviso">Esta nota já foi lançada${n.ja_lancada.data ? ` (${fmtData(n.ja_lancada.data)})` : ""}. Lançar de novo vai duplicar a despesa.</p>` : ""}
+          ${n.aviso ? `<p class="aviso nfce-aviso">${esc(n.aviso)}</p>` : ""}
+          ${comb ? `<p class="dica nfce-comb">⛽ ${String(comb.litros).replace(".", ",")} L de ${esc(comb.produto.toLowerCase())} a ${brl.format(comb.preco_litro)}/L</p>` : ""}
+          <div class="nfce-campos">
+            <label>Descrição <input data-campo="descricao" value="${esc(n.descricao)}" maxlength="120"></label>
+            <label>Data <input type="date" data-campo="data" value="${(n.data || hojeLocal()).slice(0, 10)}"></label>
+            <label>Categoria <select data-campo="categoria_id" class="${n.categoria_id ? "" : "sem-categoria"}">${opcoesCategoria("despesa", n.categoria_id)}</select>
+              ${n.origem_categoria ? `<small class="var-sub">${n.origem_categoria === "aprendida" ? "como da última vez nesta loja" : "sugestão automática"}</small>` : ""}</label>
+            ${ed.length > 1 ? `<label>Quem pagou <select data-campo="carteira_id">${ed.map(p =>
+              `<option value="${p.id}" ${p.id === minha ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select></label>` : ""}
+          </div>
+          ${pessoasPlan.length > 1 ? `<label class="check nfce-familia"><input type="checkbox" data-campo="compartilhado"> Conta da família (entra na divisão do casal)</label>` : ""}
+          <div class="nfce-pagamentos"><span class="rotulo-campo">Pagamento</span>
+            ${n.pagamentos.map((p, j) => linhaPagamento(p, k, j)).join("")}
+            <button type="button" class="link acao" data-nfce-mais-pag="${k}">+ pagou com mais de uma forma</button>
+          </div>
+          ${credito ? `<p class="dica nfce-credito">A parte no crédito fica <strong>aguardando a fatura</strong>; ao importar a fatura do cartão, o sistema confere e não lança de novo.</p>` : ""}
+          ${n.itens.length ? `<details class="nfce-itens"><summary>Ver os ${n.itens.length} itens</summary>${tabelaItens(n.itens)}</details>` : ""}
+          <div class="nfce-acoes">
+            <button type="button" class="btn" data-nfce-lancar="${k}">Lançar despesa</button>
+            <button type="button" class="link" data-nfce-descartar="${k}">descartar</button>
+          </div>
+        </div>`;
+      }).join("");
+  }
+
+  function tabelaItens(itens) {
+    return `<div class="rolagem"><table class="tabela-itens-nota"><tr><th>Produto</th><th>Qtde.</th><th>Unitário</th><th>Total</th></tr>
+      ${itens.map(i => `<tr><td>${esc(i.descricao)}</td><td>${i.qtd != null ? String(i.qtd).replace(".", ",") : ""} ${esc(i.un || "")}</td>
+        <td>${i.unitario != null ? brl.format(i.unitario) : ""}</td><td>${i.valor != null ? brl.format(i.valor) : ""}</td></tr>`).join("")}</table></div>`;
+  }
+
+  // guarda o que foi digitado antes de redesenhar os cartões
+  function lerCard(k) {
+    const card = $(`[data-nfce="${k}"]`), n = notasNfce[k];
+    if (!card) return n;
+    const campo = c => card.querySelector(`.nfce-campos [data-campo="${c}"], .nfce-familia [data-campo="${c}"]`);
+    n.descricao = campo("descricao").value;
+    n.data_lanc = campo("data").value;
+    n.categoria_id = +campo("categoria_id").value || null;
+    n.carteira_id = campo("carteira_id") ? +campo("carteira_id").value : null;
+    n.compartilhado = campo("compartilhado") ? campo("compartilhado").checked : false;
+    n.pagamentos = [...card.querySelectorAll(".nfce-pag")].map((el, j) => ({
+      ...n.pagamentos[j], forma: el.querySelector('[data-campo="forma"]').value || null,
+      valor: el.querySelector('[data-campo="valor"]').value, cartao_id: +el.querySelector('[data-campo="cartao_id"]').value || null }));
+    return n;
+  }
+  const lerTodos = () => notasNfce.forEach((_, k) => lerCard(k));
+
+  $("#btn-foto-nfce").addEventListener("click", () => $("#foto-nfce").click());
+  $("#foto-nfce").addEventListener("change", ev => { const fs = [...ev.target.files]; ev.target.value = ""; lerTodos(); lerNotas(fs); });
+  $("#form-nfce-texto").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const t = ev.target.texto.value.trim();
+    if (!t) return toast("Cole o link do QR Code ou a chave da nota.", true);
+    ev.target.reset();
+    lerTodos();
+    lerNotas([], [t]);
+  });
+  $("#painel-nfce").addEventListener("change", ev => {
+    const card = ev.target.closest("[data-nfce]");
+    if (!card) return;
+    if (ev.target.dataset.campo === "forma") {
+      const k = +card.dataset.nfce;
+      lerTodos();
+      renderNotas();
+      if (ev.target.value === "credito") $(`[data-nfce="${k}"] .nfce-pag [data-campo="cartao_id"]:not(.oculto)`)?.focus();
+    }
+    if (ev.target.dataset.campo === "categoria_id") ev.target.classList.toggle("sem-categoria", !ev.target.value);
+  });
+  $("#painel-nfce").addEventListener("click", async ev => {
+    const mais = ev.target.closest("[data-nfce-mais-pag]"), tirar = ev.target.closest("[data-nfce-tirar-pag]");
+    const desc = ev.target.closest("[data-nfce-descartar]"), lancar = ev.target.closest("[data-nfce-lancar]");
+    if (mais) {
+      lerTodos();
+      const n = notasNfce[+mais.dataset.nfceMaisPag];
+      const pago = n.pagamentos.reduce((s, p) => s + (parseFloat(String(p.valor).replace(/\./g, "").replace(",", ".")) || 0), 0);
+      n.pagamentos.push({ forma: null, valor: n.total ? Math.max(0, +(n.total - pago).toFixed(2)) || null : null });
+      renderNotas();
+    } else if (tirar) {
+      lerTodos();
+      const [k, j] = tirar.dataset.nfceTirarPag.split(":").map(Number);
+      notasNfce[k].pagamentos.splice(j, 1);
+      renderNotas();
+    } else if (desc) {
+      lerTodos();
+      notasNfce.splice(+desc.dataset.nfceDescartar, 1);
+      renderNotas();
+    } else if (lancar) {
+      const k = +lancar.dataset.nfceLancar;
+      lerTodos();
+      const n = notasNfce[k];
+      if (n.pagamentos.some(p => !p.forma)) return toast("Escolha a forma de pagamento.", true);
+      if (n.pagamentos.some(p => p.forma === "credito" && !p.cartao_id))
+        return toast(cartoesPlan.length ? "Escolha o cartão de crédito usado." : "Cadastre o cartão em “Importar fatura do cartão” para lançar a compra no crédito.", true);
+      if (n.ja_lancada && !confirm("Esta nota já foi lançada. Lançar de novo mesmo assim?")) return;
+      lancar.disabled = true;
+      try {
+        const r = await api("/api/plan/nfce/confirmar", { method: "POST", body: {
+          chave: n.chave, url: n.url, emitente: n.emitente, cnpj: n.cnpj, emissao: n.data, total: n.total, itens: n.itens,
+          descricao: n.descricao, data: n.data_lanc, categoria_id: n.categoria_id, carteira_id: n.carteira_id,
+          compartilhado: n.compartilhado, pagamentos: n.pagamentos, forcar: !!n.ja_lancada } });
+        notasNfce.splice(k, 1);
+        renderNotas();
+        toast(`Despesa lançada: ${n.descricao}` + (r.aguardando_fatura ? " (a parte no crédito aguarda a fatura)" : "") + ".");
+        carregarLancamentos();
+      } catch (e) { lancar.disabled = false; toast(e.message, true); }
+    }
+  });
+  // arrastar fotos para o quadro também funciona no computador
+  $("#painel-nfce").addEventListener("dragover", ev => { ev.preventDefault(); });
+  $("#painel-nfce").addEventListener("drop", ev => {
+    ev.preventDefault();
+    const fs = [...ev.dataTransfer.files].filter(f => f.type.startsWith("image/"));
+    if (fs.length) { lerTodos(); lerNotas(fs); }
+  });
+
+  // itens da nota na lista de lançamentos
+  document.addEventListener("click", async ev => {
+    const b = ev.target.closest("[data-ver-nota]");
+    if (!b) return;
+    const tr = b.closest("tr"), prox = tr.nextElementSibling;
+    if (prox?.classList.contains("linha-itens-nota")) return prox.remove();
+    try {
+      const n = await api(`/api/plan/notas/${b.dataset.verNota}`);
+      tr.insertAdjacentHTML("afterend", `<tr class="linha-itens-nota"><td colspan="${tr.children.length}">
+        <div class="dica">${esc(n.emitente || "")}${n.cnpj_formatado ? ` · CNPJ ${esc(n.cnpj_formatado)}` : ""}${n.total ? ` · total ${brl.format(n.total)}` : ""}
+          ${n.url ? ` · <a href="${esc(n.url)}" target="_blank" rel="noopener">ver na Sefaz</a>` : ""}</div>
+        ${n.itens.length ? tabelaItens(n.itens) : `<p class="dica">O portal não mostrou os itens desta nota.</p>`}</td></tr>`);
+    } catch (e) { toast(e.message, true); }
   });
 
   // ---------------- Cartões e importação de fatura ----------------

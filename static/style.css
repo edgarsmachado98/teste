@@ -800,3 +800,43 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .sit-atencao { color: #9a6a12; font-weight: 600; font-size: .84rem; }
 .aviso-credito { margin: 2px 0 0; font-size: .82rem; color: var(--texto-2); background: var(--painel-2); border: 1px solid var(--borda);
   border-radius: var(--raio-p); padding: 8px 12px; }
+
+/* ---------- Nota fiscal (NFC-e) ---------- */
+.nfce-entrada { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+.nfce-entrada > button { display: inline-flex; align-items: center; gap: 8px; }
+.nfce-colar { display: flex; gap: 8px; flex: 1 1 320px; margin: 0; }
+.nfce-colar input { flex: 1; min-width: 0; }
+.nfce-dica { margin: 8px 0 0; }
+.nfce-lendo { margin: 12px 0; }
+.nfce-falhas { margin: 12px 0; display: grid; gap: 4px; font-size: .86rem; }
+.nfce-card { border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px 18px; margin-top: 14px; background: var(--painel); }
+.nfce-topo { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.nfce-topo strong { font-size: 1.05rem; }
+.nfce-total { font-size: 1.3rem; font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nfce-total small { font-size: .78rem; font-weight: 500; }
+.nfce-card .aviso { margin: 10px 0 0; }
+.nfce-comb { margin: 8px 0 0; }
+.nfce-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 14px; margin-top: 14px; }
+.nfce-campos label { display: grid; gap: 4px; font-size: .84rem; color: var(--texto-2); }
+.nfce-familia { margin-top: 10px; }
+.nfce-pagamentos { display: grid; gap: 8px; margin-top: 14px; justify-items: start; }
+.nfce-pag { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nfce-valor { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--borda-forte); border-radius: var(--raio-p);
+  padding: 0 10px; background: var(--painel); }
+.nfce-valor span { color: var(--texto-2); font-size: .86rem; }
+.nfce-valor input { border: 0 !important; box-shadow: none !important; background: transparent; width: 96px; padding-left: 0;
+  font-weight: 600; font-variant-numeric: tabular-nums; }
+.nfce-credito { margin: 10px 0 0; }
+.nfce-itens { margin-top: 12px; }
+.nfce-itens summary { cursor: pointer; color: var(--texto-2); font-size: .88rem; }
+.tabela-itens-nota { font-size: .84rem; margin-top: 8px; }
+.tabela-itens-nota td:nth-child(n+2), .tabela-itens-nota th:nth-child(n+2) { text-align: right; white-space: nowrap; }
+.nfce-acoes { display: flex; gap: 14px; align-items: center; margin-top: 16px; }
+.selo-nota { cursor: pointer; font-family: inherit; }
+.linha-itens-nota td { background: var(--painel-2); }
+@media (max-width: 640px) {
+  .nfce-card { padding: 14px; }
+  .nfce-topo { flex-direction: column; }
+  .nfce-total { text-align: left; }
+  .nfce-entrada > button { width: 100%; justify-content: center; }
+}

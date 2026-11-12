@@ -194,6 +194,14 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
 
   Também em PDF (inclusive com senha, como a fatura do Ourocard por e-mail); `diagnostico_fatura.py`
   ajuda a ajustar o leitor ao layout de cada banco.
+- **Nota fiscal pela foto (NFC-e):** fotografe o QR Code do cupom (ou cole o link / a chave de acesso).
+  O QR Code é lido no próprio celular (BarcodeDetector ou jsQR) e, se não der, no servidor (zxing-cpp).
+  O sistema consulta a página pública da nota no portal da Sefaz do estado (somente endereços *.gov.br) e
+  traz a loja, data e hora, itens, valor pago, desconto e as formas de pagamento — com troco descontado do
+  dinheiro e uma despesa por forma quando o cupom foi pago de mais de um jeito. Sugere a categoria (aprende
+  por loja; posto com gasolina vira Combustível), avisa se a nota já foi lançada e guarda os itens, que
+  aparecem no selo "nota fiscal" da lista. A parte paga no crédito fica "aguardando fatura" e é conferida
+  na importação da fatura, sem duplicar. Se o portal não responder, a nota é lançada com o que o QR Code traz.
 - **Conciliação com a fatura:** uma compra lançada na hora no crédito (com o cartão informado) fica
   "aguardando fatura". Ao importar a fatura, o sistema procura a mesma compra (mesmo valor e data até
   3 dias; parcelas pelo número; valores próximos viram "possível correspondência" para o usuário

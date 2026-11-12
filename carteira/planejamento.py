@@ -120,6 +120,21 @@ CREATE TABLE IF NOT EXISTS fin_regras (
     usos         INTEGER NOT NULL DEFAULT 1,
     UNIQUE (carteira_id, padrao)
 );
+
+-- Notas fiscais (NFC-e) lidas pelo QR Code: a loja e os itens ficam guardados junto do lançamento.
+CREATE TABLE IF NOT EXISTS fin_notas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id  INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    chave        TEXT NOT NULL,
+    emitente     TEXT,
+    cnpj         TEXT,
+    emissao      TEXT,
+    total        REAL,
+    itens        TEXT,               -- JSON: [{descricao, qtd, un, unitario, valor}]
+    url          TEXT,
+    criado_em    TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    UNIQUE (carteira_id, chave)
+);
 """
 
 FORMAS = {"pix": "Pix", "debito": "Débito", "credito": "Cartão de crédito", "boleto": "Boleto",
@@ -159,7 +174,8 @@ def preparar(conn):
     colunas = {r["name"] for r in conn.execute("PRAGMA table_info(fin_lancamentos)")}
     for coluna, definicao in (("cartao_id", "INTEGER REFERENCES fin_cartoes(id) ON DELETE SET NULL"),
                               ("chave_import", "TEXT"), ("compartilhado", "INTEGER NOT NULL DEFAULT 0"),
-                              ("conferido_em", "TEXT")):  # compra lançada à mão conferida com a fatura (data)
+                              ("conferido_em", "TEXT"),  # compra lançada à mão conferida com a fatura (data)
+                              ("nota_id", "INTEGER REFERENCES fin_notas(id) ON DELETE SET NULL")):  # veio de uma NFC-e
         if coluna not in colunas:
             conn.execute(f"ALTER TABLE fin_lancamentos ADD COLUMN {coluna} {definicao}")
     if "compartilhado" not in {r["name"] for r in conn.execute("PRAGMA table_info(fin_recorrencias)")}:

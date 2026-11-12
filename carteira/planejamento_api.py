@@ -11,6 +11,7 @@ from flask import jsonify, request
 
 from . import db, licenca
 from . import fatura as fat
+from . import nfce
 from . import planejamento as plan
 from .importacao import ErroImportacao
 
@@ -296,6 +297,9 @@ def registrar(app, ctx):
                                      (atual["parcela_grupo"], cid, atual["parcela_num"])).rowcount
         else:
             conn.execute("DELETE FROM fin_lancamentos WHERE id = ?", (lid,))
+        if atual.get("nota_id"):  # nota sem nenhum lançamento: some também (pode ser lida de novo)
+            conn.execute("""DELETE FROM fin_notas WHERE id = ? AND NOT EXISTS
+                            (SELECT 1 FROM fin_lancamentos WHERE nota_id = ?)""", (atual["nota_id"], atual["nota_id"]))
         conn.commit()
         return jsonify({"ok": True, "removidos": removidos})
 
@@ -888,6 +892,117 @@ def registrar(app, ctx):
         return jsonify({"ano": ano, "rendimentos_brutos": bruto, "rendimentos_liquidos": liquido,
                         "descontos": bruto - liquido,
                         "dedutiveis": [{"grupo": g, "categoria": n, "valor": v} for (g, n), v in sorted(dedut.items())]})
+
+    # ================================================================ nota fiscal (NFC-e) pelo QR Code
+    def nota_ja_lancada(chave):
+        cids = ctx.carteiras_leitura()
+        marcas = ",".join("?" * len(cids))
+        r = conn.execute(f"""SELECT n.id, n.criado_em, MIN(l.data) AS data, SUM(l.valor) AS valor FROM fin_notas n
+                             LEFT JOIN fin_lancamentos l ON l.nota_id = n.id
+                             WHERE n.chave = ? AND n.carteira_id IN ({marcas}) GROUP BY n.id""", [chave, *cids]).fetchone()
+        return dict(r) if r else None
+
+    @app.post("/api/plan/nfce/ler")
+    def plan_nfce_ler():
+        """Lê uma ou mais notas: textos do QR Code (lidos no celular) e/ou fotos (lidas aqui)."""
+        cid = cid_escrita()
+        d = request.get_json(silent=True) or {}
+        entradas = [("texto", t, None) for t in (d.get("textos") or request.form.getlist("texto")) if str(t).strip()]
+        for arq in request.files.getlist("foto"):
+            if arq and arq.filename:
+                entradas.append(("foto", arq.read(), arq.filename))
+        if not entradas:
+            return erro("Tire uma foto do QR Code do cupom ou cole o link / a chave da nota.")
+        if len(entradas) > 20:
+            return erro("Envie até 20 notas por vez.")
+        abrir = app.config.get("nfce_abrir")  # nos testes, uma página de exemplo no lugar do portal
+        regras, por_nome = regras_usuario(cid), categorias_por_nome()
+        notas, falhas, vistas = [], [], set()
+        for tipo, valor, nome in entradas:
+            origem = nome or (str(valor)[:60] + ("…" if len(str(valor)) > 60 else ""))
+            try:
+                texto = nfce.ler_qrcode_da_foto(valor) if tipo == "foto" else str(valor)
+                chave = nfce.ler_qrcode(texto)["chave"]
+                if chave in vistas:
+                    continue  # duas fotos do mesmo cupom
+                vistas.add(chave)
+                n = nfce.consultar(texto, abrir)
+            except nfce.ErroNota as e:
+                falhas.append({"origem": origem, "motivo": str(e)})
+                continue
+            n["categoria_id"], n["origem_categoria"] = nfce.sugerir_categoria(n, regras, por_nome, fat.sugerir_categoria)
+            n["combustivel"] = nfce.resumo_combustivel(n)
+            n["ja_lancada"] = nota_ja_lancada(n["chave"])
+            n["arquivo"] = nome
+            notas.append(n)
+        return jsonify({"notas": notas, "falhas": falhas})
+
+    @app.post("/api/plan/nfce/confirmar")
+    def plan_nfce_confirmar():
+        """Cria o(s) lançamento(s) da nota: um por forma de pagamento (ex.: parte no cartão, parte em dinheiro)."""
+        d = request.get_json(silent=True) or {}
+        cid = cid_escrita(d.get("carteira_id"))
+        chave = re.sub(r"\s", "", str(d.get("chave") or "")).upper()
+        if not nfce.chave_valida(chave):
+            return erro("Chave de acesso da nota inválida.")
+        if nota_ja_lancada(chave) and not d.get("forcar"):
+            return erro("Esta nota já foi lançada.", 409)
+        pags = [p for p in (d.get("pagamentos") or []) if p and str(p.get("valor") or "").strip() not in ("", "0")]
+        if not pags:
+            return erro("Informe o valor pago.")
+        lancs = []
+        for p in pags:
+            try:
+                l = ler_lancamento({"tipo": "despesa", "data": d.get("data"), "descricao": d.get("descricao"),
+                                    "valor": p.get("valor"), "categoria_id": d.get("categoria_id"),
+                                    "forma": p.get("forma"), "cartao_id": p.get("cartao_id"),
+                                    "compartilhado": d.get("compartilhado"), "pago": True})
+            except ValueError as e:
+                return erro(str(e))
+            if l["valor"] <= 0:
+                continue
+            if l["forma"] == "credito":
+                l["cartao_id"] = cartao_valido(cid, l["cartao_id"])
+                if not l["cartao_id"]:
+                    return erro("Escolha o cartão de crédito usado nesta compra (é ele que confere com a fatura).")
+            lancs.append(l)
+        if not lancs:
+            return erro("Informe o valor pago.")
+        itens = [{k: i.get(k) for k in ("descricao", "qtd", "un", "unitario", "valor")}
+                 for i in (d.get("itens") or [])[:300] if isinstance(i, dict)]
+        url = d.get("url") if nfce.host_permitido(d.get("url") or "") else None
+        conn.execute("""INSERT INTO fin_notas (carteira_id, chave, emitente, cnpj, emissao, total, itens, url)
+                        VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(carteira_id, chave) DO UPDATE SET
+                        emitente = excluded.emitente, itens = excluded.itens, total = excluded.total""",
+                     (cid, chave, (d.get("emitente") or "")[:120] or None, (d.get("cnpj") or "")[:14] or None,
+                      (d.get("emissao") or "")[:16] or None, d.get("total"), json.dumps(itens, ensure_ascii=False), url))
+        nota_id = conn.execute("SELECT id FROM fin_notas WHERE carteira_id = ? AND chave = ?", (cid, chave)).fetchone()[0]
+        ids = []
+        for l in lancs:
+            cur = conn.execute(
+                """INSERT INTO fin_lancamentos (carteira_id, tipo, data, descricao, categoria_id, valor, forma, pago, obs,
+                   cartao_id, compartilhado, nota_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (cid, "despesa", l["data"], l["descricao"], l["categoria_id"], l["valor"], l["forma"], 1,
+                 f"NFC-e {int(chave[25:34])}", l["cartao_id"], l["compartilhado"], nota_id))
+            ids.append(cur.lastrowid)
+        est = fat.chave_estabelecimento(d.get("emitente") or "")
+        if lancs[0]["categoria_id"] and est:  # aprende: próxima nota (ou fatura) desta loja já vem com a categoria
+            conn.execute("""INSERT INTO fin_regras (carteira_id, padrao, categoria_id) VALUES (?, ?, ?)
+                            ON CONFLICT(carteira_id, padrao) DO UPDATE SET categoria_id = excluded.categoria_id,
+                            usos = usos + 1""", (cid, est, lancs[0]["categoria_id"]))
+        conn.commit()
+        return jsonify({"ok": True, "ids": ids, "nota_id": nota_id,
+                        "aguardando_fatura": sum(1 for l in lancs if l["forma"] == "credito")}), 201
+
+    @app.get("/api/plan/notas/<int:nid>")
+    def plan_nota(nid):
+        n = conn.execute("SELECT * FROM fin_notas WHERE id = ?", (nid,)).fetchone()
+        if n is None or n["carteira_id"] not in ctx.carteiras_leitura():
+            return erro("Nota não encontrada.", 404)
+        n = dict(n)
+        n["itens"] = json.loads(n["itens"] or "[]")
+        n["cnpj_formatado"] = nfce.formatar_cnpj(n["cnpj"])
+        return jsonify(n)
 
     # ================================================================ alertas (sino e Telegram)
     def alertas_planejamento(cids, hoje):
