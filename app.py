@@ -1582,6 +1582,11 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
                 if m["darf"] and hoje_ <= m["vencimento"] <= em(10):
                     add("darf", "alerta", f"DARF de {brl(m['darf'])} vence em {fmt_data(m['vencimento'])}",
                         f"Imposto sobre as vendas de {m['mes'][5:]}/{m['mes'][:4]} (código 6015).", m["mes"])
+        for provedor in app.config.get("provedores_alertas", []):  # módulos adicionais
+            try:
+                out.extend(provedor(cids, hoje_))
+            except Exception as e:  # um módulo não derruba os alertas da carteira
+                print(f"[alertas] módulo falhou: {e}")
         ordem = {"alerta": 0, "info": 1}
         return sorted(out, key=lambda x: ordem[x["nivel"]])
 
@@ -1701,7 +1706,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
     # ---------- Módulos adicionais (licenciados à parte) ----------
     planejamento_api.registrar(app, SimpleNamespace(
         conn=conn, erro=erro, carteira_atual=carteira_atual, carteiras_leitura=carteiras_leitura,
-        listar_aportes=listar_aportes, listar_proventos=listar_proventos, hoje=hoje, ErroAcesso=ErroAcesso))
+        listar_aportes=listar_aportes, listar_proventos=listar_proventos, hoje=hoje, ErroAcesso=ErroAcesso,
+        carteiras_visiveis=lambda: auth.carteiras_do_usuario(conn, g.usuario),
+        eh_admin=lambda: bool(g.usuario and g.usuario["admin"]),
+        valores_ativos=lambda cids: {l["ticker"]: l["valor"] for l in montar_resumo(cids)["ativos"] if l["quantidade"] > 0}))
 
     return app
 

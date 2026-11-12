@@ -528,6 +528,8 @@ const ICONE_ALERTA = {
   data_com: SVG_ALERTA('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>'),
   pagamento: SVG_ALERTA('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>'),
   vencimento: SVG_ALERTA('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  conta: SVG_ALERTA('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/>'),
+  orcamento: SVG_ALERTA('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
   darf: SVG_ALERTA('<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/>'),
 };
 const ICONE_ALERTA_PADRAO = SVG_ALERTA('<path d="M12 8v5"/><circle cx="12" cy="16.5" r=".6"/><path d="M10.3 4l-7.6 13.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4a2 2 0 0 0-3.4 0z"/>');

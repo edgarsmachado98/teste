@@ -31,8 +31,8 @@
 
   function recarregar() {
     const aba = document.querySelector("nav button.ativo")?.dataset.tab;
-    if (aba === "plan-resumo") carregarResumo();
-    if (aba === "plan-lancamentos") carregarLancamentos();
+    ({ "plan-resumo": carregarResumo, "plan-lancamentos": carregarLancamentos, "plan-orcamento": carregarOrcamento,
+       "plan-familia": carregarFamilia }[aba] || (() => {}))();
   }
 
   async function garantirCategorias() {
@@ -182,7 +182,8 @@
     const body = { tipo: tipoForm, data: d.data, descricao: d.descricao, categoria_id: d.categoria_id, valor: d.valor,
       valor_bruto: tipoForm === "receita" ? d.valor_bruto : "", forma: tipoForm === "despesa" ? d.forma : "", pago: d.pago,
       repetir: d.repetir, parcelas: d.parcelas, fim: d.fim, atualizar_proximos: d.atualizar_proximos,
-      cartao_id: tipoForm === "despesa" && d.forma === "credito" ? d.cartao_id : "" };
+      cartao_id: tipoForm === "despesa" && d.forma === "credito" ? d.cartao_id : "",
+      compartilhado: tipoForm === "despesa" && d.compartilhado };
     try {
       if (id) await api(`/api/plan/lancamentos/${id}`, { method: "PUT", body });
       else await api("/api/plan/lancamentos", { method: "POST", body });
@@ -228,7 +229,8 @@
       <small class="dica">Proventos e aportes da carteira aparecem no Resumo do mês.</small>`;
     $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th><th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
       lista.map(l => {
-        const selos = [l.recorrencia_id ? "todo mês" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "", l.projetado ? "previsto" : ""]
+        const selos = [l.recorrencia_id ? "todo mês" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
+          l.compartilhado ? "família" : "", l.projetado ? "previsto" : ""]
           .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ");
         const situacao = l.projetado ? `<span class="dica">previsto</span>`
           : l.pago ? `<span class="pos">${l.tipo === "receita" ? "recebido" : "pago"}</span>`
@@ -263,6 +265,7 @@
       f.id.value = l.id; f.data.value = l.data; f.descricao.value = l.descricao; f.valor.value = l.valor;
       f.valor_bruto.value = l.valor_bruto || ""; f.forma.value = l.forma || ""; f.pago.checked = !!l.pago;
       f.cartao_id.value = l.cartao_id || "";
+      f.compartilhado.checked = !!l.compartilhado;
       f.atualizar_proximos.checked = false;
       f.querySelector(".campo-proximos").classList.toggle("oculto", !l.recorrencia_id);
       $("#plan-form-titulo").textContent = "Editar lançamento";
@@ -466,5 +469,273 @@
     catch (e) { toast(e.message, true); }
   });
 
-  window.ABAS_MODULOS = { ...(window.ABAS_MODULOS || {}), "plan-resumo": carregarResumo, "plan-lancamentos": carregarLancamentos };
+  // ================= Orçamento, projeção e IR =================
+  let dadosOrc = null;
+  async function carregarOrcamento() {
+    atualizarSeletoresMes();
+    try {
+      [dadosOrc] = await Promise.all([api(`/api/plan/orcamento?mes=${mesPlan}`), carregarProjecao(), carregarIrPlan()]);
+    } catch (e) { return toast(e.message, true); }
+    renderOrcamento();
+  }
+
+  function renderOrcamento() {
+    const o = dadosOrc;
+    const restante = o.total_limite - o.total_gasto;
+    $("#orc-resumo").innerHTML = o.total_limite ? `<span>Orçado <strong>${brl.format(o.total_limite)}</strong></span>
+      <span>Gasto <strong>${brl.format(o.total_gasto)}</strong></span>
+      <span>${restante >= 0 ? "Disponível" : "Acima do orçado"} <strong class="${restante >= 0 ? "pos" : "neg"}">${brl.format(Math.abs(restante))}</strong></span>
+      ${o.fracao_mes ? `<small class="dica">${Math.round(o.fracao_mes * 100)}% do mês já passou</small>` : ""}`
+      : `<span class="dica">Nenhum limite definido. Preencha os valores abaixo ou use a média dos últimos 3 meses.</span>`;
+    const itens = o.itens.filter(i => i.limite || i.gasto || i.media_3m);
+    const resto = o.itens.filter(i => !(i.limite || i.gasto || i.media_3m));
+    const linha = i => {
+      const pct = i.pct == null ? 0 : Math.min(i.pct, 100);
+      return `<div class="orc-item ${i.estado}">
+        <div class="orc-topo"><strong>${esc(i.grupo)}</strong>${i.pct != null ? `<span class="orc-pct">${Math.round(i.pct)}%</span>` : ""}</div>
+        <div class="orc-valores">${brl.format(i.gasto)}${i.limite ? ` <span>de ${brl.format(i.limite)}</span>` : ""}</div>
+        <div class="progresso"><span style="width:${pct}%"></span></div>
+        <div class="orc-rodape"><small>${i.limite ? (i.gasto <= i.limite ? `restam ${brl.format(i.limite - i.gasto)}` : `<span class="neg">${brl.format(i.gasto - i.limite)} acima</span>`) : "sem limite"}${
+          i.media_3m ? ` · média ${brl.format(i.media_3m)}` : ""}</small>
+          <label class="requer-edicao">Limite <input type="number" min="0" step="10" data-orc-grupo="${esc(i.grupo)}" value="${i.limite || ""}" placeholder="—"></label></div>
+      </div>`;
+    };
+    $("#orc-lista").innerHTML = itens.map(linha).join("") +
+      (resto.length ? `<details class="conf-mais"><summary>Outros grupos (${resto.length})</summary>${resto.map(linha).join("")}</details>` : "");
+  }
+
+  $("#btn-orc-media").addEventListener("click", () => {
+    document.querySelectorAll("[data-orc-grupo]").forEach(inp => {
+      const i = dadosOrc.itens.find(x => x.grupo === inp.dataset.orcGrupo);
+      if (i && i.media_3m) inp.value = Math.ceil(i.media_3m / 10) * 10;
+    });
+    toast("Limites preenchidos pela média. Ajuste e clique em Salvar limites.");
+  });
+  $("#btn-orc-salvar").addEventListener("click", async () => {
+    const limites = {};
+    document.querySelectorAll("[data-orc-grupo]").forEach(inp => { if (inp.value) limites[inp.dataset.orcGrupo] = inp.value; });
+    try { await api("/api/plan/orcamento", { method: "PUT", body: { limites } }); toast("Orçamento salvo."); carregarOrcamento(); }
+    catch (e) { toast(e.message, true); }
+  });
+
+  async function carregarProjecao() {
+    const p = await api("/api/plan/projecao");
+    grafico("graf-plan-projecao", {
+      data: {
+        labels: p.meses.map(m => nomeMes(m.mes).slice(0, 3) + "/" + m.mes.slice(2, 4)),
+        datasets: [
+          { type: "bar", label: "Receitas previstas", data: p.meses.map(m => m.receitas), backgroundColor: PALETA[0] },
+          { type: "bar", label: "Despesas previstas", data: p.meses.map(m => m.despesas), backgroundColor: PALETA[3] },
+          { type: "line", label: "Saldo acumulado", data: p.meses.map(m => m.acumulado), borderColor: PALETA[2], backgroundColor: PALETA[2], tension: .25, pointRadius: 2 },
+        ],
+      },
+      options: { plugins: { tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${brl.format(c.raw)}` } } },
+        scales: { y: { ticks: { callback: v => brl.format(v).replace(",00", "") } } } },
+    });
+    const negativo = p.meses.find(m => m.acumulado < 0);
+    $("#aviso-projecao").innerHTML = !negativo ? "" : p.aporte_objetivos && p.meses.every(m => m.saldo + m.aporte_objetivos >= 0)
+      ? `<p class="aviso">Sem os aportes planejados nos objetivos (${brl.format(p.aporte_objetivos)} por mês), as contas fecham.
+          Com eles, falta dinheiro a partir de ${nomeMes(negativo.mes)}: reveja os valores ou os prazos em “Objetivos”.</p>`
+      : `<p class="aviso">As despesas previstas passam da renda: o saldo fica negativo a partir de ${nomeMes(negativo.mes)}.</p>`;
+    $("#tabela-projecao").innerHTML = `<tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Parcelas</th><th>Objetivos</th><th>Saldo</th><th>Acumulado</th></tr>` +
+      p.meses.map(m => `<tr><td>${nomeMes(m.mes)}</td><td class="pos">${brl.format(m.receitas)}</td><td>${brl.format(m.despesas)}</td>
+        <td>${m.parcelas ? brl.format(m.parcelas) : "—"}</td><td>${m.aporte_objetivos ? brl.format(m.aporte_objetivos) : "—"}</td>
+        <td class="${m.saldo >= 0 ? "pos" : "neg"}">${brl.format(m.saldo)}</td><td class="${m.acumulado >= 0 ? "" : "neg"}">${brl.format(m.acumulado)}</td></tr>`).join("");
+  }
+
+  async function carregarIrPlan() {
+    const sel = $("#ir-plan-ano");
+    if (!sel.options.length) {
+      const a = +hojeLocal().slice(0, 4);
+      sel.innerHTML = [a, a - 1, a - 2].map(x => `<option value="${x}">${x}</option>`).join("");
+    }
+    const r = await api(`/api/plan/ir?ano=${sel.value}`);
+    const ded = r.dedutiveis;
+    $("#ir-plan").innerHTML = `<div class="plan-indicadores">
+        <div><span>Rendimentos do trabalho (bruto)</span><strong>${brl.format(r.rendimentos_brutos)}</strong><small>Salários, 13º, férias, PLR lançados com o valor bruto.</small></div>
+        <div><span>Descontos na fonte</span><strong>${brl.format(r.descontos)}</strong><small>Bruto menos líquido: INSS, IR retido e outros descontos.</small></div>
+      </div>
+      <h4 style="margin:16px 0 6px">Despesas que costumam ser dedutíveis (declaração completa)</h4>
+      ${ded.length ? `<ul class="plan-lista">${ded.map(d => `<li><span class="plan-nome">${esc(d.categoria)}<small>${esc(d.grupo)}</small></span><strong>${brl.format(d.valor)}</strong></li>`).join("")}</ul>`
+        : `<p class="dica">Nenhuma despesa de saúde (plano, consultas, exames) ou educação (escola, faculdade) lançada em ${r.ano}.</p>`}
+      <p class="dica">Saúde não tem limite de dedução; educação tem limite anual por pessoa. Guarde os recibos com CPF/CNPJ.</p>`;
+  }
+  $("#ir-plan-ano").addEventListener("change", () => carregarIrPlan().catch(e => toast(e.message, true)));
+
+  // ================= Objetivos =================
+  let dadosObj = null;
+  const SIT_OBJ = { atingido: ["Atingido", "ok"], no_ritmo: ["No ritmo", "ok"], atrasado: ["Atrasado", "atencao"],
+    em_risco: ["Precisa de mais aporte", "risco"], incompleto: ["Faltam dados", "atencao"] };
+  const mesAno = d => d ? nomeMes(d.slice(0, 7)).replace(" de ", "/") : "—";
+  const anosMeses = n => n == null ? "mais de 100 anos" : n < 12 ? `${n} ${n === 1 ? "mês" : "meses"}` :
+    `${Math.floor(n / 12)} ano${n >= 24 ? "s" : ""}${n % 12 ? ` e ${n % 12} ${n % 12 === 1 ? "mês" : "meses"}` : ""}`;
+
+  function mesesParaAtingir(alvo, atual, aporte, r) {
+    let v = atual, m = 0;
+    while (v < alvo) { if (m >= 1200) return null; v = v * (1 + r) + aporte; m++; }
+    return m;
+  }
+  function aporteNecessario(alvo, atual, meses, r) {
+    if (atual >= alvo) return 0;
+    if (meses <= 0) return alvo - atual;
+    const c = Math.pow(1 + r, meses);
+    return r === 0 ? (alvo - atual) / meses : Math.max((alvo - atual * c) * r / (c - 1), 0);
+  }
+
+  async function carregarObjetivos() {
+    try { dadosObj = await api("/api/plan/objetivos"); } catch (e) { return toast(e.message, true); }
+    const d = dadosObj;
+    $("#obj-cards").innerHTML = [
+      ["Aporte necessário / mês", brl.format(d.total_necessario), "soma dos objetivos ainda não atingidos"],
+      ["Você planeja guardar", brl.format(d.total_planejado), d.total_planejado >= d.total_necessario - 0.01 ? "suficiente para todos os prazos" : `faltam ${brl.format(d.total_necessario - d.total_planejado)} por mês`],
+      ["Sobra média antes de investir", d.sobra_media == null ? "—" : brl.format(d.sobra_media), "últimos 3 meses lançados no planejamento"],
+      ["Custo de vida médio", d.custo_de_vida == null ? "—" : brl.format(d.custo_de_vida), "base da reserva de emergência"],
+    ].map(([r, v, sub]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div><small class="var-sub">${sub}</small></div>`).join("");
+    $("#obj-lista").innerHTML = d.objetivos.length ? d.objetivos.map((o, i) => {
+      const [sit, cls] = SIT_OBJ[o.situacao];
+      return `<div class="obj-cartao">
+        <div class="obj-cab"><div><span class="selo">${esc(o.rotulo_tipo)}</span><h4>${esc(o.nome)}</h4></div><span class="obj-sit ${cls}">${sit}</span></div>
+        <div class="obj-valores"><strong>${brl.format(o.valor_atual)}</strong><span>${o.valor_alvo_calc ? `de ${brl.format(o.valor_alvo_calc)}` : "guardado"}</span></div>
+        ${o.situacao === "incompleto" ? `<p class="dica" style="margin:0">Para calcular o valor da reserva, lance suas despesas do mês em “Receitas e despesas” ou informe o valor do objetivo.</p>` : ""}
+        <div class="progresso"><span style="width:${o.progresso}%"></span></div>
+        <small class="var-sub">${Math.round(o.progresso)}% · prazo ${mesAno(o.data_alvo_calc)}${o.explicacao ? ` · ${esc(o.explicacao)}` : ""}</small>
+        <dl class="obj-numeros">
+          <div><dt>Necessário por mês</dt><dd>${o.aporte_necessario == null ? "—" : brl.format(o.aporte_necessario)}</dd></div>
+          <div><dt>Planejado por mês</dt><dd>${brl.format(o.aporte_planejado)}</dd></div>
+          <div><dt>No ritmo planejado</dt><dd>${o.situacao === "atingido" ? "já atingido" : !o.valor_alvo_calc ? "—" : o.data_prevista ? `chega em ${mesAno(o.data_prevista)}` : "não chega"}</dd></div>
+        </dl>
+        ${o.tickers.length ? `<div class="chips">${o.tickers.map(t => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : ""}
+        <details class="obj-simular"><summary>Simular “e se…”</summary>
+          <div class="form-linha">
+            <label>Guardar por mês <input type="number" min="0" step="50" data-sim="aporte" data-obj="${i}" value="${Math.round(o.aporte_planejado)}"></label>
+            <label>Rentabilidade real (% a.a.) <input type="number" min="0" max="30" step="0.5" data-sim="taxa" data-obj="${i}" value="${o.rentabilidade}"></label>
+          </div>
+          <p class="sim-resultado" data-sim-res="${i}"></p>
+        </details>
+        <div class="obj-acoes requer-edicao"><button class="link editar" data-obj-editar="${o.id}">editar</button><button class="link" data-obj-excluir="${o.id}">excluir</button></div>
+      </div>`;
+    }).join("") : `<div class="painel plan-boas-vindas"><h3>Defina seus objetivos</h3>
+        <p class="dica">Comece pela <strong>reserva de emergência</strong> e depois a <strong>aposentadoria</strong>. Para cada objetivo, o sistema calcula quanto guardar por mês e acompanha o progresso, inclusive com os ativos da carteira que você reservar para ele.</p>
+        <button type="button" class="btn requer-edicao" data-novo-objetivo>Criar o primeiro objetivo</button></div>`;
+    document.querySelectorAll("[data-sim-res]").forEach(e => simular(+e.dataset.simRes));
+  }
+
+  function simular(i) {
+    const o = dadosObj.objetivos[i];
+    const aporte = +document.querySelector(`[data-sim="aporte"][data-obj="${i}"]`).value || 0;
+    const taxa = +document.querySelector(`[data-sim="taxa"][data-obj="${i}"]`).value || 0;
+    const r = Math.pow(1 + taxa / 100, 1 / 12) - 1;
+    const m = mesesParaAtingir(o.valor_alvo_calc, o.valor_atual, aporte, r);
+    const nec = aporteNecessario(o.valor_alvo_calc, o.valor_atual, o.meses, r);
+    const res = document.querySelector(`[data-sim-res="${i}"]`);
+    res.innerHTML = !o.valor_alvo_calc ? "" : o.valor_atual >= o.valor_alvo_calc ? "Objetivo já atingido."
+      : `Guardando <strong>${brl.format(aporte)}</strong> por mês a ${pct(taxa, 1)} ao ano, chega lá em <strong>${anosMeses(m)}</strong>${m != null ? ` (${mesAno(somarMes(hojeLocal().slice(0, 7), m) + "-01")})` : ""}.
+         Para o prazo de ${mesAno(o.data_alvo_calc)}, seriam ${brl.format(nec)} por mês.`;
+  }
+  $("#obj-lista").addEventListener("input", ev => { if (ev.target.dataset.sim) simular(+ev.target.dataset.obj); });
+
+  const CAMPOS_TIPO = {
+    reserva: ["meses_reserva", "valor_alvo", "data_alvo"], aposentadoria: ["renda_desejada", "idade_atual", "idade_alvo"],
+    renda_passiva: ["renda_desejada", "data_alvo"],
+  };
+  const DICAS_TIPO = {
+    reserva: "Deixe o valor vazio para usar 6 meses (ou os meses informados) do seu custo de vida médio. Guarde em algo de liquidez diária, como Tesouro Selic ou CDB com liquidez.",
+    aposentadoria: "O valor necessário é 25 vezes a renda anual desejada (regra dos 4%): com ele, retirar 4% ao ano tende a durar a vida toda. Valores em reais de hoje.",
+    renda_passiva: "Patrimônio que, rendendo 6% ao ano em proventos (dividendos, FIIs), paga a renda desejada.",
+    divida: "Informe o saldo devedor. Quitar dívidas caras costuma render mais que qualquer investimento.",
+  };
+  function ajustarFormObjetivo() {
+    const f = $("#form-objetivo"), tipo = f.tipo.value, campos = CAMPOS_TIPO[tipo] || ["valor_alvo", "data_alvo"];
+    document.querySelectorAll("[data-obj-campo]").forEach(l => l.classList.toggle("oculto", !campos.includes(l.dataset.objCampo)));
+    $("#obj-dica-tipo").textContent = DICAS_TIPO[tipo] || "";
+  }
+
+  function abrirObjetivo(o) {
+    const f = $("#form-objetivo");
+    f.reset();
+    f.tipo.innerHTML = Object.entries(dadosObj.tipos).map(([v, n]) => `<option value="${v}">${esc(n)}</option>`).join("");
+    f.id.value = o?.id || "";
+    if (o) ["tipo", "nome", "valor_alvo", "valor_guardado", "aporte_mensal", "rentabilidade", "renda_desejada", "idade_atual",
+      "idade_alvo", "meses_reserva", "prioridade"].forEach(k => { f[k].value = o[k] ?? ""; });
+    if (o?.data_alvo) f.data_alvo.value = o.data_alvo.slice(0, 7);
+    const marcados = new Set(o?.tickers || []);
+    $("#obj-ativos-lista").innerHTML = dadosObj.ativos.length ? dadosObj.ativos.map(a => `<label class="chip-check">
+        <input type="checkbox" value="${esc(a.ticker)}" ${marcados.has(a.ticker) ? "checked" : ""}> ${esc(a.ticker)} <small>${brl.format(a.valor)}</small></label>`).join("")
+      : `<span class="dica">Nenhum ativo na carteira.</span>`;
+    $("#obj-form-titulo").textContent = o ? "Editar objetivo" : "Novo objetivo";
+    ajustarFormObjetivo();
+    $("#dialogo-objetivo").showModal();
+  }
+  $("#form-objetivo").tipo.addEventListener("change", ajustarFormObjetivo);
+  $("#btn-obj-cancelar").addEventListener("click", () => $("#dialogo-objetivo").close());
+  $("#btn-novo-objetivo").addEventListener("click", () => abrirObjetivo(null));
+  $("#form-objetivo").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const f = ev.target, d = formDados(f);
+    d.tickers = [...document.querySelectorAll("#obj-ativos-lista input:checked")].map(c => c.value);
+    try {
+      if (d.id) await api(`/api/plan/objetivos/${d.id}`, { method: "PUT", body: d });
+      else await api("/api/plan/objetivos", { method: "POST", body: d });
+      $("#dialogo-objetivo").close();
+      toast("Objetivo salvo.");
+      carregarObjetivos();
+    } catch (e) { toast(e.message, true); }
+  });
+  document.addEventListener("click", async ev => {
+    if (ev.target.closest("[data-novo-objetivo]")) abrirObjetivo(null);
+    const ed = ev.target.closest("[data-obj-editar]"), ex = ev.target.closest("[data-obj-excluir]");
+    if (ed) abrirObjetivo(dadosObj.objetivos.find(o => o.id === +ed.dataset.objEditar));
+    if (ex && confirm("Excluir este objetivo?")) {
+      try { await api(`/api/plan/objetivos/${ex.dataset.objExcluir}`, { method: "DELETE" }); carregarObjetivos(); }
+      catch (e) { toast(e.message, true); }
+    }
+  });
+
+  // ================= Família =================
+  let dadosFam = null;
+  async function carregarFamilia() {
+    atualizarSeletoresMes();
+    try { dadosFam = await api(`/api/plan/familia?mes=${mesPlan}`); } catch (e) { return toast(e.message, true); }
+    const f = dadosFam, t = f.totais;
+    $("#fam-cards").innerHTML = [
+      ["Renda da família", brl.format(t.receitas + t.proventos), t.proventos ? `inclui ${brl.format(t.proventos)} de proventos` : "soma da renda líquida de todos"],
+      ["Despesas", brl.format(t.despesas), `${brl.format(t.compartilhadas)} em contas da família`],
+      ["Investido", brl.format(t.investido), "aportes nas carteiras"],
+      ["Sobra da família", `<span class="${t.sobra >= 0 ? "pos" : "neg"}">${brl.format(t.sobra)}</span>`, "renda − despesas − investido"],
+    ].map(([r, v, sub]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div><small class="var-sub">${sub}</small></div>`).join("");
+    const junto = f.modo === "junto";
+    $("#fam-acerto").innerHTML = f.pessoas.length < 2 ? `<p class="dica">A divisão aparece quando há duas ou mais pessoas com carteira e acesso a elas.</p>` :
+      `<div class="rolagem"><table class="tabela-familia"><tr><th>Pessoa</th><th>Renda</th><th>Pagou</th>${junto ? "" : "<th>Parte</th><th>Saldo</th>"}</tr>
+        ${f.pessoas.map(p => `<tr><td><strong>${esc(p.nome)}</strong>${junto ? "" : `<small class="var-sub">${pct(p.peso, 0)} das contas</small>`}</td>
+          <td>${brl.format(p.renda)}</td><td>${brl.format(p.pagou)}</td>
+          ${junto ? "" : `<td>${brl.format(p.cota)}</td><td class="${p.saldo >= 0 ? "pos" : "neg"}">${brlSinal(p.saldo) || brl.format(0)}</td>`}</tr>`).join("")}
+        <tr class="linha-total"><td>Total</td><td>${brl.format(f.pessoas.reduce((a, p) => a + p.renda, 0))}</td><td>${brl.format(f.total)}</td>${junto ? "" : "<td></td><td></td>"}</tr></table></div>
+      <div class="fam-acerto">${junto ? `<p>No modo <strong>tudo junto</strong> não há acerto: as contas saem do caixa comum.</p>`
+        : f.transferencias.length ? f.transferencias.map(x => `<p><strong>${esc(x.de)}</strong> transfere <strong>${brl.format(x.valor)}</strong> para <strong>${esc(x.para)}</strong> para acertar o mês.</p>`).join("")
+        : `<p>Contas do mês já divididas certinho: ninguém deve nada.</p>`}</div>`;
+    $("#fam-modos").innerHTML = Object.entries(f.modos).map(([v, txt]) => {
+      const [titulo, desc] = txt.split(": ");
+      return `<label class="fam-modo"><input type="radio" name="modo" value="${v}" ${v === f.modo ? "checked" : ""} ${f.pode_configurar ? "" : "disabled"}>
+        <span><strong>${esc(titulo)}</strong><small>${esc(desc || "")}</small></span></label>`;
+    }).join("");
+    $("#fam-pesos").innerHTML = f.pessoas.map(p => `<label>${esc(p.nome)} (%) <input type="number" min="0" max="100" step="1"
+      data-peso="${p.id}" value="${f.pesos[p.id] ?? Math.round(100 / f.pessoas.length)}" ${f.pode_configurar ? "" : "disabled"}></label>`).join("");
+    $("#fam-pesos").classList.toggle("oculto", f.modo !== "personalizado");
+    $("#btn-fam-salvar").classList.toggle("oculto", !f.pode_configurar);
+    $("#fam-dica-config").textContent = f.pode_configurar ? "" : "Só o administrador muda a forma de dividir.";
+  }
+  $("#form-familia").addEventListener("change", ev => {
+    if (ev.target.name === "modo") $("#fam-pesos").classList.toggle("oculto", ev.target.value !== "personalizado");
+  });
+  $("#form-familia").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const modo = ev.target.querySelector("input[name=modo]:checked")?.value;
+    const pesos = {};
+    document.querySelectorAll("[data-peso]").forEach(i => (pesos[i.dataset.peso] = i.value));
+    try { await api("/api/plan/familia", { method: "PUT", body: { modo, pesos } }); toast("Forma de dividir salva."); carregarFamilia(); }
+    catch (e) { toast(e.message, true); }
+  });
+
+  window.ABAS_MODULOS = { ...(window.ABAS_MODULOS || {}), "plan-resumo": carregarResumo, "plan-lancamentos": carregarLancamentos,
+    "plan-orcamento": carregarOrcamento, "plan-objetivos": carregarObjetivos, "plan-familia": carregarFamilia };
 })();

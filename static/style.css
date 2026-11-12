@@ -643,3 +643,76 @@ button.link.conf-ignorar:hover { color: var(--texto); }
 .fatura-opcoes { margin-top: 12px; }
 @media (max-width: 600px) { .fatura-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 #nome-arquivo-fatura.escolhido { color: var(--texto); font-weight: 550; }
+
+/* ---------- planejamento: orçamento, objetivos, família */
+.orc-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.orc-lista details { grid-column: 1 / -1; }
+.orc-lista details[open] { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.orc-lista details summary { grid-column: 1 / -1; }
+.orc-item { border: 1px solid var(--borda); border-radius: var(--raio-p); padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
+.orc-topo { display: flex; justify-content: space-between; gap: 8px; font-size: .88rem; }
+.orc-topo span { color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.orc-rodape { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.orc-rodape small { color: var(--suave); font-size: .76rem; }
+.orc-rodape label { display: flex; align-items: center; gap: 6px; font-size: .76rem; color: var(--suave); }
+.orc-rodape input { width: 100px; height: 30px; }
+.orc-item .progresso { margin-top: 0; }
+.orc-item.atencao .progresso span { background: #c08a2e; }
+.orc-item.estourado { border-color: color-mix(in srgb, var(--neg) 40%, var(--borda)); }
+.orc-item.estourado .progresso span { background: var(--neg); }
+.tabela-projecao td:first-child { text-transform: none; }
+.obj-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.obj-grade > .painel { grid-column: 1 / -1; }
+.obj-cartao { background: var(--painel); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.obj-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.obj-cab h4 { margin: 6px 0 0; font-size: 1.02rem; }
+.obj-sit { font-size: .74rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.obj-sit.ok { background: color-mix(in srgb, var(--pos) 12%, var(--painel)); color: var(--pos); }
+.obj-sit.atencao { background: color-mix(in srgb, #c08a2e 14%, var(--painel)); color: #9a6a12; }
+.obj-sit.risco { background: color-mix(in srgb, var(--neg) 12%, var(--painel)); color: var(--neg); }
+.obj-valores { display: flex; align-items: baseline; gap: 6px; }
+.obj-valores strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.obj-valores span { color: var(--suave); font-size: .86rem; }
+.obj-numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 0; }
+.obj-numeros dt { font-size: .7rem; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.obj-numeros dd { margin: 2px 0 0; font-weight: 600; font-size: .88rem; font-variant-numeric: tabular-nums; }
+.obj-simular summary { cursor: pointer; font-size: .84rem; color: var(--primaria); font-weight: 550; }
+.obj-simular .form-linha { margin-top: 8px; }
+.obj-simular input { width: 120px !important; }
+.sim-resultado { font-size: .86rem; color: var(--texto-2); margin: 8px 0 0; line-height: 1.5; }
+.obj-acoes { display: flex; gap: 4px; justify-content: flex-end; }
+.dialogo-largo { max-width: 680px; }
+.form-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 10px 0; }
+.form-grade label { display: flex; flex-direction: column; gap: 5px; font-size: .74rem; color: var(--suave); font-weight: 500; }
+.form-grade input, .form-grade select { width: 100%; }
+.obj-ativos { border: 1px solid var(--borda); border-radius: var(--raio-p); padding: 8px 12px 12px; margin: 8px 0 14px; }
+.obj-ativos legend { font-size: .76rem; color: var(--suave); padding: 0 4px; }
+.chip-check { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--borda); border-radius: 999px; padding: 4px 10px;
+  font-size: .8rem; cursor: pointer; margin: 4px 4px 0 0; }
+.chip-check small { color: var(--suave); }
+.chip-check:has(input:checked) { border-color: var(--primaria); background: var(--primaria-suave); }
+.fam-modos { display: flex; flex-direction: column; gap: 8px; }
+.fam-modo { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--borda); border-radius: var(--raio-p); padding: 10px 12px; cursor: pointer; }
+.fam-modo:has(input:checked) { border-color: var(--primaria); background: var(--primaria-suave); }
+.fam-modo span { display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
+.fam-modo small { color: var(--suave); font-size: .78rem; }
+.fam-pesos, #fam-pesos { margin-top: 10px; }
+.fam-acerto { margin-top: 12px; padding: 12px 14px; border-radius: var(--raio-p); background: var(--painel-2); border: 1px solid var(--borda); }
+.fam-acerto p { margin: 0; font-size: .9rem; }
+.fam-acerto p + p { margin-top: 6px; }
+.linha-total td { font-weight: 650; border-bottom: 0; }
+@media (max-width: 600px) {
+  .form-grade { grid-template-columns: 1fr; }
+  .obj-numeros { grid-template-columns: 1fr 1fr; }
+}
+.orc-pct { font-weight: 650; font-variant-numeric: tabular-nums; }
+.orc-item.estourado .orc-pct { color: var(--neg); }
+.orc-item.atencao .orc-pct { color: #9a6a12; }
+.orc-valores { font-size: .92rem; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: -3px; }
+.orc-valores span { color: var(--suave); font-weight: 400; }
+.obj-cab { flex-wrap: wrap; }
+.obj-cab > div { min-width: 0; flex: 1 1 160px; }
+.tabela-familia th, .tabela-familia td { padding: 9px 8px; }
+.tabela-familia td small.var-sub { font-weight: 400; }
+#tab-plan-familia .grade2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+@media (max-width: 900px) { #tab-plan-familia .grade2 { grid-template-columns: 1fr; } }

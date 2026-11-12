@@ -192,6 +192,18 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
   estabelecimento, e o sistema aprende com as escolhas e correções do usuário. Faturas em PDF ainda
   não são lidas.
 
+  Também em PDF (inclusive com senha, como a fatura do Ourocard por e-mail); `diagnostico_fatura.py`
+  ajuda a ajustar o leitor ao layout de cada banco.
+- **Família (casal):** despesas marcadas como "conta da família" são divididas pela regra escolhida
+  pelo administrador (proporcional à renda, meio a meio, percentuais próprios ou tudo junto), com o
+  acerto do mês ("Fulana transfere R$ X para Fulano") e os totais da família.
+- **Objetivos:** reserva de emergência (meses do custo de vida), aposentadoria (regra dos 4%), renda
+  passiva, patrimônio, imóvel, carro, educação, viagem, dívida... com valor guardado, ativos da
+  carteira reservados, aporte mensal necessário (rentabilidade real), previsão, situação e simulador.
+- **Orçamento:** limite mensal por grupo, alertas aos 80% e ao passar do limite e de contas a vencer
+  (sino e Telegram), projeção dos próximos 12 meses (com os aportes planejados nos objetivos) e
+  totais do ano para o IR (rendimentos do trabalho e despesas de saúde e educação).
+
 Ativação: `CARTEIRA_MODULOS=planejamento` no `.env` (ou `todos`). No modo demonstração todos os
 módulos ficam ativos. O controle fica em `carteira/licenca.py`, ponto único para a futura chave de
 licença.

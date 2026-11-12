@@ -283,3 +283,114 @@ def test_api_fatura_pdf_com_senha(novo_app, com_modulo):
     assert "senha" in envio().get_json()["erro"]
     p = envio(senha="12345").get_json()
     assert p["resumo"]["compras"] == 7 and p["resumo"]["parceladas"] == 1
+
+
+# ------------------------------------------------------------------ fase 3: família
+def test_acerto_proporcional_e_meio_a_meio():
+    pessoas = [{"id": 1, "nome": "Edgar", "renda": 6000, "pagou": 3000},
+               {"id": 2, "nome": "Eliandra", "renda": 4000, "pagou": 1000}]
+    r = plan.acerto_familia(pessoas, "proporcional")
+    assert r["total"] == 4000 and [round(p["cota"]) for p in r["pessoas"]] == [2400, 1600]
+    assert r["transferencias"] == [{"de": "Eliandra", "para": "Edgar", "valor": 600.0}]
+    r = plan.acerto_familia(pessoas, "meio")
+    assert r["transferencias"] == [{"de": "Eliandra", "para": "Edgar", "valor": 1000.0}]
+    assert plan.acerto_familia(pessoas, "junto")["transferencias"] == []
+    r = plan.acerto_familia(pessoas, "personalizado", {"1": 70, "2": 30})
+    assert r["transferencias"][0]["valor"] == pytest.approx(200)
+
+
+def test_api_familia(novo_app, com_modulo):
+    app = novo_app(fonte)
+    edgar = cliente_logado(app)
+    edgar.post("/api/usuarios", json={"nome": "Eliandra", "email": "eli@x.com", "senha": "senha-eli-123",
+                                      "criar_carteira": True, "nome_carteira": "Carteira Eliandra"})
+    eli = cliente_logado(app, "eli@x.com", "senha-eli-123")
+    mes = dt.date.today().isoformat()[:7]
+    edgar.post("/api/plan/lancamentos", json={"tipo": "receita", "data": f"{mes}-05", "valor": 6000})
+    eli.post("/api/plan/lancamentos", json={"tipo": "receita", "data": f"{mes}-05", "valor": 4000})
+    edgar.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-10", "valor": 3000, "compartilhado": True})
+    eli.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-10", "valor": 1000, "compartilhado": True})
+    eli.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-11", "valor": 300})  # pessoal
+    f = edgar.get(f"/api/plan/familia?mes={mes}").get_json()
+    assert f["modo"] == "proporcional" and f["pode_configurar"]
+    assert f["totais"]["compartilhadas"] == 4000 and f["totais"]["despesas"] == 4300
+    assert f["transferencias"] == [{"de": "Eliandra", "para": "Edgar Machado", "valor": 600.0}]
+    assert eli.put("/api/plan/familia", json={"modo": "meio"}).status_code == 403  # só o administrador
+    assert edgar.put("/api/plan/familia", json={"modo": "meio"}).status_code == 200
+    assert edgar.get(f"/api/plan/familia?mes={mes}").get_json()["transferencias"][0]["valor"] == 1000
+
+
+# ------------------------------------------------------------------ fase 4: objetivos
+def test_calculos_de_objetivo():
+    assert plan.aporte_necessario(12000, 0, 12, 0) == 1000
+    pmt = plan.aporte_necessario(100000, 10000, 120, plan.taxa_mensal(4))
+    v = 10000
+    for _ in range(120):
+        v = v * (1 + plan.taxa_mensal(4)) + pmt
+    assert v == pytest.approx(100000, rel=1e-6)
+    assert plan.meses_para_atingir(1000, 0, 100, 0) == 10
+    assert plan.meses_para_atingir(1000, 0, 0, 0) is None
+    hoje = "2026-11-12"
+    apos = plan.avaliar_objetivo({"tipo": "aposentadoria", "renda_desejada": 10000, "idade_atual": 40, "idade_alvo": 60,
+                                  "rentabilidade": 4, "aporte_mensal": 0, "valor_guardado": 0}, {}, None, hoje)
+    assert apos["valor_alvo_calc"] == 3_000_000 and apos["data_alvo_calc"] == "2046-11-01"
+    assert apos["situacao"] == "em_risco" and apos["aporte_necessario"] > 0
+    res = plan.avaliar_objetivo({"tipo": "reserva", "meses_reserva": 6, "valor_guardado": 5000, "tickers": "TESOURO SELIC 2029",
+                                 "aporte_mensal": 2000, "rentabilidade": 0}, {"TESOURO SELIC 2029": 10000}, 4000, hoje)
+    assert res["valor_alvo_calc"] == 24000 and res["valor_atual"] == 15000 and res["situacao"] == "no_ritmo"
+
+
+def test_api_objetivos(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    c.post("/api/aportes", json={"data": "2025-01-02", "ticker": "ITUB4", "quantidade": 100, "preco": 30})
+    assert c.post("/api/plan/objetivos", json={"tipo": "imovel"}).get_json()["erro"] == "Informe o valor do objetivo."
+    assert "idade" in c.post("/api/plan/objetivos", json={"tipo": "aposentadoria", "renda_desejada": 8000}).get_json()["erro"]
+    r = c.post("/api/plan/objetivos", json={"tipo": "imovel", "nome": "Entrada do apartamento", "valor_alvo": 120000,
+                                            "data_alvo": "2031-01", "aporte_mensal": 1500, "tickers": ["itub4"]})
+    assert r.status_code == 201
+    o = c.get("/api/plan/objetivos").get_json()
+    obj = o["objetivos"][0]
+    assert obj["tickers"] == ["ITUB4"] and obj["em_ativos"] > 0 and obj["data_alvo_calc"] == "2031-01-01"
+    assert obj["aporte_necessario"] > 0 and o["total_necessario"] == pytest.approx(obj["aporte_necessario"])
+    assert any(a["ticker"] == "ITUB4" for a in o["ativos"])
+    oid = obj["id"]
+    assert c.put(f"/api/plan/objetivos/{oid}", json={**{k: obj[k] for k in ("tipo", "nome", "data_alvo")},
+                                                     "valor_alvo": 1, "tickers": ["ITUB4"]}).status_code == 200
+    assert c.get("/api/plan/objetivos").get_json()["objetivos"][0]["situacao"] == "atingido"
+    c.delete(f"/api/plan/objetivos/{oid}")
+    assert c.get("/api/plan/objetivos").get_json()["objetivos"] == []
+
+
+# ------------------------------------------------------------------ fase 5: orçamento, projeção, IR, alertas
+def test_orcamento_projecao_ir_e_alertas(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    hoje = dt.date.today()
+    mes = hoje.isoformat()[:7]
+    c.post("/api/plan/lancamentos", json={"tipo": "receita", "data": f"{mes}-01", "valor": 8000, "valor_bruto": 10000,
+                                          "categoria_id": cat(c, "receita", "Salário"), "repetir": "mensal"})
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-01", "valor": 900,
+                                          "categoria_id": cat(c, "despesa", "Mercado")})
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-02", "valor": 1200,
+                                          "categoria_id": cat(c, "despesa", "Plano de saúde"), "repetir": "mensal"})
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": hoje.isoformat(), "valor": 300, "pago": False,
+                                          "descricao": "Conta de luz", "categoria_id": cat(c, "despesa", "Energia")})
+    c.put("/api/plan/orcamento", json={"limites": {"Alimentação": 1000, "Saúde": 1000, "Lazer": ""}})
+    o = {i["grupo"]: i for i in c.get(f"/api/plan/orcamento?mes={mes}").get_json()["itens"]}
+    assert o["Alimentação"]["estado"] == "atencao" and o["Alimentação"]["pct"] == 90
+    assert o["Saúde"]["estado"] == "estourado" and o["Lazer"]["estado"] == "sem_limite"
+    p = c.get("/api/plan/projecao").get_json()["meses"]
+    assert len(p) == 12 and p[1]["receitas"] == 8000 and p[1]["despesas"] == 1200
+    ir = c.get(f"/api/plan/ir?ano={hoje.year}").get_json()
+    assert ir["rendimentos_brutos"] >= 10000 and ir["descontos"] >= 2000
+    assert any(d["categoria"] == "Plano de saúde" for d in ir["dedutiveis"])
+    alertas = c.get("/api/alertas").get_json()["itens"]
+    tipos = {a["tipo"] for a in alertas}
+    assert {"orcamento", "conta"} <= tipos
+    assert any("Conta de luz" in a["titulo"] for a in alertas)
+
+
+def test_alertas_do_modulo_somem_sem_licenca(novo_app, monkeypatch):
+    monkeypatch.delenv("CARTEIRA_DEMO", raising=False)
+    monkeypatch.delenv("CARTEIRA_MODULOS", raising=False)
+    c = cliente_logado(novo_app(fonte))
+    assert not any(a["tipo"] in ("orcamento", "conta") for a in c.get("/api/alertas").get_json()["itens"])

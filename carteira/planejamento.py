@@ -69,6 +69,40 @@ CREATE TABLE IF NOT EXISTS fin_cartoes (
     ativo          INTEGER NOT NULL DEFAULT 1
 );
 
+-- Configurações do módulo (modo do casal, pesos da divisão...).
+CREATE TABLE IF NOT EXISTS fin_config (
+    chave TEXT PRIMARY KEY,
+    valor TEXT
+);
+
+-- Limite mensal de gastos por grupo de despesa.
+CREATE TABLE IF NOT EXISTS fin_orcamento (
+    carteira_id INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    grupo       TEXT NOT NULL,
+    limite      REAL NOT NULL CHECK (limite >= 0),
+    PRIMARY KEY (carteira_id, grupo)
+);
+
+-- Objetivos financeiros (reserva, aposentadoria, imóvel...).
+CREATE TABLE IF NOT EXISTS fin_objetivos (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    carteira_id       INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+    tipo              TEXT NOT NULL,
+    nome              TEXT NOT NULL,
+    valor_alvo        REAL,
+    data_alvo         TEXT,
+    valor_guardado    REAL NOT NULL DEFAULT 0,   -- valor já guardado fora da carteira (poupança, conta...)
+    aporte_mensal     REAL NOT NULL DEFAULT 0,   -- quanto pretende guardar por mês
+    rentabilidade     REAL NOT NULL DEFAULT 4,   -- % ao ano acima da inflação
+    renda_desejada    REAL,                      -- aposentadoria / renda passiva (R$/mês)
+    idade_atual       INTEGER,
+    idade_alvo        INTEGER,
+    meses_reserva     INTEGER,
+    prioridade        INTEGER NOT NULL DEFAULT 2,
+    tickers           TEXT,                      -- ativos da carteira vinculados (separados por vírgula)
+    criado_em         TEXT
+);
+
 -- Estabelecimento -> categoria, aprendido com as correções do usuário na importação de faturas.
 CREATE TABLE IF NOT EXISTS fin_regras (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,9 +150,11 @@ def preparar(conn):
     conn.executescript(ESQUEMA)
     colunas = {r["name"] for r in conn.execute("PRAGMA table_info(fin_lancamentos)")}
     for coluna, definicao in (("cartao_id", "INTEGER REFERENCES fin_cartoes(id) ON DELETE SET NULL"),
-                              ("chave_import", "TEXT")):
+                              ("chave_import", "TEXT"), ("compartilhado", "INTEGER NOT NULL DEFAULT 0")):
         if coluna not in colunas:
             conn.execute(f"ALTER TABLE fin_lancamentos ADD COLUMN {coluna} {definicao}")
+    if "compartilhado" not in {r["name"] for r in conn.execute("PRAGMA table_info(fin_recorrencias)")}:
+        conn.execute("ALTER TABLE fin_recorrencias ADD COLUMN compartilhado INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS fin_lanc_chave ON fin_lancamentos (carteira_id, chave_import)")
     # categorias padrão (as que faltarem; novas versões podem trazer categorias novas)
     for tipo, grupos in CATEGORIAS_PADRAO.items():
@@ -172,9 +208,9 @@ def materializar(conn, carteira_ids, ate_mes):
         for mes in meses_entre(inicio, fim):
             conn.execute(
                 """INSERT INTO fin_lancamentos (carteira_id, tipo, data, descricao, categoria_id, valor, valor_bruto,
-                   forma, pago, recorrencia_id) VALUES (?,?,?,?,?,?,?,?,0,?)""",
+                   forma, pago, recorrencia_id, compartilhado) VALUES (?,?,?,?,?,?,?,?,0,?,?)""",
                 (r["carteira_id"], r["tipo"], data_no_mes(mes, r["dia"]), r["descricao"], r["categoria_id"],
-                 r["valor"], r["valor_bruto"], r["forma"], r["id"]))
+                 r["valor"], r["valor_bruto"], r["forma"], r["id"], r.get("compartilhado") or 0))
             ultimo, criou = mes, True
         if ultimo:
             conn.execute("UPDATE fin_recorrencias SET gerado_ate = ? WHERE id = ?", (ultimo, r["id"]))
@@ -192,6 +228,7 @@ def projetar_recorrencias(conn, carteira_ids, mes):
             out.append({"id": None, "carteira_id": r["carteira_id"], "tipo": r["tipo"], "data": data_no_mes(mes, r["dia"]),
                         "descricao": r["descricao"], "categoria_id": r["categoria_id"], "valor": r["valor"],
                         "valor_bruto": r["valor_bruto"], "forma": r["forma"], "pago": 0, "recorrencia_id": r["id"],
+                        "compartilhado": r.get("compartilhado") or 0, "cartao_id": None,
                         "parcela_num": None, "parcela_total": None, "projetado": True})
     return out
 
@@ -286,3 +323,166 @@ def custo_de_vida(despesas_por_mes, mes_atual, meses=12):
     """Média das despesas dos últimos meses fechados que têm lançamentos (até `meses`)."""
     fechados = sorted(((m, v) for m, v in despesas_por_mes.items() if m < mes_atual and v > 0))[-meses:]
     return sum(v for _, v in fechados) / len(fechados) if fechados else None
+
+
+# ================================================================== fase 3: família / casal
+
+MODOS_FAMILIA = {
+    "proporcional": "Proporcional à renda: cada um paga as contas da família na proporção do que ganha",
+    "meio": "Meio a meio: as contas da família são divididas igualmente",
+    "personalizado": "Personalizado: percentuais definidos por vocês",
+    "junto": "Tudo junto: a renda é somada e as contas saem do caixa comum (sem acerto)",
+}
+
+
+def acerto_familia(pessoas, modo="proporcional", pesos_manuais=None):
+    """Divisão das contas da família no mês e quem transfere para quem.
+
+    pessoas: [{id, nome, renda, pagou}] — renda líquida do mês e quanto cada um pagou de contas da família.
+    Retorna {pessoas: [... + peso, cota, saldo], transferencias: [{de, para, valor}], total}.
+    """
+    total = sum(p["pagou"] for p in pessoas)
+    n = len(pessoas) or 1
+    if modo == "proporcional":
+        renda = sum(max(p["renda"], 0) for p in pessoas)
+        pesos = {p["id"]: (max(p["renda"], 0) / renda if renda > 0 else 1 / n) for p in pessoas}
+    elif modo == "personalizado" and pesos_manuais:
+        soma = sum(float(pesos_manuais.get(str(p["id"]), 0) or 0) for p in pessoas)
+        pesos = {p["id"]: (float(pesos_manuais.get(str(p["id"]), 0) or 0) / soma if soma > 0 else 1 / n) for p in pessoas}
+    else:
+        pesos = {p["id"]: 1 / n for p in pessoas}
+    saida = []
+    for p in pessoas:
+        cota = total * pesos[p["id"]] if modo != "junto" else p["pagou"]
+        saida.append({**p, "peso": pesos[p["id"]] * 100, "cota": cota, "saldo": p["pagou"] - cota})
+    transferencias = []
+    if modo != "junto":
+        devedores = sorted(([p["nome"], -p["saldo"]] for p in saida if p["saldo"] < -0.005), key=lambda x: -x[1])
+        credores = sorted(([p["nome"], p["saldo"]] for p in saida if p["saldo"] > 0.005), key=lambda x: -x[1])
+        i = j = 0
+        while i < len(devedores) and j < len(credores):
+            v = min(devedores[i][1], credores[j][1])
+            transferencias.append({"de": devedores[i][0], "para": credores[j][0], "valor": round(v, 2)})
+            devedores[i][1] -= v
+            credores[j][1] -= v
+            if devedores[i][1] <= 0.005:
+                i += 1
+            if credores[j][1] <= 0.005:
+                j += 1
+    return {"pessoas": saida, "transferencias": transferencias, "total": total, "modo": modo}
+
+
+# ================================================================== fase 4: objetivos
+
+TIPOS_OBJETIVO = {
+    "reserva": "Reserva de emergência",
+    "aposentadoria": "Aposentadoria / independência financeira",
+    "renda_passiva": "Renda passiva",
+    "patrimonio": "Patrimônio",
+    "imovel": "Imóvel",
+    "carro": "Carro",
+    "educacao": "Educação dos filhos",
+    "viagem": "Viagem",
+    "divida": "Quitar dívida",
+    "outro": "Outro objetivo",
+}
+TAXA_RETIRADA = 0.04   # regra dos 4%: 25 vezes a renda anual desejada
+RENDIMENTO_RENDA = 0.06  # renda passiva: rendimento anual médio da carteira de renda (dividendos, FIIs)
+
+
+def meses_ate(hoje_iso, data_iso):
+    h, d = dt.date.fromisoformat(hoje_iso), dt.date.fromisoformat(data_iso)
+    return max((d.year - h.year) * 12 + d.month - h.month, 0)
+
+
+def taxa_mensal(anual_pct):
+    return (1 + anual_pct / 100) ** (1 / 12) - 1
+
+
+def aporte_necessario(alvo, atual, meses, r):
+    """Aporte mensal constante para ir de `atual` a `alvo` em `meses`, rendendo `r` ao mês."""
+    if atual >= alvo:
+        return 0.0
+    if meses <= 0:
+        return alvo - atual
+    cresc = (1 + r) ** meses
+    if r == 0:
+        return (alvo - atual) / meses
+    return max((alvo - atual * cresc) * r / (cresc - 1), 0.0)
+
+
+def meses_para_atingir(alvo, atual, aporte, r, limite=1200):
+    """Quantos meses até atingir o alvo com o aporte mensal (None se não chega em 100 anos)."""
+    v, m = atual, 0
+    while v < alvo:
+        if m >= limite:
+            return None
+        v = v * (1 + r) + aporte
+        m += 1
+    return m
+
+
+def avaliar_objetivo(o, valor_ativos, custo_vida, hoje):
+    """Valor-alvo, quanto já tem, aporte mensal necessário, previsão e situação de um objetivo.
+
+    Valores em reais de hoje: a rentabilidade é a real (acima da inflação).
+    """
+    tipo = o["tipo"]
+    alvo, data_alvo = o.get("valor_alvo"), o.get("data_alvo")
+    explicacao = None
+    if tipo == "reserva" and not alvo and custo_vida:
+        meses_res = o.get("meses_reserva") or 6
+        alvo = custo_vida * meses_res
+        explicacao = f"{meses_res} meses do custo de vida médio"
+    if tipo == "aposentadoria" and o.get("renda_desejada"):
+        alvo = alvo or o["renda_desejada"] * 12 / TAXA_RETIRADA
+        explicacao = explicacao or "25 vezes a renda anual desejada (regra dos 4%)"
+        if not data_alvo and o.get("idade_atual") and o.get("idade_alvo"):
+            anos = max(int(o["idade_alvo"]) - int(o["idade_atual"]), 0)
+            h = dt.date.fromisoformat(hoje)
+            data_alvo = dt.date(h.year + anos, h.month, 1).isoformat()
+    if tipo == "renda_passiva" and o.get("renda_desejada"):
+        alvo = alvo or o["renda_desejada"] * 12 / RENDIMENTO_RENDA
+        explicacao = explicacao or f"patrimônio que rende {RENDIMENTO_RENDA * 100:.0f}% ao ano em proventos"
+    if not data_alvo:
+        data_alvo = dt.date.fromisoformat(somar_meses(hoje[:7], 12) + "-01").isoformat()
+    tickers = [t for t in (o.get("tickers") or "").split(",") if t]
+    em_ativos = sum(valor_ativos.get(t, 0.0) for t in tickers)
+    atual = float(o.get("valor_guardado") or 0) + em_ativos
+    alvo = float(alvo or 0)
+    r = taxa_mensal(float(o.get("rentabilidade") or 0))
+    meses = meses_ate(hoje, data_alvo)
+    necessario = aporte_necessario(alvo, atual, meses, r) if alvo else None
+    planejado = float(o.get("aporte_mensal") or 0)
+    previsto = meses_para_atingir(alvo, atual, planejado, r) if alvo else None
+    if not alvo:
+        situacao = "incompleto"
+    elif atual >= alvo:
+        situacao = "atingido"
+    elif necessario is not None and planejado >= necessario - 0.01:
+        situacao = "no_ritmo"
+    elif necessario and planejado >= necessario * 0.6:
+        situacao = "atrasado"
+    else:
+        situacao = "em_risco"
+    data_prevista = None
+    if previsto is not None:
+        data_prevista = somar_meses(hoje[:7], previsto) + "-01"
+    return {**o, "tickers": tickers, "valor_alvo_calc": alvo, "data_alvo_calc": data_alvo, "explicacao": explicacao,
+            "valor_atual": atual, "em_ativos": em_ativos, "progresso": min(atual / alvo * 100, 100) if alvo else 0,
+            "meses": meses, "taxa_mensal": r, "aporte_necessario": necessario, "aporte_planejado": planejado,
+            "meses_previstos": previsto, "data_prevista": data_prevista, "situacao": situacao,
+            "rotulo_tipo": TIPOS_OBJETIVO.get(tipo, tipo)}
+
+
+# ================================================================== fase 5: orçamento, projeção e IR
+
+# Categorias que costumam ser dedutíveis na declaração completa do IR (conferir as regras do ano).
+DEDUTIVEIS_IR = {"Plano de saúde": "Saúde", "Consultas / exames": "Saúde", "Escola / faculdade": "Educação"}
+
+
+def situacao_orcamento(limite, gasto, fracao_mes=None):
+    pct = gasto / limite * 100 if limite else None
+    projecao = gasto / fracao_mes if fracao_mes and fracao_mes > 0 else None
+    estado = "sem_limite" if not limite else "estourado" if gasto > limite else "atencao" if pct >= 80 else "ok"
+    return {"limite": limite, "gasto": gasto, "pct": pct, "estado": estado, "projecao_mes": projecao}

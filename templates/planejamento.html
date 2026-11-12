@@ -69,6 +69,7 @@
         <label class="campo-parcelas oculto">Parcelas <input type="number" name="parcelas" min="2" max="120" value="2"></label>
         <label class="campo-fim oculto">Até (opcional) <input type="month" name="fim"></label>
         <label class="check"><input type="checkbox" name="pago" checked> <span data-rotulo-pago>Já pago</span></label>
+        <label class="check so-despesa" title="Entra na divisão das contas do casal (tela Família)"><input type="checkbox" name="compartilhado"> Conta da família</label>
         <label class="check campo-proximos oculto"><input type="checkbox" name="atualizar_proximos"> Aplicar aos próximos meses</label>
         <button type="submit" id="btn-plan-salvar">Adicionar</button>
         <button type="button" class="secundario oculto" id="btn-plan-cancelar">Cancelar edição</button>
@@ -153,4 +154,108 @@
         </div>
       </form>
     </dialog>
+  </section>
+
+  <section id="tab-plan-orcamento" class="tab">
+    <div class="plan-barra">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Orçamento por grupo</h3>
+          <p class="dica" style="margin:0">Defina quanto pode gastar por mês em cada grupo. O sino e o Telegram avisam aos 80% e ao passar do limite.</p></div>
+        <div class="acoes-painel requer-edicao">
+          <button type="button" class="secundario btn-pequeno" id="btn-orc-media">Preencher pela média de 3 meses</button>
+          <button type="button" class="btn btn-pequeno" id="btn-orc-salvar">Salvar limites</button>
+        </div>
+      </div>
+      <div id="orc-resumo" class="plan-totais"></div>
+      <div class="orc-lista" id="orc-lista"></div>
+    </div>
+    <div class="painel">
+      <h3>Próximos 12 meses</h3>
+      <p class="dica" style="margin-top:0">Receitas e contas fixas, parcelas já lançadas e o aporte planejado nos objetivos. Gastos do dia a dia ainda não lançados não entram.</p>
+      <div id="aviso-projecao"></div>
+      <canvas id="graf-plan-projecao" height="90"></canvas>
+      <div class="rolagem"><table id="tabela-projecao" class="tabela-projecao"></table></div>
+    </div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Para a declaração do Imposto de Renda</h3>
+          <p class="dica" style="margin:0">Totais do ano lançados aqui. Confira com os informes de rendimentos e os recibos, e as regras de dedução do ano.</p></div>
+        <select id="ir-plan-ano" aria-label="Ano"></select>
+      </div>
+      <div id="ir-plan"></div>
+    </div>
+  </section>
+
+  <section id="tab-plan-objetivos" class="tab">
+    <div class="cards" id="obj-cards"></div>
+    <div class="plan-barra">
+      <p class="dica" style="margin:0">Valores em reais de hoje: a rentabilidade usada é a <strong>real</strong> (acima da inflação).</p>
+      <button type="button" class="btn btn-pequeno requer-edicao" id="btn-novo-objetivo">Novo objetivo</button>
+    </div>
+    <div class="obj-grade" id="obj-lista"></div>
+
+    <dialog id="dialogo-objetivo" class="dialogo dialogo-largo">
+      <form id="form-objetivo" method="dialog">
+        <h3 id="obj-form-titulo">Novo objetivo</h3>
+        <input type="hidden" name="id">
+        <div class="form-grade">
+          <label>Tipo <select name="tipo" required></select></label>
+          <label>Nome <input name="nome" maxlength="80" placeholder="ex.: Entrada do apartamento"></label>
+          <label data-obj-campo="renda_desejada">Renda mensal desejada (R$) <input type="number" name="renda_desejada" min="0" step="0.01"></label>
+          <label data-obj-campo="idade_atual">Idade atual <input type="number" name="idade_atual" min="0" max="120"></label>
+          <label data-obj-campo="idade_alvo">Idade para se aposentar <input type="number" name="idade_alvo" min="0" max="120"></label>
+          <label data-obj-campo="meses_reserva">Meses de reserva <input type="number" name="meses_reserva" min="1" max="36" placeholder="6"></label>
+          <label data-obj-campo="valor_alvo">Valor do objetivo (R$) <input type="number" name="valor_alvo" min="0" step="0.01"></label>
+          <label data-obj-campo="data_alvo">Até quando <input type="month" name="data_alvo"></label>
+          <label>Já guardado fora da carteira (R$) <input type="number" name="valor_guardado" min="0" step="0.01" placeholder="0"></label>
+          <label>Quanto pretende guardar por mês (R$) <input type="number" name="aporte_mensal" min="0" step="0.01" placeholder="0"></label>
+          <label>Rentabilidade real (% ao ano) <input type="number" name="rentabilidade" min="0" max="30" step="0.1" value="4"></label>
+          <label>Prioridade <select name="prioridade"><option value="1">Alta</option><option value="2" selected>Média</option><option value="3">Baixa</option></select></label>
+        </div>
+        <p class="dica" id="obj-dica-tipo"></p>
+        <fieldset class="obj-ativos">
+          <legend>Ativos da carteira reservados para este objetivo</legend>
+          <div id="obj-ativos-lista" class="chips"></div>
+        </fieldset>
+        <div class="dialogo-acoes">
+          <button type="button" class="secundario" id="btn-obj-cancelar">Cancelar</button>
+          <button type="submit" class="btn">Salvar objetivo</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
+
+  <section id="tab-plan-familia" class="tab">
+    <div class="plan-barra">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <div class="cards" id="fam-cards"></div>
+    <div class="grade2">
+      <div class="painel">
+        <h3>Contas da família</h3>
+        <p class="dica" style="margin-top:0">Ao lançar uma despesa, marque <strong>“Conta da família”</strong> para ela entrar na divisão.
+          Cada um lança as contas que pagou na própria carteira.</p>
+        <div id="fam-acerto"></div>
+      </div>
+      <div class="painel">
+        <h3>Como vocês dividem</h3>
+        <form id="form-familia">
+          <div id="fam-modos" class="fam-modos"></div>
+          <div id="fam-pesos" class="form-linha oculto"></div>
+          <button type="submit" class="btn btn-pequeno" id="btn-fam-salvar" style="margin-top:12px">Salvar</button>
+        </form>
+        <p class="dica" id="fam-dica-config"></p>
+      </div>
+    </div>
   </section>
