@@ -242,3 +242,44 @@ def test_fatura_na_data_de_vencimento(novo_app, com_modulo):
     assert datas == {"2026-11-10"}
     assert c.post("/api/plan/fatura/previa", content_type="multipart/form-data",
                   data={"arquivo": (io.BytesIO(b"x"), "a.csv"), "cartao_id": 999}).status_code == 400
+
+
+def ler_fixture(nome):
+    import os
+    return open(os.path.join(os.path.dirname(__file__), "fixtures", nome), "rb").read()
+
+
+def test_fatura_pdf_estilo_bb():
+    itens = fat.ler_fatura(ler_fixture("fatura_cartao_bb.pdf"), "fatura.pdf")
+    resumo = [(i["data"], i["tipo"], i["valor"]) for i in itens]
+    assert resumo == [("2026-11-04", "pagamento", 2500.0), ("2026-11-05", "compra", 312.45),
+                      ("2026-11-07", "compra", 189.9), ("2026-11-10", "compra", 420.0), ("2026-11-15", "compra", 55.9),
+                      ("2026-11-18", "compra", 52.3), ("2026-11-20", "tarifa", 1.83), ("2026-11-25", "estorno", 30.0),
+                      ("2026-11-30", "compra", 30.0)]
+    assert itens[3]["parcela_num"] == 3 and itens[3]["parcela_total"] == 10
+    # saldo anterior, total da fatura e pagamento mínimo não viram lançamentos
+    assert not any("SALDO" in i["descricao"] or "Total" in i["descricao"] for i in itens)
+
+
+def test_fatura_pdf_com_senha():
+    conteudo = ler_fixture("fatura_cartao_bb_senha.pdf")
+    with pytest.raises(fat.ErroImportacao, match="tem senha"):
+        fat.ler_fatura(conteudo, "fatura.pdf")
+    with pytest.raises(fat.ErroImportacao, match="incorreta"):
+        fat.ler_fatura(conteudo, "fatura.pdf", "000")
+    assert len(fat.ler_fatura(conteudo, "fatura.pdf", "12345")) == 9
+
+
+def test_ano_da_fatura_pelo_vencimento():
+    import datetime as dt
+    assert fat._ano_referencia("Vencimento: 10/01/2027") == dt.date(2027, 1, 10)
+
+
+def test_api_fatura_pdf_com_senha(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    cartao = c.post("/api/plan/cartoes", json={"nome": "Ourocard"}).get_json()["id"]
+    envio = lambda **extra: c.post("/api/plan/fatura/previa", content_type="multipart/form-data", data={  # noqa: E731
+        "arquivo": (io.BytesIO(ler_fixture("fatura_cartao_bb_senha.pdf")), "fatura.pdf"), "cartao_id": cartao, **extra})
+    assert "senha" in envio().get_json()["erro"]
+    p = envio(senha="12345").get_json()
+    assert p["resumo"]["compras"] == 7 and p["resumo"]["parceladas"] == 1

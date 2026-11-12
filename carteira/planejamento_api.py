@@ -315,7 +315,7 @@ def registrar(app, ctx):
         if not cartao_id:
             return erro("Escolha o cartão desta fatura.")
         try:
-            itens = fat.ler_fatura(arq.read(), arq.filename)
+            itens = fat.ler_fatura(arq.read(), arq.filename, request.form.get("senha") or None)  # senha não é guardada
         except ErroImportacao as e:
             return erro(str(e))
         regras, por_nome = regras_usuario(cid), categorias_por_nome()

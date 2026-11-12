@@ -89,14 +89,14 @@
     <div class="painel requer-edicao" id="painel-fatura">
       <div class="cabecalho-painel">
         <div><h3>Importar fatura do cartão</h3>
-          <p class="dica" style="margin:0">Baixe a fatura em <strong>OFX</strong> ou <strong>CSV</strong> no app ou site do banco
-            (Nubank, Itaú, BB, Inter, C6, XP…). As compras já vêm categorizadas e o sistema aprende com as suas correções.</p></div>
+          <p class="dica" style="margin:0">Envie a fatura em <strong>PDF</strong> (a que chega por e-mail ou é baixada no app),
+            <strong>OFX</strong> ou <strong>CSV</strong>. As compras já vêm categorizadas e o sistema aprende com as suas correções.</p></div>
       </div>
       <form id="form-fatura" class="form-linha">
         <label>Cartão <select name="cartao_id" id="sel-cartao-fatura" required></select></label>
         <div class="seletor-arquivos">
-          <span class="rotulo-campo">Arquivo da fatura (OFX, CSV ou Excel)</span>
-          <input type="file" name="arquivo" id="arquivo-fatura" accept=".ofx,.qfx,.csv,.xlsx,.xls,.txt" hidden>
+          <span class="rotulo-campo">Arquivo da fatura (PDF, OFX, CSV ou Excel)</span>
+          <input type="file" name="arquivo" id="arquivo-fatura" accept=".pdf,.ofx,.qfx,.csv,.xlsx,.xls,.txt" hidden>
           <div class="zona-arquivos" id="zona-fatura">
             <button type="button" class="secundario btn-pequeno" id="btn-arquivo-fatura">
               <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -104,6 +104,8 @@
             <span class="dica" id="nome-arquivo-fatura">ou arraste a fatura para cá</span>
           </div>
         </div>
+        <label class="campo-senha-pdf oculto">Senha do PDF <input type="password" name="senha" autocomplete="off"
+          placeholder="se a fatura tiver senha"></label>
         <button type="submit">Ler fatura</button>
       </form>
       <details class="dica" id="novo-cartao">

@@ -38,7 +38,7 @@ def parcela_de(descricao):
     return None, None, d
 
 
-PAGAMENTO = ("PAGAMENTO RECEBIDO", "PAGAMENTO EFETUADO", "PAGAMENTO DE FATURA", "PAGTO", "PAGAMENTO FATURA",
+PAGAMENTO = ("PAGAMENTO RECEBIDO", "PAGAMENTO EFETUADO", "PAGAMENTO DE FATURA", "PAGTO", "PGTO", "PAGAMENTO FATURA",
              "PAGAMENTO ON LINE", "PAGAMENTO ONLINE", "PAGAMENTO - OBRIGADO", "PAGAMENTO OBRIGADO", "PGTO FATURA")
 TARIFA = ("IOF", "ANUIDADE", "TARIFA", "JUROS", "ENCARGOS", "MULTA")
 
@@ -136,7 +136,94 @@ def ler_planilha_fatura(conteudo, nome_arquivo):
                          "Envie a fatura em OFX, CSV ou Excel.")
 
 
-def ler_fatura(conteudo, nome_arquivo):
+# ------------------------------------------------------------------ PDF
+
+# Linha de lançamento no texto do PDF: "05/10 SUPERMERCADO X SAO PAULO BR 123,45" (valor em US$ opcional depois)
+RE_LINHA_PDF = re.compile(
+    r"^(\d{2})/(\d{2})(?:/(\d{2,4}))?\s+(.+?)\s+(-\s?)?(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})(\s?-)?"
+    r"(?:\s+(?:US\$\s*)?-?\d{1,3}(?:\.\d{3})*,\d{2}-?)?\s*$")
+IGNORAR_PDF = ("SALDO", "TOTAL", "SUBTOTAL", "LIMITE", "PAGAMENTO MINIMO", "VALOR MINIMO", "MINIMO", "VENCIMENTO",
+               "FATURA ANTERIOR", "ENCARGOS DO PROXIMO", "CUSTO EFETIVO", "TAXA", "PREVISAO", "MELHOR DATA",
+               "DATA DE FECHAMENTO", "PERIODO", "COTACAO DO DOLAR", "DOLAR DE CONVERSAO")
+
+
+def _texto_pdf(conteudo, senha=None):
+    try:
+        import pdfplumber
+        from pdfminer.pdfdocument import PDFPasswordIncorrect
+    except ImportError as e:
+        raise ErroImportacao("Instale o pacote pdfplumber para ler PDFs (pip install -r requirements.txt).") from e
+    import io as _io
+    try:
+        with pdfplumber.open(_io.BytesIO(conteudo), password=senha or "") as pdf:
+            return [(p.extract_text() or "") for p in pdf.pages]
+    except PDFPasswordIncorrect:
+        raise ErroImportacao("Este PDF tem senha. Informe a senha da fatura (no BB costuma ser parte do CPF; "
+                             "veja no e-mail da fatura)." if not senha else "Senha do PDF incorreta.") from None
+    except Exception as e:  # o pdfplumber embrulha os erros do pdfminer
+        if "password" in repr(e).lower() or "encrypt" in repr(e).lower():
+            raise ErroImportacao("Este PDF tem senha. Informe a senha da fatura (no BB costuma ser parte do CPF; "
+                                 "veja no e-mail da fatura)." if not senha else "Senha do PDF incorreta.") from None
+        raise ErroImportacao(f"Não foi possível abrir o PDF ({e.__class__.__name__}).") from None
+
+
+def _ano_referencia(texto):
+    """Data de vencimento da fatura (ou a data completa mais recente do texto), para completar o ano."""
+    import datetime as _dt
+    t = normalizar(texto)
+    m = re.search(r"VENCIMENTO[^0-9]{0,40}(\d{2})/(\d{2})/(\d{4})", t)
+    if m:
+        return _dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    datas = []
+    for d, mth, a in re.findall(r"\b(\d{2})/(\d{2})/(\d{4})\b", t):
+        try:
+            datas.append(_dt.date(int(a), int(mth), int(d)))
+        except ValueError:
+            continue
+    return max(datas) if datas else _dt.date.today()
+
+
+def ler_pdf_fatura(conteudo, senha=None):
+    """Lançamentos de uma fatura em PDF (texto), linha a linha: data dd/mm, descrição e valor em R$."""
+    paginas = _texto_pdf(conteudo, senha)
+    texto = "\n".join(paginas)
+    if not texto.strip():
+        raise ErroImportacao("O PDF não tem texto (parece escaneado). Baixe a fatura em PDF pelo app ou site do banco.")
+    ref = _ano_referencia(texto)
+    itens = []
+    for linha in texto.splitlines():
+        m = RE_LINHA_PDF.match(linha.strip())
+        if not m:
+            continue
+        dia, mes, ano_txt, desc, menos_antes, valor_txt, menos_depois = m.groups()[:7]
+        desc_n = normalizar(desc)
+        if any(desc_n.startswith(p) or f" {p} " in f" {desc_n} " for p in IGNORAR_PDF) and not \
+                any(p in desc_n for p in PAGAMENTO):
+            continue
+        try:
+            dia_i, mes_i = int(dia), int(mes)
+            if ano_txt:
+                ano = int(ano_txt) + (2000 if len(ano_txt) == 2 else 0)
+            else:  # sem ano: o do vencimento; compras de meses depois dele são do ano anterior
+                ano = ref.year if mes_i <= ref.month else ref.year - 1
+            import datetime as _dt
+            data = _dt.date(ano, mes_i, dia_i).isoformat()
+        except ValueError:
+            continue
+        valor = _numero(valor_txt)
+        if menos_antes or menos_depois or re.search(r"\b(CR|CREDITO)\s*$", desc_n):
+            valor = -valor
+        itens.append({"data": data, "descricao": desc.strip(), "valor_assinado": valor, "fitid": None})
+    if itens and sum(1 for x in itens if x["valor_assinado"] > 0) < len(itens) / 2:
+        for x in itens:  # banco que mostra as compras com sinal negativo
+            x["valor_assinado"] = -x["valor_assinado"]
+    if not itens:
+        raise ErroImportacao("Não encontrei lançamentos neste PDF. Rode o diagnóstico da fatura "
+                             "(python diagnostico_fatura.py \"arquivo.pdf\") e envie o resultado para o leitor ser ajustado.")
+    return itens
+
+
+def ler_fatura(conteudo, nome_arquivo, senha=None):
     """Lê a fatura e devolve os itens já classificados."""
     nome = (nome_arquivo or "").lower()
     if nome.endswith((".ofx", ".qfx")) or conteudo[:200].upper().lstrip().startswith((b"OFXHEADER", b"<OFX", b"<?XML")) \
@@ -148,9 +235,8 @@ def ler_fatura(conteudo, nome_arquivo):
             except UnicodeDecodeError:
                 continue
         brutos, _ = ler_ofx(texto)
-    elif nome.endswith(".pdf"):
-        raise ErroImportacao("Fatura em PDF ainda não é lida. Baixe a fatura em OFX ou CSV no app ou site do banco "
-                             "(geralmente em “Exportar” ou “Baixar fatura”).")
+    elif nome.endswith(".pdf") or conteudo[:5] == b"%PDF-":
+        brutos = ler_pdf_fatura(conteudo, senha)
     else:
         brutos = ler_planilha_fatura(conteudo, nome_arquivo)
     itens, vistos = [], {}

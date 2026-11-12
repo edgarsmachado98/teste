@@ -332,6 +332,9 @@
     $("#nome-arquivo-fatura").textContent = f ? f.name : "ou arraste a fatura para cá";
     $("#nome-arquivo-fatura").classList.toggle("escolhido", !!f);
     $("#btn-arquivo-fatura span").textContent = f ? "Trocar arquivo" : "Escolher arquivo";
+    // PDF: mostra o campo de senha (faturas por e-mail costumam ser protegidas)
+    $("#form-fatura .campo-senha-pdf").classList.toggle("oculto", !(f && /\.pdf$/i.test(f.name)));
+    $("#form-fatura").senha.value = "";
     $("#previa-fatura").innerHTML = "";
   }
   $("#btn-arquivo-fatura").addEventListener("click", () => $("#arquivo-fatura").click());
@@ -347,13 +350,20 @@
     const fd = new FormData();
     fd.append("arquivo", arquivoFatura, arquivoFatura.name);
     fd.append("cartao_id", ev.target.cartao_id.value);
+    if (ev.target.senha.value) fd.append("senha", ev.target.senha.value);
     if (!fd.get("cartao_id")) return toast("Cadastre ou escolha o cartão desta fatura.", true);
     $("#previa-fatura").innerHTML = `<p class="dica">Lendo a fatura…</p>`;
     try {
       const r = await fetch("/api/plan/fatura/previa", { method: "POST", body: fd,
         headers: { "X-Requested-With": "fetch", "X-Carteira": String(carteiraAtual) } });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.erro || `Erro ${r.status}`);
+      if (!r.ok) {
+        if (/senha/i.test(j.erro || "")) {
+          $("#form-fatura .campo-senha-pdf").classList.remove("oculto");
+          ev.target.senha.focus();
+        }
+        throw new Error(j.erro || `Erro ${r.status}`);
+      }
       previaFatura = j;
       renderPreviaFatura();
     } catch (e) { $("#previa-fatura").innerHTML = ""; toast(e.message, true); }
