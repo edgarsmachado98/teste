@@ -211,7 +211,7 @@
 
   function atualizarResumoForm() {
     const f = $("#form-plan"), receita = tipoForm === "receita";
-    const valor = +f.valor.value || 0, cat = catPorId(+f.categoria_id.value);
+    const valor = lerMoeda(f.valor.value) || 0, cat = catPorId(+f.categoria_id.value);
     const tit = valorRadio("titular"), pessoa = pessoasPlan.find(p => String(p.id) === tit);
     const rep = f.id.value ? "nao" : valorRadio("repetir"), n = +f.parcelas.value || 2;
     const data = f.data.value ? fmtData(f.data.value) : "";
@@ -382,9 +382,9 @@
       const l = dadosLanc.lancamentos.find(x => x.id === +ed.dataset.planEditar), f = $("#form-plan");
       tipoForm = l.tipo;
       preencherCategorias(l.categoria_id);
-      f.id.value = l.id; f.data.value = l.data; f.descricao.value = l.descricao; f.valor.value = l.valor;
+      f.id.value = l.id; f.data.value = l.data; f.descricao.value = l.descricao; f.valor.value = fmtMoeda(l.valor);
       f.dataset.carteiraOriginal = l.carteira_id;
-      f.valor_bruto.value = l.valor_bruto || ""; f.pago.checked = !!l.pago;
+      f.valor_bruto.value = fmtMoeda(l.valor_bruto); f.pago.checked = !!l.pago;
       f.querySelectorAll('input[name="forma"]').forEach(r => (r.checked = r.value === (l.forma || "")));
       f.cartao_id.value = l.cartao_id || "";
       renderTitulares(l.carteira_id, l.tipo === "receita" && !!l.compartilhado);
@@ -426,7 +426,6 @@
 
   // ---------------- Nota fiscal (NFC-e) pelo QR Code ----------------
   let notasNfce = [], falhasNfce = [], promessaJsQR = null;
-  const valorBR = v => (v == null ? "" : Number(v).toFixed(2).replace(".", ","));
 
   function carregarJsQR() {
     return (promessaJsQR ||= new Promise((ok, falha) => {
@@ -520,7 +519,7 @@
     const cartaoUnico = cartoesPlan.length === 1 ? cartoesPlan[0].id : null;
     return `<div class="nfce-pag" data-pag="${j}">
       <select data-campo="forma" aria-label="Forma de pagamento">${opcoesForma(p.forma)}</select>
-      <label class="nfce-valor"><span>R$</span><input data-campo="valor" inputmode="decimal" value="${valorBR(p.valor)}" aria-label="Valor"></label>
+      <label class="nfce-valor"><span>R$</span><input data-campo="valor" inputmode="decimal" data-moeda value="${fmtMoeda(p.valor)}" aria-label="Valor"></label>
       <select data-campo="cartao_id" class="${p.forma === "credito" ? "" : "oculto"}" aria-label="Cartão">
         <option value="">${cartoesPlan.length ? "Qual cartão?" : "Cadastre o cartão na fatura abaixo"}</option>
         ${cartoesPlan.map(c => `<option value="${c.id}" ${c.id === (p.cartao_id || cartaoUnico) ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>
@@ -620,7 +619,7 @@
     if (mais) {
       lerTodos();
       const n = notasNfce[+mais.dataset.nfceMaisPag];
-      const pago = n.pagamentos.reduce((s, p) => s + (parseFloat(String(p.valor).replace(/\./g, "").replace(",", ".")) || 0), 0);
+      const pago = n.pagamentos.reduce((s, p) => s + (lerMoeda(p.valor) || 0), 0);
       n.pagamentos.push({ forma: null, valor: n.total ? Math.max(0, +(n.total - pago).toFixed(2)) || null : null });
       renderNotas();
     } else if (tirar) {
@@ -1056,7 +1055,7 @@
     f.tipo.innerHTML = Object.entries(dadosObj.tipos).map(([v, n]) => `<option value="${v}">${esc(n)}</option>`).join("");
     f.id.value = o?.id || "";
     if (o) ["tipo", "nome", "valor_alvo", "valor_guardado", "aporte_mensal", "rentabilidade", "renda_desejada", "idade_atual",
-      "idade_alvo", "meses_reserva", "prioridade"].forEach(k => { f[k].value = o[k] ?? ""; });
+      "idade_alvo", "meses_reserva", "prioridade"].forEach(k => { f[k].value = f[k].dataset.moeda !== undefined ? fmtMoeda(o[k]) : o[k] ?? ""; });
     if (o?.data_alvo) f.data_alvo.value = o.data_alvo.slice(0, 7);
     const marcados = new Set(o?.tickers || []);
     $("#obj-ativos-lista").innerHTML = dadosObj.ativos.length ? dadosObj.ativos.map(a => `<label class="chip-check">

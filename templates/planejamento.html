@@ -64,7 +64,7 @@
         <input type="hidden" name="id">
         <div class="lanc-principal">
           <label class="lanc-valor"><span data-rotulo-valor>Valor</span>
-            <span class="campo-moeda"><em>R$</em><input type="number" name="valor" step="0.01" min="0" required inputmode="decimal" placeholder="0,00"></span></label>
+            <span class="campo-moeda"><em>R$</em><input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor" required placeholder="0,00"></span></label>
           <label class="lanc-desc">Descrição <input name="descricao" maxlength="120" placeholder="Ex.: Supermercado"></label>
           <div class="lanc-data">
             <label><span data-rotulo-data>Data</span> <input type="date" name="data" required></label>
@@ -100,7 +100,7 @@
 
         <div class="lanc-bloco so-receita oculto">
           <button type="button" class="link acao" id="btn-mostrar-bruto">+ Adicionar valor bruto (antes dos descontos)</button>
-          <label class="campo-bruto oculto lanc-sub">Valor bruto (R$) <input type="number" name="valor_bruto" step="0.01" min="0" inputmode="decimal" placeholder="Ex.: valor do contracheque"></label>
+          <label class="campo-bruto oculto lanc-sub">Valor bruto (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_bruto" placeholder="Ex.: valor do contracheque"></label>
         </div>
 
         <div class="lanc-bloco so-novo">
@@ -279,14 +279,14 @@
         <div class="form-grade">
           <label>Tipo <select name="tipo" required></select></label>
           <label>Nome <input name="nome" maxlength="80" placeholder="ex.: Entrada do apartamento"></label>
-          <label data-obj-campo="renda_desejada">Renda mensal desejada (R$) <input type="number" name="renda_desejada" min="0" step="0.01"></label>
+          <label data-obj-campo="renda_desejada">Renda mensal desejada (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="renda_desejada" placeholder="0,00"></label>
           <label data-obj-campo="idade_atual">Idade atual <input type="number" name="idade_atual" min="0" max="120"></label>
           <label data-obj-campo="idade_alvo">Idade para se aposentar <input type="number" name="idade_alvo" min="0" max="120"></label>
           <label data-obj-campo="meses_reserva">Meses de reserva <input type="number" name="meses_reserva" min="1" max="36" placeholder="6"></label>
-          <label data-obj-campo="valor_alvo">Valor do objetivo (R$) <input type="number" name="valor_alvo" min="0" step="0.01"></label>
+          <label data-obj-campo="valor_alvo">Valor do objetivo (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_alvo" placeholder="0,00"></label>
           <label data-obj-campo="data_alvo">Até quando <input type="month" name="data_alvo"></label>
-          <label>Já guardado fora da carteira (R$) <input type="number" name="valor_guardado" min="0" step="0.01" placeholder="0"></label>
-          <label>Quanto pretende guardar por mês (R$) <input type="number" name="aporte_mensal" min="0" step="0.01" placeholder="0"></label>
+          <label>Já guardado fora da carteira (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_guardado" placeholder="0,00"></label>
+          <label>Quanto pretende guardar por mês (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="aporte_mensal" placeholder="0,00"></label>
           <label>Rentabilidade real (% ao ano) <input type="number" name="rentabilidade" min="0" max="30" step="0.1" value="4"></label>
           <label>Prioridade <select name="prioridade"><option value="1">Alta</option><option value="2" selected>Média</option><option value="3">Baixa</option></select></label>
         </div>

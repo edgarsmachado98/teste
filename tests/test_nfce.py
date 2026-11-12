@@ -126,3 +126,13 @@ def test_api_nota_fiscal(novo_app, com_modulo):
     for l in da_nota:
         c.delete(f"/api/plan/lancamentos/{l['id']}")
     assert not c.post("/api/plan/nfce/ler", json={"textos": [URL]}).get_json()["notas"][0]["ja_lancada"]
+
+
+def test_valor_digitado_com_ponto_de_milhar(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    for digitado, esperado in (("7.200", 7200.0), ("7.200,50", 7200.5), ("7,5", 7.5), ("R$ 1.234.567,89", 1234567.89),
+                               ("7.5", 7.5), (7200, 7200.0)):
+        lid = c.post("/api/plan/lancamentos", json={"tipo": "receita", "data": "2026-11-12", "descricao": "Salário",
+                                                    "valor": digitado}).get_json()["id"]
+        l = next(x for x in c.get("/api/plan/lancamentos?mes=2026-11").get_json()["lancamentos"] if x["id"] == lid)
+        assert l["valor"] == esperado, digitado

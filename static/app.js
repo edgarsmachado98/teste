@@ -60,8 +60,30 @@ function grafico(id, config) {
 function formDados(form) {
   const d = Object.fromEntries(new FormData(form).entries());
   form.querySelectorAll("input[type=checkbox]").forEach(c => (d[c.name] = c.checked));
+  form.querySelectorAll("input[data-moeda]").forEach(i => {
+    if (i.name && !i.disabled) { const n = lerMoeda(i.value); d[i.name] = i.value.trim() === "" ? "" : isNaN(n) ? i.value : n; }
+  });
   return d;
 }
+
+// Valores em reais digitados no padrão brasileiro: "7.200" = sete mil e duzentos, "7.200,50", "7,5", "R$ 1.234,56".
+// (O campo numérico do navegador lê o ponto como vírgula decimal: "7.200" virava 7,2.)
+function lerMoeda(v) {
+  let s = String(v ?? "").replace(/R\$|\s/g, "");
+  if (!s) return NaN;
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  return /^-?\d*\.?\d+$/.test(s) ? Number(s) : NaN;
+}
+const fmtMoeda = v => v === "" || v == null || isNaN(v) ? "" :
+  Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// ao sair do campo, mostra o valor como ficou entendido: 7200 -> 7.200,00
+document.addEventListener("focusout", ev => {
+  const i = ev.target;
+  if (!i.matches?.("input[data-moeda]") || !i.value.trim()) return;
+  const n = lerMoeda(i.value);
+  if (!isNaN(n)) i.value = fmtMoeda(n);
+});
 
 // ---------------- Navegação ----------------
 document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
@@ -230,7 +252,7 @@ async function carregarAgenda() {
         : `<small class="dica">defina ao lado</small>`}</div>`;
   const f = $("#form-meta-renda");
   f.classList.toggle("oculto", carteiraAtual === FAMILIA);
-  if (document.activeElement !== f.valor) f.valor.value = meta ?? "";
+  if (document.activeElement !== f.valor) f.valor.value = fmtMoeda(meta);
   grafico("graf-projecao", {
     type: "bar",
     data: { labels: r.meses.map(m => `${MESES_CURTOS[+m.mes.slice(5) - 1]}/${m.mes.slice(2, 4)}`), datasets: [
@@ -270,7 +292,7 @@ async function carregarAgenda() {
 $("#form-meta-renda").addEventListener("submit", async ev => {
   ev.preventDefault();
   try {
-    await api(`/api/carteiras/${carteiraAtual}/meta-renda`, { method: "PUT", body: { valor: ev.target.valor.value } });
+    await api(`/api/carteiras/${carteiraAtual}/meta-renda`, { method: "PUT", body: { valor: lerMoeda(ev.target.valor.value) || ev.target.valor.value } });
     toast("Meta de renda salva."); carregarAgenda();
   } catch (e) { toast(e.message, true); }
 });
@@ -1361,7 +1383,7 @@ $("#form-sugestao").addEventListener("submit", async ev => {
   ev.preventDefault();
   const alvo = $("#resultado-sugestao");
   try {
-    const s = await api("/api/sugestao", { method: "POST", body: { valor: ev.target.valor.value } });
+    const s = await api("/api/sugestao", { method: "POST", body: { valor: lerMoeda(ev.target.valor.value) || ev.target.valor.value } });
     alvo.innerHTML = `<div class="cards" style="margin-top:16px">
         <div class="card"><div class="rotulo">Valor do aporte</div><div class="valor">${brl.format(s.valor_aporte)}</div></div>
         <div class="card"><div class="rotulo">Utilizado</div><div class="valor">${brl.format(s.valor_utilizado)}</div></div>

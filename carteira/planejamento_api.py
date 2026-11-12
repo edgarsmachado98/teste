@@ -114,8 +114,16 @@ def registrar(app, ctx):
         return cartao_id if ok else None
 
     def numero(v, campo):
+        """Aceita número ou texto no padrão brasileiro: '7.200' = 7200, '7.200,50', '7,5'."""
         try:
-            return float(str(v).replace(".", "").replace(",", ".")) if isinstance(v, str) and "," in v else float(v)
+            if isinstance(v, str):
+                t = re.sub(r"R\$|\s", "", v)
+                if "," in t:
+                    t = t.replace(".", "").replace(",", ".")
+                elif re.fullmatch(r"-?\d{1,3}(\.\d{3})+", t):
+                    t = t.replace(".", "")
+                return float(t)
+            return float(v)
         except (TypeError, ValueError):
             raise ValueError(f"Informe {campo} válido.") from None
 

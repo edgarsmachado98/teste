@@ -450,7 +450,7 @@
           <p class="dica" style="margin:0"><strong>Confirmado</strong>: a receber e anunciado pelas empresas.
             <strong>Projetado</strong>: repete os proventos dos últimos 12 meses com a quantidade atual (estimativa).</p></div>
         <form id="form-meta-renda" class="form-linha requer-edicao">
-          <label>Meta de renda mensal (R$) <input type="number" name="valor" step="any" min="0" style="width:130px"></label>
+          <label>Meta de renda mensal (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor" placeholder="0,00" style="width:130px"></label>
           <button type="submit" class="btn-pequeno">Salvar meta</button>
         </form>
       </div>
@@ -494,7 +494,7 @@
           </select></label>
           <label>Data com <input type="date" name="data_com"></label>
           <label>Pagamento <input type="date" name="data_pagamento" required></label>
-          <label>Valor total (R$) <input type="number" name="valor_total" step="any" min="0" required></label>
+          <label>Valor total (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_total" placeholder="0,00" required></label>
           <label>Obs. <input name="obs"></label>
           <button type="submit">Salvar</button>
         </form>
@@ -547,7 +547,7 @@
     <div class="painel">
       <h3>Quanto você vai aportar?</h3>
       <form id="form-sugestao" class="form-linha">
-        <label>Valor (R$) <input type="number" name="valor" step="any" min="0" required></label>
+        <label>Valor (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor" placeholder="0,00" required></label>
         <button type="submit">Calcular distribuição</button>
       </form>
       <p class="dica">A sugestão direciona o dinheiro para os ativos mais abaixo da meta, considerando o patrimônio após o aporte, e respeita lotes inteiros para ações, FIIs, ETFs e BDRs.</p>
