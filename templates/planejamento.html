@@ -55,14 +55,19 @@
           <button type="button" data-plan-tipo="receita"><span aria-hidden="true">+</span> Receita</button>
         </div>
       </div>
+      <div class="aviso-membros oculto" id="aviso-membros">
+        <div><strong>Primeiro passo: cadastre os membros da família</strong>
+          <span>Assim cada receita e despesa fica no nome certo (ex.: o salário do Edgar e o da Eliandra) e a divisão das contas funciona.</span></div>
+        <button type="button" class="btn btn-pequeno" data-ir-aba="plan-familia">Cadastrar membros</button>
+      </div>
       <form id="form-plan" autocomplete="off">
         <input type="hidden" name="id">
         <div class="lanc-principal">
-          <label class="lanc-valor"><span data-rotulo-valor>Quanto?</span>
+          <label class="lanc-valor"><span data-rotulo-valor>Valor</span>
             <span class="campo-moeda"><em>R$</em><input type="number" name="valor" step="0.01" min="0" required inputmode="decimal" placeholder="0,00"></span></label>
-          <label class="lanc-desc">Descrição <input name="descricao" maxlength="120" placeholder="ex.: Supermercado"></label>
+          <label class="lanc-desc">Descrição <input name="descricao" maxlength="120" placeholder="Ex.: Supermercado"></label>
           <div class="lanc-data">
-            <label>Quando? <input type="date" name="data" required></label>
+            <label><span data-rotulo-data>Data</span> <input type="date" name="data" required></label>
             <div class="pilulas mini"><button type="button" data-data="0">Hoje</button><button type="button" data-data="-1">Ontem</button></div>
           </div>
         </div>
@@ -71,48 +76,48 @@
           <span class="lanc-rotulo">Categoria</span>
           <div class="pilulas" id="cat-frequentes"></div>
           <select name="categoria_id" required aria-label="Todas as categorias"></select>
-          <small class="lanc-ajuda">Não achou? <button type="button" class="link acao" id="btn-abrir-categoria">criar categoria</button></small>
+          <small class="lanc-ajuda">Não encontrou a categoria? <button type="button" class="link acao" id="btn-abrir-categoria">Criar nova</button></small>
         </div>
 
         <div class="lanc-bloco" id="bloco-titular">
-          <span class="lanc-rotulo" data-rotulo-titular>De quem é?</span>
+          <span class="lanc-rotulo" data-rotulo-titular>Titular</span>
           <div class="pilulas" id="pilulas-titular"></div>
           <div class="so-despesa lanc-sub">
-            <span class="lanc-rotulo">A conta é</span>
+            <span class="lanc-rotulo">Tipo de despesa</span>
             <div class="pilulas">
-              <label><input type="radio" name="conta" value="pessoal" checked><span>Pessoal</span></label>
-              <label><input type="radio" name="conta" value="familia"><span>Da família <small>(dividida entre o casal)</small></span></label>
+              <label><input type="radio" name="conta" value="pessoal" checked><span>Individual</span></label>
+              <label><input type="radio" name="conta" value="familia"><span>Compartilhada <small>(dividida na família)</small></span></label>
             </div>
           </div>
         </div>
 
         <div class="lanc-bloco so-despesa">
-          <span class="lanc-rotulo">Como pagou?</span>
+          <span class="lanc-rotulo">Forma de pagamento</span>
           <div class="pilulas" id="pilulas-forma"></div>
-          <label class="campo-cartao oculto lanc-sub">Qual cartão? <select name="cartao_id"></select></label>
+          <label class="campo-cartao oculto lanc-sub">Cartão <select name="cartao_id"></select></label>
         </div>
 
         <div class="lanc-bloco so-receita oculto">
-          <button type="button" class="link acao" id="btn-mostrar-bruto">+ Informar o valor bruto (antes dos descontos)</button>
-          <label class="campo-bruto oculto lanc-sub">Valor bruto (R$) <input type="number" name="valor_bruto" step="0.01" min="0" inputmode="decimal" placeholder="ex.: salário no contracheque"></label>
+          <button type="button" class="link acao" id="btn-mostrar-bruto">+ Adicionar valor bruto (antes dos descontos)</button>
+          <label class="campo-bruto oculto lanc-sub">Valor bruto (R$) <input type="number" name="valor_bruto" step="0.01" min="0" inputmode="decimal" placeholder="Ex.: valor do contracheque"></label>
         </div>
 
         <div class="lanc-bloco so-novo">
-          <span class="lanc-rotulo">Repete?</span>
+          <span class="lanc-rotulo">Recorrência</span>
           <div class="pilulas">
-            <label><input type="radio" name="repetir" value="nao" checked><span>Só esta vez</span></label>
-            <label><input type="radio" name="repetir" value="mensal"><span>Todo mês</span></label>
-            <label class="so-despesa"><input type="radio" name="repetir" value="parcelado"><span>Parcelado</span></label>
+            <label><input type="radio" name="repetir" value="nao" checked><span>Única</span></label>
+            <label><input type="radio" name="repetir" value="mensal"><span>Mensal</span></label>
+            <label class="so-despesa"><input type="radio" name="repetir" value="parcelado"><span>Parcelada</span></label>
           </div>
           <div class="lanc-sub form-linha">
-            <label class="campo-parcelas oculto">Em quantas parcelas? <input type="number" name="parcelas" min="2" max="120" value="2"></label>
-            <label class="campo-fim oculto">Até quando? (opcional) <input type="month" name="fim"></label>
+            <label class="campo-parcelas oculto">Número de parcelas <input type="number" name="parcelas" min="2" max="120" value="2"></label>
+            <label class="campo-fim oculto">Término (opcional) <input type="month" name="fim"></label>
           </div>
         </div>
 
         <div class="lanc-rodape">
-          <label class="interruptor"><input type="checkbox" name="pago" checked><span></span><b data-rotulo-pago>Já pago</b></label>
-          <label class="check campo-proximos oculto"><input type="checkbox" name="atualizar_proximos"> Aplicar também aos próximos meses</label>
+          <label class="interruptor"><input type="checkbox" name="pago" checked><span></span><b data-rotulo-pago>Pago</b></label>
+          <label class="check campo-proximos oculto"><input type="checkbox" name="atualizar_proximos"> Aplicar aos próximos meses</label>
           <p class="lanc-resumo" id="lanc-resumo"></p>
           <div class="lanc-botoes">
             <button type="button" class="secundario oculto" id="btn-plan-cancelar">Cancelar</button>
@@ -285,12 +290,33 @@
         <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       </div>
     </div>
+    <div class="painel" id="painel-membros">
+      <div class="cabecalho-painel">
+        <div><h3>Membros da família</h3>
+          <p class="dica" style="margin:0">Quem faz parte do planejamento. Cada membro é titular das próprias receitas e despesas.
+            Membros sem acesso ao sistema (filhos, pais) também podem ser cadastrados.</p></div>
+      </div>
+      <div class="rolagem"><table id="tabela-membros" class="tabela-membros"></table></div>
+      <div class="membros-acoes plan-admin">
+        <button type="button" class="btn btn-pequeno" id="btn-salvar-membros">Salvar membros</button>
+        <details id="novo-membro">
+          <summary class="link acao">+ Adicionar membro sem acesso ao sistema</summary>
+          <form id="form-membro" class="form-linha" style="margin-top:10px">
+            <label>Nome <input name="nome" required maxlength="60" placeholder="Ex.: Lucas"></label>
+            <label>Parentesco <select name="parentesco"></select></label>
+            <label class="check"><input type="checkbox" name="divide"> Participa da divisão das contas</label>
+            <button type="submit" class="secundario">Adicionar</button>
+          </form>
+        </details>
+      </div>
+      <p class="dica" id="dica-membros"></p>
+    </div>
     <div class="cards" id="fam-cards"></div>
     <div class="grade2">
       <div class="painel">
         <h3>Contas da família</h3>
-        <p class="dica" style="margin-top:0">Ao lançar uma despesa, marque <strong>“Conta da família”</strong> para ela entrar na divisão.
-          Cada um lança as contas que pagou na própria carteira.</p>
+        <p class="dica" style="margin-top:0">Despesas lançadas como <strong>compartilhadas</strong> entram na divisão entre os membros
+          que participam dela. Informe em “Pago por” quem pagou cada conta.</p>
         <div id="fam-acerto"></div>
       </div>
       <div class="painel">

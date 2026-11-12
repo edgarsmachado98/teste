@@ -50,7 +50,7 @@
   function preencherCategorias(selecionada) {
     const grupos = {};
     categoriasPlan.filter(c => c.tipo === tipoForm).forEach(c => (grupos[c.grupo] ||= []).push(c));
-    $("#form-plan").categoria_id.innerHTML = `<option value="">Escolha…</option>` + Object.entries(grupos).map(([g, cs]) =>
+    $("#form-plan").categoria_id.innerHTML = `<option value="">Selecione a categoria</option>` + Object.entries(grupos).map(([g, cs]) =>
       `<optgroup label="${esc(g)}">${cs.map(c => `<option value="${c.id}" ${c.id === selecionada ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</optgroup>`).join("");
     $("#plan-grupos").innerHTML = [...new Set(categoriasPlan.map(c => c.grupo))].map(g => `<option value="${esc(g)}">`).join("");
   }
@@ -194,10 +194,11 @@
     f.querySelector(".campo-fim").classList.toggle("oculto", rep !== "mensal");
     f.querySelector(".campo-bruto").classList.toggle("oculto", !receita || (!f.valor_bruto.value && !f.dataset.bruto));
     $("#btn-mostrar-bruto").classList.toggle("oculto", !receita || !!f.valor_bruto.value || !!f.dataset.bruto);
-    f.querySelector("[data-rotulo-valor]").textContent = rep === "parcelado" ? "Valor total da compra" : receita ? "Quanto caiu na conta?" : "Quanto?";
-    f.querySelector("[data-rotulo-pago]").textContent = receita ? "Já recebido" : "Já pago";
-    f.querySelector("[data-rotulo-titular]").textContent = receita ? "De quem é a receita?" : "Quem pagou?";
-    f.descricao.placeholder = receita ? "ex.: Salário da empresa X" : "ex.: Supermercado";
+    f.querySelector("[data-rotulo-valor]").textContent = rep === "parcelado" ? "Valor total da compra" : receita ? "Valor líquido recebido" : "Valor";
+    f.querySelector("[data-rotulo-data]").textContent = rep === "parcelado" ? "Data da 1ª parcela" : receita ? "Data do recebimento" : "Data";
+    f.querySelector("[data-rotulo-pago]").textContent = receita ? "Recebido" : "Pago";
+    f.querySelector("[data-rotulo-titular]").textContent = receita ? "Titular da receita" : "Pago por";
+    f.descricao.placeholder = receita ? "Ex.: Salário — Empresa X" : "Ex.: Supermercado";
     $("#btn-plan-salvar").textContent = editando ? "Salvar alterações" : receita ? "Salvar receita" : "Salvar despesa";
     renderPilulasCategoria();
     atualizarResumoForm();
@@ -212,8 +213,8 @@
     if (!valor) { $("#lanc-resumo").textContent = ""; return; }
     let txt = receita
       ? `Receita de ${brl.format(valor)}${cat ? ` (${cat.nome})` : ""} ${tit === "grupo" ? "do grupo familiar" : pessoa ? `de ${pessoa.nome}` : ""}`
-      : `Despesa de ${brl.format(valor)}${cat ? ` em ${cat.nome}` : ""}${pessoa ? `, paga por ${pessoa.nome}` : ""}${valorRadio("conta") === "familia" ? ", conta da família" : ""}`;
-    txt += rep === "mensal" ? `, todo mês a partir de ${data}` : rep === "parcelado" ? `, em ${n}x de ${brl.format(valor / n)} a partir de ${data}` : data ? `, em ${data}` : "";
+      : `Despesa de ${brl.format(valor)}${cat ? ` em ${cat.nome}` : ""}${pessoa ? `, paga por ${pessoa.nome}` : ""}${valorRadio("conta") === "familia" ? ", compartilhada na família" : ", individual"}`;
+    txt += rep === "mensal" ? `, mensal a partir de ${data}` : rep === "parcelado" ? `, em ${n}x de ${brl.format(valor / n)} a partir de ${data}` : data ? `, em ${data}` : "";
     $("#lanc-resumo").textContent = txt + ".";
   }
 
@@ -280,7 +281,7 @@
       else await api("/api/plan/lancamentos", { method: "POST", body });
       const p = pessoasPlan.find(x => String(x.id) === String(titular));
       const fora = carteiraAtual !== FAMILIA && titular && +titular !== carteiraAtual;
-      toast((id ? "Lançamento atualizado" : body.repetir === "mensal" ? "Lançado para todo mês" :
+      toast((id ? "Lançamento atualizado" : body.repetir === "mensal" ? "Lançamento mensal criado" :
         body.repetir === "parcelado" ? `Compra lançada em ${d.parcelas} parcelas` : "Lançamento salvo") +
         (fora && p ? `, na carteira de ${p.nome} (selecione “Visão da família” para ver tudo junto).` : "."));
       const manterData = f.data.value;
@@ -310,6 +311,8 @@
     } catch (e) { return toast(e.message, true); }
     pessoasPlan = dadosLanc.pessoas || [];
     document.body.classList.toggle("plan-sem-edicao", !pessoasPlan.some(p => p.editar));
+    // primeiro acesso do administrador: convida a cadastrar os membros da família
+    $("#aviso-membros").classList.toggle("oculto", !USUARIO.admin || pessoasPlan.some(p => p.cadastrado));
     if (!$("#form-plan").id.value) limparForm();
     renderLancamentos();
   }
@@ -328,8 +331,8 @@
     const podeEditar = cid => pessoasPlan.some(p => p.id === cid && p.editar);
     $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th>${varias ? "<th>Titular</th>" : ""}<th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
       lista.map(l => {
-        const selos = [l.recorrencia_id ? "todo mês" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
-          l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "família") : "", l.projetado ? "previsto" : ""]
+        const selos = [l.recorrencia_id ? "mensal" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
+          l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "compartilhada") : "", l.projetado ? "previsto" : ""]
           .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ");
         const situacao = l.projetado ? `<span class="dica">previsto</span>`
           : l.pago ? `<span class="pos">${l.tipo === "receita" ? "recebido" : "pago"}</span>`
@@ -799,9 +802,45 @@
   });
 
   // ================= Família =================
+  let dadosMembros = null;
+  async function carregarMembros() {
+    dadosMembros = await api("/api/plan/membros");
+    const m = dadosMembros, pode = m.pode_configurar;
+    const opcoes = sel => Object.entries(m.parentescos).map(([v, n]) => `<option value="${v}" ${v === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
+    $("#tabela-membros").innerHTML = `<tr><th>Nome</th><th>Parentesco</th><th>Divide as contas</th><th>Acesso ao sistema</th></tr>` +
+      m.membros.map(p => `<tr data-membro="${p.id}">
+        <td><input name="nome" value="${esc(p.nome)}" maxlength="60" ${pode ? "" : "disabled"}></td>
+        <td><select name="parentesco" ${pode ? "" : "disabled"}>${opcoes(p.parentesco)}</select></td>
+        <td><label class="interruptor"><input type="checkbox" name="divide" ${p.divide ? "checked" : ""} ${pode ? "" : "disabled"}><span></span></label></td>
+        <td>${p.tem_login ? `<span class="selo">com login</span>` : `<span class="dica">sem login</span>`}<small class="var-sub">${esc(p.carteira)}</small></td></tr>`).join("");
+    $("#form-membro").parentesco.innerHTML = opcoes("filho");
+    document.querySelectorAll(".plan-admin").forEach(e => e.classList.toggle("oculto", !pode));
+    $("#dica-membros").textContent = pode ? (m.configurado ? "" :
+      "Confira os nomes e o parentesco e clique em Salvar membros. Para dar acesso a alguém, use Acessos e conta → Usuários.")
+      : "Só o administrador altera os membros da família.";
+  }
+  $("#btn-salvar-membros").addEventListener("click", async () => {
+    const membros = [...document.querySelectorAll("[data-membro]")].map(tr => ({ id: +tr.dataset.membro,
+      nome: tr.querySelector("[name=nome]").value, parentesco: tr.querySelector("[name=parentesco]").value,
+      divide: tr.querySelector("[name=divide]").checked }));
+    try { await api("/api/plan/membros", { method: "PUT", body: { membros } }); toast("Membros da família salvos."); carregarFamilia(); }
+    catch (e) { toast(e.message, true); }
+  });
+  $("#form-membro").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    try {
+      await api("/api/plan/membros", { method: "POST", body: formDados(ev.target) });
+      ev.target.reset(); $("#novo-membro").open = false;
+      toast("Membro adicionado. Ele já pode ser escolhido como titular nos lançamentos.");
+      await carregarCarteiras?.(carteiraAtual);
+      carregarFamilia();
+    } catch (e) { toast(e.message, true); }
+  });
+
   let dadosFam = null;
   async function carregarFamilia() {
     atualizarSeletoresMes();
+    carregarMembros().catch(e => toast(e.message, true));
     try { dadosFam = await api(`/api/plan/familia?mes=${mesPlan}`); } catch (e) { return toast(e.message, true); }
     const f = dadosFam, t = f.totais;
     $("#fam-cards").innerHTML = [
@@ -821,7 +860,8 @@
         <tr class="linha-total"><td>Total</td><td>${brl.format(f.pessoas.reduce((a, p) => a + p.renda, 0))}</td><td>${brl.format(f.total)}</td>${junto ? "" : "<td></td><td></td>"}</tr></table></div>
       <div class="fam-acerto">${junto ? `<p>No modo <strong>tudo junto</strong> não há acerto: as contas saem do caixa comum.</p>`
         : f.transferencias.length ? f.transferencias.map(x => `<p><strong>${esc(x.de)}</strong> transfere <strong>${brl.format(x.valor)}</strong> para <strong>${esc(x.para)}</strong> para acertar o mês.</p>`).join("")
-        : `<p>Contas do mês já divididas certinho: ninguém deve nada.</p>`}</div>`;
+        : `<p>Contas do mês já divididas certinho: ninguém deve nada.</p>`}
+        ${(f.fora_da_divisao || []).filter(p => p.pagou).map(p => `<p class="dica">${esc(p.nome)} pagou ${brl.format(p.pagou)} em contas compartilhadas, mas não participa da divisão.</p>`).join("")}</div>`;
     $("#fam-modos").innerHTML = Object.entries(f.modos).map(([v, txt]) => {
       const [titulo, desc] = txt.split(": ");
       return `<label class="fam-modo"><input type="radio" name="modo" value="${v}" ${v === f.modo ? "checked" : ""} ${f.pode_configurar ? "" : "disabled"}>

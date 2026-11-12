@@ -431,3 +431,35 @@ def test_receita_do_grupo_familiar(novo_app, com_modulo):
     lanc = edgar.get(f"/api/plan/lancamentos?mes={mes}").get_json()
     assert {p["nome"] for p in lanc["pessoas"]} == {"Edgar Machado", "Eliandra"}
     assert all(p["editar"] for p in lanc["pessoas"])  # o administrador lança para os dois
+
+
+def test_membros_da_familia(novo_app, com_modulo):
+    app = novo_app(fonte)
+    edgar = cliente_logado(app)
+    edgar.post("/api/usuarios", json={"nome": "Eliandra", "email": "eli@x.com", "senha": "senha-eli-123",
+                                      "criar_carteira": True, "nome_carteira": "Carteira Eliandra"})
+    m = edgar.get("/api/plan/membros").get_json()
+    assert not m["configurado"] and {p["nome"] for p in m["membros"]} == {"Edgar Machado", "Eliandra"}
+    # filho sem login, que não divide as contas
+    r = edgar.post("/api/plan/membros", json={"nome": "Lucas", "parentesco": "filho"})
+    lucas = r.get_json()["id"]
+    assert r.status_code == 201
+    membros = edgar.get("/api/plan/membros").get_json()["membros"]
+    edgar.put("/api/plan/membros", json={"membros": [
+        {**p, "nome": "Edgar" if p["nome"] == "Edgar Machado" else p["nome"],
+         "parentesco": "conjuge" if p["nome"] == "Eliandra" else p["parentesco"]} for p in membros]})
+    m = edgar.get("/api/plan/membros").get_json()
+    por_nome = {p["nome"]: p for p in m["membros"]}
+    assert m["configurado"] and set(por_nome) == {"Edgar", "Eliandra", "Lucas"}
+    assert not por_nome["Lucas"]["divide"] and not por_nome["Lucas"]["tem_login"]
+    # lança uma receita para o Lucas (mesada / estágio) e uma conta compartilhada paga por ele
+    mes = dt.date.today().isoformat()[:7]
+    edgar.post("/api/plan/lancamentos", json={"tipo": "receita", "data": f"{mes}-05", "valor": 900, "carteira_id": lucas})
+    edgar.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-06", "valor": 100, "carteira_id": lucas,
+                                              "compartilhado": True})
+    f = edgar.get(f"/api/plan/familia?mes={mes}").get_json()
+    assert {p["nome"] for p in f["pessoas"]} == {"Edgar", "Eliandra"}  # Lucas não entra na divisão
+    assert f["fora_da_divisao"][0]["nome"] == "Lucas" and f["fora_da_divisao"][0]["pagou"] == 100
+    eli = cliente_logado(app, "eli@x.com", "senha-eli-123")
+    assert eli.put("/api/plan/membros", json={"membros": []}).status_code == 403
+    assert eli.post("/api/plan/membros", json={"nome": "X"}).status_code == 403

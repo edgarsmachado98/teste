@@ -1710,6 +1710,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         carteiras_visiveis=lambda: auth.carteiras_do_usuario(conn, g.usuario),
         eh_admin=lambda: bool(g.usuario and g.usuario["admin"]),
         usuario_id=lambda: g.usuario["id"] if g.usuario else None,
+        criar_carteira=lambda nome, dono: auth.criar_carteira(conn, nome, dono),
         valores_ativos=lambda cids: {l["ticker"]: l["valor"] for l in montar_resumo(cids)["ativos"] if l["quantidade"] > 0}))
 
     return app

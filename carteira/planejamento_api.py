@@ -62,9 +62,17 @@ def registrar(app, ctx):
     # várias carteiras (ex.: o administrador da família) lança para qualquer uma delas, inclusive
     # na visão da família, escolhendo o titular.
     def pessoas():
-        return [{"id": c["id"], "nome": c.get("dono_nome") or c["nome"], "carteira": c["nome"],
-                 "editar": bool(c["permissoes"]["editar"]), "minha": c.get("dono_id") == ctx.usuario_id()}
-                for c in ctx.carteiras_visiveis()]
+        """Titulares possíveis: as carteiras visíveis, com o nome e o parentesco do cadastro de membros."""
+        membros = {r["carteira_id"]: r for r in conn.execute("SELECT * FROM fin_membros")}
+        out = []
+        for c in ctx.carteiras_visiveis():
+            m = membros.get(c["id"])
+            out.append({"id": c["id"], "nome": (m["nome"] if m else None) or c.get("dono_nome") or c["nome"],
+                        "carteira": c["nome"], "parentesco": m["parentesco"] if m else "titular",
+                        "divide": bool(m["divide"]) if m else True, "cadastrado": m is not None,
+                        "tem_login": c.get("dono_id") is not None,
+                        "editar": bool(c["permissoes"]["editar"]), "minha": c.get("dono_id") == ctx.usuario_id()})
+        return out
 
     def editaveis():
         return [p for p in pessoas() if p["editar"]]
@@ -526,11 +534,11 @@ def registrar(app, ctx):
     @app.get("/api/plan/familia")
     def plan_familia():
         mes = mes_param()
-        carteiras = ctx.carteiras_visiveis()
+        carteiras = pessoas()
         cids = [c["id"] for c in carteiras]
         plan.materializar(conn, cids, mes_atual())
         modo, pesos = config("modo_familia", "proporcional"), config("pesos_familia", {})
-        pessoas, totais = [], {"receitas": 0.0, "despesas": 0.0, "compartilhadas": 0.0}
+        participantes, totais = [], {"receitas": 0.0, "despesas": 0.0, "compartilhadas": 0.0}
         prov = plan.proventos_por_mes(ctx.listar_proventos(cids), ctx.hoje()) if cids else {}
         inv = plan.investido_por_mes(ctx.listar_aportes(cids)) if cids else {}
         for c in carteiras:
@@ -540,12 +548,14 @@ def registrar(app, ctx):
                 l["valor"] for l in lancs if l["tipo"] == "receita" and l.get("compartilhado"))
             desp = sum(l["valor"] for l in lancs if l["tipo"] == "despesa")
             comum = sum(l["valor"] for l in lancs if l["tipo"] == "despesa" and l.get("compartilhado"))
-            pessoas.append({"id": c["id"], "nome": c.get("dono_nome") or c["nome"], "carteira": c["nome"],
-                            "renda": renda, "pagou": comum, "despesas_pessoais": desp - comum})
+            participantes.append({"id": c["id"], "nome": c["nome"], "carteira": c["carteira"], "divide": c["divide"],
+                                  "renda": renda, "pagou": comum, "despesas_pessoais": desp - comum})
             totais["receitas"] += renda
             totais["despesas"] += desp
             totais["compartilhadas"] += comum
-        acerto = plan.acerto_familia(pessoas, modo, pesos)
+        # só quem divide as contas entra no acerto; contas pagas por quem não divide ficam fora da divisão
+        acerto = plan.acerto_familia([p for p in participantes if p["divide"]], modo, pesos)
+        acerto["fora_da_divisao"] = [p for p in participantes if not p["divide"]]
         investido, proventos = inv.get(mes, 0.0), prov.get(mes, 0.0)
         totais.setdefault("receitas_grupo", 0.0)
         totais.update({"investido": investido, "proventos": proventos,
@@ -572,6 +582,49 @@ def registrar(app, ctx):
             salvar_config("pesos_familia", pesos)
         conn.commit()
         return jsonify({"ok": True})
+
+    # ================================================================ membros da família
+    @app.get("/api/plan/membros")
+    def plan_membros():
+        return jsonify({"membros": pessoas(), "parentescos": plan.PARENTESCOS,
+                        "configurado": bool(config("membros_configurados", False)), "pode_configurar": bool(ctx.eh_admin())})
+
+    @app.put("/api/plan/membros")
+    def plan_salvar_membros():
+        if not ctx.eh_admin():
+            return erro("Apenas o administrador cadastra os membros da família.", 403)
+        visiveis = {p["id"] for p in pessoas()}
+        for m in (request.get_json(silent=True) or {}).get("membros") or []:
+            try:
+                cid = int(m.get("id"))
+            except (TypeError, ValueError):
+                continue
+            nome = (m.get("nome") or "").strip()[:60]
+            if cid not in visiveis or not nome:
+                continue
+            parentesco = m.get("parentesco") if m.get("parentesco") in plan.PARENTESCOS else "outro"
+            conn.execute("""INSERT INTO fin_membros (carteira_id, nome, parentesco, divide) VALUES (?, ?, ?, ?)
+                            ON CONFLICT(carteira_id) DO UPDATE SET nome = excluded.nome, parentesco = excluded.parentesco,
+                            divide = excluded.divide""", (cid, nome, parentesco, 1 if m.get("divide") else 0))
+        salvar_config("membros_configurados", True)
+        conn.commit()
+        return jsonify({"ok": True})
+
+    @app.post("/api/plan/membros")
+    def plan_novo_membro():
+        """Membro da família sem login (filhos, pais...): ganha uma carteira própria para os lançamentos."""
+        if not ctx.eh_admin():
+            return erro("Apenas o administrador cadastra os membros da família.", 403)
+        d = request.get_json(silent=True) or {}
+        nome = (d.get("nome") or "").strip()[:60]
+        if not nome:
+            return erro("Informe o nome do membro da família.")
+        parentesco = d.get("parentesco") if d.get("parentesco") in plan.PARENTESCOS else "outro"
+        cid = ctx.criar_carteira(f"Carteira {nome}", None)
+        conn.execute("INSERT INTO fin_membros (carteira_id, nome, parentesco, divide) VALUES (?, ?, ?, ?)",
+                     (cid, nome, parentesco, 1 if d.get("divide") else 0))
+        conn.commit()
+        return jsonify({"ok": True, "id": cid}), 201
 
     # ================================================================ fase 4: objetivos
     CAMPOS_OBJ = ("tipo", "nome", "valor_alvo", "data_alvo", "valor_guardado", "aporte_mensal", "rentabilidade",

@@ -103,6 +103,14 @@ CREATE TABLE IF NOT EXISTS fin_objetivos (
     criado_em         TEXT
 );
 
+-- Membros da família: quem é o titular de cada carteira no planejamento (com ou sem login no sistema).
+CREATE TABLE IF NOT EXISTS fin_membros (
+    carteira_id INTEGER PRIMARY KEY REFERENCES carteiras(id) ON DELETE CASCADE,
+    nome        TEXT NOT NULL,
+    parentesco  TEXT NOT NULL DEFAULT 'titular',
+    divide      INTEGER NOT NULL DEFAULT 1      -- participa da divisão das contas da família
+);
+
 -- Estabelecimento -> categoria, aprendido com as correções do usuário na importação de faturas.
 CREATE TABLE IF NOT EXISTS fin_regras (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -486,3 +494,7 @@ def situacao_orcamento(limite, gasto, fracao_mes=None):
     projecao = gasto / fracao_mes if fracao_mes and fracao_mes > 0 else None
     estado = "sem_limite" if not limite else "estourado" if gasto > limite else "atencao" if pct >= 80 else "ok"
     return {"limite": limite, "gasto": gasto, "pct": pct, "estado": estado, "projecao_mes": projecao}
+
+
+PARENTESCOS = {"titular": "Titular", "conjuge": "Cônjuge / companheiro(a)", "filho": "Filho(a)",
+               "pai_mae": "Pai / mãe", "outro": "Outro"}

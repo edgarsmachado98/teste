@@ -775,3 +775,18 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
   .lanc-botoes .btn { flex: 1; }
 }
 .lanc-bloco > button.link, .lanc-ajuda { align-self: flex-start; }
+.aviso-membros { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 12px 14px;
+  margin-bottom: 14px; border-radius: var(--raio-p); border: 1px solid color-mix(in srgb, var(--primaria) 30%, var(--borda));
+  background: var(--primaria-suave); }
+.aviso-membros div { display: flex; flex-direction: column; gap: 2px; }
+.aviso-membros span { font-size: .84rem; color: var(--texto-2); }
+.tabela-membros td { vertical-align: middle; }
+.tabela-membros th:nth-child(-n+2), .tabela-membros td:nth-child(-n+2) { text-align: left; }
+.tabela-membros input[name=nome] { width: 100%; min-width: 160px; }
+.tabela-membros select { min-width: 180px; }
+.tabela-membros td:nth-child(3) .interruptor { justify-content: flex-end; }
+.membros-acoes { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+.membros-acoes summary { cursor: pointer; padding-top: 6px; }
+.interruptor { display: inline-flex; }
+.interruptor span { display: inline-block; }
+#detalhe-categoria:not([open]) { display: none; }
