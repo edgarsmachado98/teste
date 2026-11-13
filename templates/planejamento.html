@@ -1,0 +1,461 @@
+{# Módulo adicional: Planejamento financeiro (incluído só quando ativo na licença) #}
+  <section id="tab-plan-resumo" class="tab">
+    <div class="plan-barra">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <button type="button" class="btn btn-pequeno plan-editavel" data-ir-aba="plan-lancamentos" data-novo-lanc="despesa">Novo lançamento</button>
+    </div>
+    <div id="plan-boas-vindas" class="painel plan-boas-vindas oculto">
+      <h3>Comece pelo básico</h3>
+      <ol>
+        <li>Lance sua <strong>renda</strong> (salário bruto e líquido) marcando “todo mês”.</li>
+        <li>Lance as <strong>contas fixas</strong> (aluguel, condomínio, escola, internet…), também como “todo mês”.</li>
+        <li>No dia a dia, registre os <strong>gastos</strong>. Compras parceladas entram de uma vez, com todas as parcelas.</li>
+      </ol>
+      <p class="dica">Proventos e aportes da carteira já entram aqui automaticamente.</p>
+      <button type="button" class="btn plan-editavel" data-ir-aba="plan-lancamentos" data-novo-lanc="despesa">Fazer o primeiro lançamento</button>
+    </div>
+    <div class="cards" id="plan-cards"></div>
+    <div class="grade2">
+      <div class="painel">
+        <h3>Para onde foi o dinheiro</h3>
+        <div class="plan-pizza"><canvas id="graf-plan-despesas"></canvas></div>
+        <div id="plan-despesas-grupo"></div>
+      </div>
+      <div class="painel">
+        <h3>De onde veio</h3>
+        <div id="plan-receitas"></div>
+        <h3 style="margin-top:20px">Contas do mês</h3>
+        <div id="plan-a-pagar"></div>
+        <div id="plan-cartoes"></div>
+      </div>
+    </div>
+    <div class="grade2">
+      <div class="painel">
+        <h3>Indicadores</h3>
+        <div id="plan-indicadores" class="plan-indicadores"></div>
+      </div>
+      <div class="painel">
+        <h3>Últimos 12 meses</h3>
+        <canvas id="graf-plan-serie" height="170"></canvas>
+        <p class="dica plan-vazio oculto" id="plan-serie-vazia">O gráfico aparece quando houver receitas, despesas ou aportes lançados.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-plan-lancamentos" class="tab">
+    <div class="lanc-topo">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <select id="plan-pessoa" aria-label="Membro da família" class="oculto"></select>
+      <div class="lanc-acoes plan-editavel">
+        <button type="button" class="secundario" data-abrir-gaveta="painel-nfce">Nota fiscal</button>
+        <button type="button" class="secundario" data-abrir-gaveta="painel-fatura">Importar fatura</button>
+        <button type="button" class="btn btn-receita" data-novo-lanc="receita">+ Receita</button>
+        <button type="button" class="btn btn-despesa" data-novo-lanc="despesa">− Despesa</button>
+      </div>
+    </div>
+    <div class="cards" id="plan-kpis"></div>
+    <div class="lanc-grade">
+      <div class="painel lanc-lista">
+        <div class="lanc-filtros">
+          <div class="chips" id="plan-chips">
+            <button type="button" class="ativo" data-filtro="">Todos</button><button type="button" data-filtro="receita">Receitas</button>
+            <button type="button" data-filtro="despesa">Despesas</button><button type="button" data-filtro="pendente">A pagar</button>
+            <button type="button" data-filtro="cartao">Cartão</button>
+          </div>
+          <input type="search" id="plan-busca" placeholder="Buscar lançamento…" aria-label="Buscar lançamento" autocomplete="off">
+        </div>
+        <div id="lista-plan" class="lista-plan"></div>
+        <p class="dica" id="plan-nota-modo"></p>
+      </div>
+      <div class="lanc-lado">
+        <div class="painel lado-fixas"><div class="lado-cab"><h3>Contas fixas</h3><button type="button" class="link acao" data-abrir-gaveta="plan-fixas">ver todas</button></div>
+          <div id="lado-despesas"></div></div>
+        <div class="painel lado-fixas"><div class="lado-cab"><h3>Receitas fixas</h3><button type="button" class="link acao" data-abrir-gaveta="plan-fixas">ver todas</button></div>
+          <div id="lado-receitas"></div></div>
+      </div>
+    </div>
+    <div class="menu-lanc oculto" id="menu-lanc" role="menu"></div>
+
+    <!-- abertos na janela lateral -->
+    <div id="plan-guardados" hidden>
+    <div class="painel plan-editavel lanc-form" id="painel-plan-form">
+      <div class="lanc-cab">
+        <h3 id="plan-form-titulo">Novo lançamento</h3>
+        <div class="lanc-tipo" role="tablist" aria-label="Tipo de lançamento">
+          <button type="button" class="ativo" data-plan-tipo="despesa"><span aria-hidden="true">−</span> Despesa</button>
+          <button type="button" data-plan-tipo="receita"><span aria-hidden="true">+</span> Receita</button>
+        </div>
+      </div>
+      <div class="aviso-membros oculto" id="aviso-membros">
+        <div><strong>Primeiro passo: cadastre os membros da família</strong>
+          <span>Assim cada receita e despesa fica no nome certo (ex.: o salário do Edgar e o da Eliandra) e a divisão das contas funciona.</span></div>
+        <button type="button" class="btn btn-pequeno" data-ir-aba="plan-familia">Cadastrar membros</button>
+      </div>
+      <form id="form-plan" autocomplete="off">
+        <input type="hidden" name="id">
+        <div class="lanc-principal">
+          <label class="lanc-valor"><span data-rotulo-valor>Valor</span>
+            <span class="campo-moeda"><em>R$</em><input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor" required placeholder="0,00"></span></label>
+          <label class="lanc-desc">Descrição <input name="descricao" maxlength="120" placeholder="Ex.: Supermercado"></label>
+          <div class="lanc-data">
+            <label><span data-rotulo-data>Data</span> <input type="date" name="data" required></label>
+            <div class="pilulas mini"><button type="button" data-data="0">Hoje</button><button type="button" data-data="-1">Ontem</button></div>
+          </div>
+        </div>
+
+        <div class="lanc-bloco">
+          <span class="lanc-rotulo">Categoria</span>
+          <div class="pilulas" id="cat-frequentes"></div>
+          <select name="categoria_id" required aria-label="Todas as categorias"></select>
+          <small class="lanc-ajuda">Não encontrou a categoria? <button type="button" class="link acao" id="btn-abrir-categoria">Criar nova</button></small>
+        </div>
+
+        <div class="lanc-bloco" id="bloco-titular">
+          <span class="lanc-rotulo" data-rotulo-titular>Titular</span>
+          <div class="pilulas" id="pilulas-titular"></div>
+          <small class="lanc-ajuda" id="ajuda-titular"></small>
+          <div class="so-despesa lanc-sub">
+            <span class="lanc-rotulo">Tipo de despesa</span>
+            <div class="pilulas">
+              <label><input type="radio" name="conta" value="pessoal" checked><span>Individual</span></label>
+              <label><input type="radio" name="conta" value="familia"><span>Compartilhada <small>(dividida na família)</small></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="lanc-bloco so-despesa">
+          <span class="lanc-rotulo">Forma de pagamento</span>
+          <div class="pilulas" id="pilulas-forma"></div>
+          <label class="campo-cartao oculto lanc-sub">Cartão <select name="cartao_id"></select></label>
+          <p class="aviso-credito oculto" id="aviso-credito"></p>
+        </div>
+
+        <div class="lanc-bloco so-receita oculto">
+          <button type="button" class="link acao" id="btn-mostrar-bruto">+ Adicionar valor bruto (antes dos descontos)</button>
+          <label class="campo-bruto oculto lanc-sub">Valor bruto (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_bruto" placeholder="Ex.: valor do contracheque"></label>
+        </div>
+
+        <div class="lanc-bloco so-novo">
+          <span class="lanc-rotulo">Recorrência</span>
+          <div class="pilulas">
+            <label><input type="radio" name="repetir" value="nao" checked><span>Única</span></label>
+            <label><input type="radio" name="repetir" value="mensal"><span>Mensal</span></label>
+            <label class="so-despesa"><input type="radio" name="repetir" value="parcelado"><span>Parcelada</span></label>
+          </div>
+          <div class="lanc-sub form-linha">
+            <label class="campo-parcelas oculto">Número de parcelas <input type="number" name="parcelas" min="2" max="120" value="2"></label>
+            <label class="campo-fim oculto">Término (opcional) <input type="month" name="fim"></label>
+          </div>
+        </div>
+
+        <div class="lanc-rodape">
+          <label class="interruptor"><input type="checkbox" name="pago" checked><span></span><b data-rotulo-pago>Pago</b></label>
+          <label class="check campo-proximos oculto"><input type="checkbox" name="atualizar_proximos"> Aplicar aos próximos meses</label>
+          <p class="lanc-resumo" id="lanc-resumo"></p>
+          <div class="lanc-botoes">
+            <button type="button" class="secundario oculto" id="btn-plan-cancelar">Cancelar</button>
+            <button type="submit" class="btn" id="btn-plan-salvar">Salvar despesa</button>
+          </div>
+        </div>
+      </form>
+      <details class="dica" id="detalhe-categoria">
+        <summary>Criar categoria</summary>
+        <form id="form-plan-categoria" class="form-linha" style="margin-top:8px">
+          <label>Tipo <select name="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>
+          <label>Grupo <input name="grupo" list="plan-grupos" required placeholder="ex.: Moradia"></label>
+          <label>Nome <input name="nome" required placeholder="ex.: Jardinagem"></label>
+          <button type="submit" class="secundario">Criar</button>
+        </form>
+        <datalist id="plan-grupos"></datalist>
+      </details>
+    </div>
+
+    <div class="painel plan-editavel" id="painel-nfce">
+      <div class="cabecalho-painel">
+        <div><h3>Lançar pela nota fiscal</h3>
+          <p class="dica" style="margin:0">Fotografe o <strong>QR Code</strong> do cupom (mercado, posto, farmácia…). O sistema
+            consulta a nota na Sefaz e já traz a loja, o valor, os itens e a forma de pagamento.</p></div>
+      </div>
+      <div class="nfce-entrada">
+        <input type="file" id="foto-nfce" accept="image/*" multiple hidden>
+        <button type="button" class="btn" id="btn-foto-nfce">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <span>Fotografar ou escolher fotos</span></button>
+        <form id="form-nfce-texto" class="nfce-colar">
+          <input name="texto" placeholder="ou cole o link do QR Code / a chave de acesso (44 números)" autocomplete="off">
+          <button type="submit" class="secundario">Ler</button>
+        </form>
+      </div>
+      <p class="dica nfce-dica">Dica: pode enviar várias fotos de uma vez, uma por cupom. Basta o QR Code aparecer inteiro e nítido.</p>
+      <div id="previa-nfce"></div>
+    </div>
+
+    <div class="painel plan-editavel" id="painel-fatura">
+      <div class="cabecalho-painel">
+        <div><h3>Importar fatura do cartão</h3>
+          <p class="dica" style="margin:0">Envie a fatura em <strong>PDF</strong> (a que chega por e-mail ou é baixada no app),
+            <strong>OFX</strong> ou <strong>CSV</strong>. As compras já vêm categorizadas e o sistema aprende com as suas correções.</p></div>
+      </div>
+      <form id="form-fatura" class="form-linha">
+        <label>Cartão <select name="cartao_id" id="sel-cartao-fatura" required></select></label>
+        <div class="seletor-arquivos">
+          <span class="rotulo-campo">Arquivo da fatura (PDF, OFX, CSV ou Excel)</span>
+          <input type="file" name="arquivo" id="arquivo-fatura" accept=".pdf,.ofx,.qfx,.csv,.xlsx,.xls,.txt" hidden>
+          <div class="zona-arquivos" id="zona-fatura">
+            <button type="button" class="secundario btn-pequeno" id="btn-arquivo-fatura">
+              <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Escolher arquivo</span></button>
+            <span class="dica" id="nome-arquivo-fatura">ou arraste a fatura para cá</span>
+          </div>
+        </div>
+        <label class="campo-senha-pdf oculto">Senha do PDF <input type="password" name="senha" autocomplete="off"
+          placeholder="se a fatura tiver senha"></label>
+        <button type="submit">Ler fatura</button>
+      </form>
+      <details class="dica" id="novo-cartao">
+        <summary>Cadastrar cartão</summary>
+        <form id="form-cartao" class="form-linha" style="margin-top:8px">
+          <label>Nome <input name="nome" required placeholder="ex.: Nubank, Itaú Visa"></label>
+          <label>Dia do vencimento <input type="number" name="dia_vencimento" min="1" max="31" placeholder="ex.: 15"></label>
+          <button type="submit" class="secundario">Cadastrar</button>
+        </form>
+        <div id="lista-cartoes"></div>
+      </details>
+      <div id="previa-fatura"></div>
+    </div>
+
+      <div id="plan-fixas">
+    <div class="fixas">
+      <div class="painel">
+        <h3>Receitas fixas</h3>
+        <p class="dica" style="margin-top:0">Salários e rendas que entram todo mês, lançadas automaticamente.</p>
+        <div class="rolagem"><table id="tabela-fixas-receitas" class="tabela-fixas"></table></div>
+      </div>
+      <div class="painel">
+        <h3>Contas fixas</h3>
+        <p class="dica" style="margin-top:0">Aluguel, escola, internet, assinaturas… lançadas automaticamente todo mês.</p>
+        <div class="rolagem"><table id="tabela-fixas-despesas" class="tabela-fixas"></table></div>
+      </div>
+    </div>
+    <p class="dica fixas-dica"><strong>Encerrar</strong> para de lançar a partir do próximo mês e mantém os meses já lançados.
+      <strong>Excluir</strong> apaga tudo, para quando foi lançada por engano.</p>
+      </div>
+    </div>
+
+    <dialog id="dialogo-plan-excluir" class="dialogo">
+      <form method="dialog">
+        <h3>Excluir lançamento</h3>
+        <p id="dialogo-plan-texto"></p>
+        <div class="dialogo-acoes">
+          <button value="cancelar" class="secundario">Cancelar</button>
+          <button value="este" class="secundario">Só este</button>
+          <button value="proximos" class="btn">Este e os próximos</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
+
+  <section id="tab-plan-orcamento" class="tab">
+    <div class="plan-barra">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Orçamento por grupo</h3>
+          <p class="dica" style="margin:0">Defina quanto pode gastar por mês em cada grupo. O sino e o Telegram avisam aos 80% e ao passar do limite.</p></div>
+        <div class="acoes-painel requer-edicao">
+          <button type="button" class="secundario btn-pequeno" id="btn-orc-media">Preencher pela média de 3 meses</button>
+          <button type="button" class="btn btn-pequeno" id="btn-orc-salvar">Salvar limites</button>
+        </div>
+      </div>
+      <div id="orc-resumo" class="plan-totais"></div>
+      <div class="orc-lista" id="orc-lista"></div>
+    </div>
+    <div class="painel">
+      <h3>Próximos 12 meses</h3>
+      <p class="dica" style="margin-top:0">Receitas e contas fixas, parcelas já lançadas e o aporte planejado nos objetivos. Gastos do dia a dia ainda não lançados não entram.</p>
+      <div id="aviso-projecao"></div>
+      <canvas id="graf-plan-projecao" height="90"></canvas>
+      <div class="rolagem"><table id="tabela-projecao" class="tabela-projecao"></table></div>
+    </div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Para a declaração do Imposto de Renda</h3>
+          <p class="dica" style="margin:0">Totais do ano lançados aqui. Confira com os informes de rendimentos e os recibos, e as regras de dedução do ano.</p></div>
+        <select id="ir-plan-ano" aria-label="Ano"></select>
+      </div>
+      <div id="ir-plan"></div>
+    </div>
+  </section>
+
+  <section id="tab-plan-objetivos" class="tab">
+    <div class="cards" id="obj-cards"></div>
+    <div class="plan-barra">
+      <p class="dica" style="margin:0">Valores em reais de hoje: a rentabilidade usada é a <strong>real</strong> (acima da inflação).</p>
+      <button type="button" class="btn btn-pequeno requer-edicao" id="btn-novo-objetivo">Novo objetivo</button>
+    </div>
+    <div class="obj-grade" id="obj-lista"></div>
+
+    <dialog id="dialogo-objetivo" class="dialogo dialogo-largo">
+      <form id="form-objetivo" method="dialog">
+        <h3 id="obj-form-titulo">Novo objetivo</h3>
+        <input type="hidden" name="id">
+        <div class="form-grade">
+          <label>Tipo <select name="tipo" required></select></label>
+          <label>Nome <input name="nome" maxlength="80" placeholder="ex.: Entrada do apartamento"></label>
+          <label data-obj-campo="renda_desejada">Renda mensal desejada (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="renda_desejada" placeholder="0,00"></label>
+          <label data-obj-campo="idade_atual">Idade atual <input type="number" name="idade_atual" min="0" max="120"></label>
+          <label data-obj-campo="idade_alvo">Idade para se aposentar <input type="number" name="idade_alvo" min="0" max="120"></label>
+          <label data-obj-campo="meses_reserva">Meses de reserva <input type="number" name="meses_reserva" min="1" max="36" placeholder="6"></label>
+          <label data-obj-campo="valor_alvo">Valor do objetivo (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_alvo" placeholder="0,00"></label>
+          <label data-obj-campo="data_alvo">Até quando <input type="month" name="data_alvo"></label>
+          <label>Já guardado fora da carteira (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_guardado" placeholder="0,00"></label>
+          <label>Quanto pretende guardar por mês (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="aporte_mensal" placeholder="0,00"></label>
+          <label>Rentabilidade real (% ao ano) <input type="number" name="rentabilidade" min="0" max="30" step="0.1" value="4"></label>
+          <label>Prioridade <select name="prioridade"><option value="1">Alta</option><option value="2" selected>Média</option><option value="3">Baixa</option></select></label>
+        </div>
+        <p class="dica" id="obj-dica-tipo"></p>
+        <fieldset class="obj-ativos">
+          <legend>Ativos da carteira reservados para este objetivo</legend>
+          <div id="obj-ativos-lista" class="chips"></div>
+        </fieldset>
+        <div class="dialogo-acoes">
+          <button type="button" class="secundario" id="btn-obj-cancelar">Cancelar</button>
+          <button type="submit" class="btn">Salvar objetivo</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
+
+  <section id="tab-plan-familia" class="tab">
+    <div class="plan-barra">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <div class="painel" id="painel-membros">
+      <div class="cabecalho-painel">
+        <div><h3>Membros da família</h3>
+          <p class="dica" style="margin:0">Quem faz parte do planejamento. Cada membro aparece como opção de “quem pagou” nas despesas
+            e de “para quem é” nas receitas.</p></div>
+        <button type="button" class="btn plan-admin" id="btn-novo-membro">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Cadastrar membro</button>
+      </div>
+      <div class="lista-membros" id="lista-membros"></div>
+      <p class="dica" id="dica-membros"></p>
+    </div>
+    <dialog id="dialogo-membro" class="dialogo">
+      <form id="form-membro" method="dialog" autocomplete="off">
+        <h3 id="titulo-membro">Cadastrar membro da família</h3>
+        <p id="sub-membro">Filhos, pais e quem não usa o sistema também podem ser cadastrados.</p>
+        <input type="hidden" name="id">
+        <div class="form-membro-campos">
+          <label>Nome completo <input name="nome" required maxlength="60" placeholder="Ex.: Lucas Machado"></label>
+          <label>Parentesco <select name="parentesco"></select></label>
+          <label><span>Data de nascimento <small class="dica">(opcional)</small></span> <input type="date" name="nascimento"></label>
+          <label class="linha-interruptor"><span><strong>Participa da divisão das contas</strong>
+            <small>As despesas compartilhadas são divididas entre quem participa.</small></span>
+            <span class="interruptor"><input type="checkbox" name="divide"><span></span></span></label>
+          <p class="dica" id="login-membro"></p>
+          <details class="trocar-membro" id="trocar-membro">
+            <summary class="link acao">Os lançamentos estão no cadastro errado? Trocar com outro membro</summary>
+            <p class="dica">Troca os dois de lugar: nomes, parentesco e todos os lançamentos, contas fixas, cartões e notas.
+              Use quando, por exemplo, o seu login foi cadastrado com o nome de outra pessoa. Os investimentos não mudam.</p>
+            <div class="form-linha"><select id="sel-trocar-membro" aria-label="Trocar com"></select>
+              <button type="button" class="secundario" id="btn-trocar-membro">Trocar</button></div>
+          </details>
+        </div>
+        <div class="dialogo-acoes">
+          <button type="button" class="link" id="btn-remover-membro">Remover da família</button>
+          <span style="flex:1"></span>
+          <button type="button" class="secundario" id="btn-cancelar-membro">Cancelar</button>
+          <button type="submit" class="btn">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+    <div class="cards" id="fam-cards"></div>
+    <div class="grade2">
+      <div class="painel">
+        <h3>Contas da família</h3>
+        <p class="dica" style="margin-top:0" id="fam-regra"></p>
+        <div id="fam-acerto"></div>
+      </div>
+      <div class="painel">
+        <h3>Como vocês dividem</h3>
+        <form id="form-familia">
+          <div id="fam-modos" class="fam-modos"></div>
+          <div id="fam-pesos" class="form-linha oculto"></div>
+          <button type="submit" class="btn btn-pequeno" id="btn-fam-salvar" style="margin-top:12px">Salvar</button>
+        </form>
+        <p class="dica" id="fam-dica-config"></p>
+      </div>
+    </div>
+    <div class="painel" id="painel-fam-itens">
+      <h3>Contas da família no mês</h3>
+      <p class="dica" style="margin-top:0" id="fam-itens-dica"></p>
+      <div class="rolagem"><table id="fam-itens" class="tabela-fam-itens"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-plan-cartoes" class="tab">
+    <div class="cabecalho-pagina-acoes plan-editavel">
+      <button type="button" class="btn" data-novo-cartao><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Novo cartão</button>
+    </div>
+    <div class="cards" id="cartoes-totais"></div>
+    <div id="cartoes-avisos" class="cartao-alertas"></div>
+    <div class="grade-cartoes" id="cartoes-grade"></div>
+  </section>
+
+  <section id="tab-plan-cartao" class="tab">
+    <button type="button" class="link acao voltar-cartoes" data-todos-cartoes>← Todos os cartões</button>
+    <div class="painel cartao-topo" id="cartao-topo"></div>
+    <div id="cartao-alertas" class="cartao-alertas"></div>
+    <div class="cards" id="cartao-cards"></div>
+    <div id="cartao-importar"></div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Faturas mês a mês</h3>
+          <p class="dica" style="margin:0">Clique em um mês para ver as compras. As compras entram na fatura pelo dia de fechamento do cartão.</p></div>
+      </div>
+      <div id="cartao-faturas" class="cartao-faturas"></div>
+    </div>
+    <dialog id="dialogo-cartao" class="dialogo">
+      <form id="form-config-cartao" method="dialog" autocomplete="off">
+        <h3>Configurar cartão</h3>
+        <p>Com os dias de fechamento e vencimento, cada compra cai na fatura certa e os avisos chegam na hora.</p>
+        <input type="hidden" name="id">
+        <div class="form-membro-campos">
+          <label>Nome do cartão <input name="nome" required maxlength="40" placeholder="Ex.: Nubank, Ourocard Visa"></label>
+          <div class="form-linha">
+            <label>Final <input name="final" inputmode="numeric" maxlength="4" placeholder="1234" style="width:90px"></label>
+            <label>Limite (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="limite" placeholder="0,00" style="width:140px"></label>
+          </div>
+          <div class="form-linha">
+            <label>Dia do fechamento <input type="number" name="dia_fechamento" min="1" max="31" placeholder="ex.: 3" style="width:110px"></label>
+            <label>Dia do vencimento <input type="number" name="dia_vencimento" min="1" max="31" placeholder="ex.: 10" style="width:110px"></label>
+          </div>
+          <label>De quem é o cartão <select name="carteira_id"></select></label>
+        </div>
+        <div class="dialogo-acoes">
+          <button type="button" class="link" id="btn-remover-cartao">Remover cartão</button>
+          <span style="flex:1"></span>
+          <button type="button" class="secundario" id="btn-cancelar-cartao">Cancelar</button>
+          <button type="submit" class="btn">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+  </section>

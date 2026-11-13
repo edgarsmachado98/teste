@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.db
+.venv/
+.pytest_cache/
+.env
+.secret_key
+*.db-wal
+*.db-shm
+backups/
+diagnostico_fatura.txt

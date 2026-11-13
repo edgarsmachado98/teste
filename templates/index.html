@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carteira de Aportes</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#15181c">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Carteira">
+  <script>try { var t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=versao) }}">
+  <script src="{{ url_for('static', filename='tema.js', v=versao) }}" defer></script>
+  <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="marca">
+      <span class="logo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6 4 4 6-8"/><path d="M14 7h6v6"/></svg></span>
+      <div><strong>Carteira</strong><small>de Aportes</small></div>
+    </div>
+    <div class="bloco-carteira">
+      <label for="sel-carteira">Carteira</label>
+      <select id="sel-carteira"></select>
+      <span id="selo-permissao" class="selo-permissao"></span>
+    </div>
+    <nav aria-label="Menu principal">
+      <p class="grupo-nav">Visão geral</p>
+      <button data-tab="carteira" data-titulo="Patrimônio" data-sub="Resumo, alocação e evolução da carteira" class="ativo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15.5 3.7A9 9 0 0 1 20.3 8.5H15.5z"/></svg><span>Patrimônio</span></button>
+      <button data-tab="fluxo" data-titulo="Fluxo financeiro" data-sub="Visão geral de compras, vendas e proventos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 14.5h2"/></svg><span>Fluxo financeiro</span></button>
+      <button data-tab="rentabilidade" data-titulo="Rentabilidade" data-sub="Desempenho da carteira mês a mês comparado com CDI, IPCA e Ibovespa"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-5 4 4 8-8"/><path d="M15 8h5v5"/><path d="M3 21h18"/></svg><span>Rentabilidade</span></button>
+      <button data-tab="rendafixa" data-titulo="Renda fixa" data-sub="Valor atualizado pela taxa contratada, impostos e vencimentos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Renda fixa</span></button>
+      <p class="grupo-nav">Movimentações</p>
+      <button data-tab="aportes" data-titulo="Aportes" data-sub="Compras, vendas e importação de extratos da B3"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m0 0l-3-3m3 3l3-3"/><path d="M17 20V4m0 0l-3 3m3-3l3 3"/></svg><span>Aportes</span></button>
+      <button data-tab="proventos" data-titulo="Proventos" data-sub="Dividendos, JCP e rendimentos recebidos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.5-.9-1.6-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2s1.2 1.7 2.8 2 2.8.9 2.8 2.1-1.2 2.1-2.8 2.1c-1.3 0-2.4-.6-2.9-1.5M12 6v1.8m0 8.4V18"/></svg><span>Proventos</span></button>
+      <p class="grupo-nav">Estratégia</p>
+      <button data-tab="ativos" data-titulo="Ativos e metas" data-sub="Cadastro dos ativos e alocação desejada"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg><span>Ativos e metas</span></button>
+      <button data-tab="diversificacao" data-titulo="Diversificação" data-sub="Metas por categoria, exposição por setor, indexador e prazo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9l7.8 4.5"/><circle cx="12" cy="12" r="9"/></svg><span>Diversificação</span></button>
+      <button data-tab="sugestao" data-titulo="Próximo aporte" data-sub="Quanto comprar de cada ativo para seguir a meta"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7.5h7M8.5 12h1m2.5 0h1m2.5 0h0M8.5 16h1m2.5 0h1m2.5 0h0"/></svg><span>Próximo aporte</span></button>
+      <button data-tab="impostos" data-titulo="Imposto de Renda" data-sub="Apuração mensal das vendas, DARF e dados para a declaração anual"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span>Imposto de Renda</span></button>
+      <p class="grupo-nav">Mercado</p>
+      <button data-tab="acompanhamento" data-titulo="Acompanhamento" data-sub="Ativos de interesse, preço-teto, preço justo e alertas de preço"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Acompanhamento</span></button>
+      <button data-tab="mercado" data-titulo="Análise de ativos" data-sub="Indicadores técnicos, fundamentos e sinais"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Análise de ativos</span></button>
+      <button data-tab="comparar" data-titulo="Comparar ativos" data-sub="Desempenho e correlação entre ativos"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-7"/></svg><span>Comparar ativos</span></button>
+      {% if "planejamento" in modulos %}
+      <p class="grupo-nav">Planejamento financeiro</p>
+      <button data-tab="plan-resumo" data-titulo="Resumo do mês" data-sub="Receitas, despesas, investimentos e o que sobrou"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 9h18M8 2.5v3M16 2.5v3M7.5 14h3M7.5 17.5h6"/></svg><span>Resumo do mês</span></button>
+      <button data-tab="plan-lancamentos" data-titulo="Receitas e despesas" data-sub="Renda, contas fixas, gastos do dia a dia e parcelas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v6M15 18h6"/></svg><span>Receitas e despesas</span></button>
+      <button data-tab="plan-cartoes" data-titulo="Cartões" data-sub="Resumo de todos os cartões de crédito da família" id="nav-btn-cartoes"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/></svg><span>Cartões</span><svg class="icone seta-nav" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      <button data-tab="plan-orcamento" data-titulo="Orçamento" data-sub="Limites por grupo, próximos 12 meses e resumo para o IR"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Orçamento</span></button>
+      <button data-tab="plan-objetivos" data-titulo="Objetivos" data-sub="Reserva, aposentadoria, imóvel e outros sonhos, com o aporte necessário"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg><span>Objetivos</span></button>
+      <button data-tab="plan-familia" data-titulo="Família" data-sub="Renda e contas do casal, divisão e acerto do mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M14.5 15.2c.8-.6 1.6-.9 2.5-.9 2 0 3.6 1.4 4 4.2"/></svg><span>Família</span></button>
+      {% endif %}
+      <p class="grupo-nav">Configurações</p>
+      <button data-tab="acessos" data-titulo="Acessos e conta" data-sub="Carteiras, permissões, usuários e senha"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Acessos e conta</span></button>
+    </nav>
+    <div class="usuario-card">
+      <span class="avatar" id="avatar"></span>
+      <div class="usuario-info">
+        <strong>{{ usuario.nome }}</strong>
+        <small>{{ "Administrador" if usuario.admin else usuario.email }}</small>
+      </div>
+      <button type="button" id="btn-sair" class="btn-icone" title="Sair" aria-label="Sair"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5M5 12h11"/></svg></button>
+    </div>
+  </aside>
+  <div class="sombra-menu" id="sombra-menu"></div>
+
+  <div class="conteudo">
+    <header class="topo">
+      <button type="button" class="btn-icone btn-menu" id="btn-menu" aria-label="Abrir menu"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <div class="topo-titulo">
+        <h1 id="titulo-pagina">Patrimônio</h1>
+        <p id="sub-pagina">Resumo, alocação e evolução da carteira</p>
+      </div>
+      <div class="acoes-topo">
+      <button type="button" class="btn-icone btn-instalar oculto" id="btn-instalar" title="Instalar como aplicativo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M5 21h14"/></svg></button>
+      <div class="sino-wrap">
+        <button type="button" class="btn-icone btn-sino" id="btn-sino" aria-label="Alertas" aria-expanded="false" title="Alertas"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span class="contador oculto" id="contador-alertas"></span>
+        </button>
+        <div class="painel-alertas oculto" id="painel-alertas" role="dialog" aria-label="Alertas">
+          <div class="cab-alertas"><strong>Alertas</strong><span class="dica" id="info-telegram"></span></div>
+          <div id="lista-alertas"></div>
+        </div>
+      </div>
+      <button type="button" class="btn-icone btn-privacidade" id="btn-privacidade" aria-pressed="false"
+              title="Ocultar valores (modo privacidade)" aria-label="Ocultar valores">
+        <svg class="icone olho-aberto" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg class="icone olho-fechado" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7c1.8 0 3.4-.6 4.8-1.4"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+      </button>
+      <button type="button" class="btn-icone btn-tema" id="btn-tema" title="Mudar o tema" aria-label="Mudar o tema">
+  <svg class="icone ic-lua" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  <svg class="icone ic-sol" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/></svg>
+      </button>
+      </div>
+      <div class="topo-dir">
+        <span class="saudacao" id="saudacao"></span>
+        <span class="data-hoje" id="data-hoje"></span>
+      </div>
+    </header>
+    <div id="aviso-leitura" class="aviso leitura oculto">Você tem acesso <strong>somente de visualização</strong> a esta carteira.</div>
+    {% if demo %}<div class="aviso">Modo demonstração: as cotações exibidas são <strong>simuladas</strong>.</div>{% endif %}
+<main>
+  <section id="tab-carteira" class="tab visivel">
+    <div class="barra-cotacoes">
+      <span id="info-cotacoes" class="dica"></span>
+      <button type="button" class="secundario btn-pequeno" id="btn-atualizar-cotacoes">Atualizar cotações</button>
+    </div>
+    <div class="cards" id="cards-resumo"></div>
+
+    <div class="painel painel-destaque">
+      <div class="cabecalho-painel">
+        <div>
+          <h3>Visão geral por categoria</h3>
+          <p class="dica" style="margin:0">Clique em uma categoria para ver os ativos.
+            Rentabilidade = valorização + proventos recebidos, sobre o valor investido.</p>
+        </div>
+        <div class="acoes-painel">
+          <button type="button" class="secundario btn-pequeno" id="btn-expandir-todas">Expandir todas</button>
+        </div>
+      </div>
+      <div class="rolagem"><table id="tabela-categorias" class="tabela-categorias"></table></div>
+    </div>
+
+    <div class="grade2">
+      <div class="painel">
+        <div class="cabecalho-painel">
+          <h3>Classificação dos ativos</h3>
+          <select id="criterio-ranking" aria-label="Critério da classificação">
+            <option value="rentabilidade">Rentabilidade</option>
+            <option value="variacao">Variação do dia</option>
+          </select>
+        </div>
+        <div class="ranking" id="ranking"></div>
+      </div>
+      <div class="painel"><h3>Alocação por categoria</h3><canvas id="graf-classe"></canvas></div>
+    </div>
+
+    <div class="painel oculto" id="painel-por-carteira">
+      <h3>Patrimônio por carteira</h3>
+      <div class="rolagem"><table id="tabela-por-carteira"></table></div>
+    </div>
+
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Evolução do patrimônio</h3>
+          <p class="dica" style="margin:0">Valor da carteira no fim de cada mês comparado com o total investido (aportes menos vendas).</p></div>
+      </div>
+      <canvas id="graf-evolucao" height="85"></canvas>
+      <p class="dica" id="aviso-estimados"></p>
+    </div>
+
+    <div class="painel"><h3>Alocação por ativo: atual x meta</h3><canvas id="graf-alocacao"></canvas></div>
+    <div class="painel">
+      <h3>Posições detalhadas</h3>
+      <div class="rolagem"><table id="tabela-posicoes"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-fluxo" class="tab">
+    <div class="painel">
+      <form id="form-fluxo" class="form-linha">
+        <label>Período <select name="periodo">
+          <option value="12m" selected>Últimos 12 meses</option>
+          <option value="ano">Este ano</option>
+          <option value="ano_anterior">Ano anterior</option>
+          <option value="tudo">Desde o início</option>
+          <option value="personalizado">Personalizado</option>
+        </select></label>
+        <label>De <input type="date" name="inicio"></label>
+        <label>Até <input type="date" name="fim"></label>
+        <button type="submit">Atualizar</button>
+      </form>
+    </div>
+    <div class="cards" id="cards-fluxo"></div>
+    <div class="painel"><h3>Compras, vendas e recebidos por mês</h3><canvas id="graf-fluxo" height="90"></canvas></div>
+    <div class="painel"><h3>Por ativo</h3><div class="rolagem"><table id="tabela-fluxo-ativo"></table></div></div>
+    <div class="painel">
+      <h3 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">Extrato do período
+        <select id="filtro-fluxo" style="font-size:.85rem;font-weight:400">
+          <option value="">Todos os lançamentos</option><option value="compra">Compras</option>
+          <option value="venda">Vendas</option><option value="provento">Proventos</option>
+        </select></h3>
+      <div class="rolagem"><table id="tabela-fluxo"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-rentabilidade" class="tab">
+    <div class="cards" id="cards-rentabilidade"></div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Rentabilidade acumulada</h3>
+          <p class="dica" style="margin:0">Método de cotas: os aportes e as vendas não distorcem o resultado. Proventos recebidos contam como ganho.</p></div>
+        <select id="periodo-rentabilidade" aria-label="Período">
+          <option value="12m">Últimos 12 meses</option><option value="ano">Este ano</option>
+          <option value="inicio" selected>Desde o início</option>
+        </select>
+      </div>
+      <canvas id="graf-rentabilidade" height="90"></canvas>
+      <p class="dica" id="aviso-referencias"></p>
+    </div>
+    <div class="painel">
+      <h3>Rentabilidade mês a mês</h3>
+      <div class="rolagem"><table id="tabela-rentabilidade" class="tabela-rentabilidade"></table></div>
+      <p class="dica">Cada ano mostra a carteira, o CDI e quanto a carteira rendeu em relação ao CDI (% do CDI).</p>
+    </div>
+  </section>
+
+  <section id="tab-rendafixa" class="tab">
+    <div class="cards" id="cards-rf"></div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Títulos de renda fixa</h3>
+          <p class="dica" style="margin:0">Valor bruto pela taxa contratada (marcação na curva) ou pelo preço oficial do Tesouro.
+            IR pela tabela regressiva e IOF nos primeiros 30 dias, por aplicação.</p></div>
+      </div>
+      <div class="rolagem"><table id="tabela-rf"></table></div>
+      <p class="dica" id="aviso-rf"></p>
+    </div>
+    <div class="painel">
+      <h3>Próximos vencimentos</h3>
+      <div id="vencimentos-rf"></div>
+    </div>
+  </section>
+
+  <section id="tab-impostos" class="tab">
+    <div class="painel">
+      <div class="cabecalho-painel" style="margin-bottom:0">
+        <form class="form-linha" id="form-ano-ir">
+          <label>Ano-calendário <select name="ano" id="ano-ir"></select></label>
+        </form>
+        <p class="dica" style="margin:0;flex:1 1 380px">Cálculo por pessoa (selecione a carteira de quem vai declarar).
+          Estimativa baseada nas operações registradas: confira com as notas de corretagem, os informes de rendimentos e,
+          se possível, com um contador. Mudanças recentes na legislação (por exemplo, a tributação de dividendos a partir
+          de 2026) não estão no cálculo.</p>
+      </div>
+    </div>
+    <div class="cards" id="cards-ir"></div>
+
+    <div class="painel">
+      <h3>Apuração mensal</h3>
+      <p class="dica" style="margin-top:0">Clique em um mês para ver as vendas. Ações: isentas quando as vendas do mês somam até R$ 20.000.
+        ETFs e BDRs 15% sem isenção, FIIs 20%, day trade 20%. Prejuízos compensados dentro de cada tipo.</p>
+      <div class="rolagem"><table id="tabela-ir" class="tabela-categorias"></table></div>
+    </div>
+
+    <div class="painel">
+      <h3 id="titulo-declaracao">Declaração anual</h3>
+      <h4 class="subtitulo-ir">Bens e Direitos</h4>
+      <div class="rolagem"><table id="tabela-bens"></table></div>
+      <div class="grade2" style="margin-top:18px">
+        <div><h4 class="subtitulo-ir">Rendimentos isentos e não tributáveis</h4><div id="lista-isentos"></div></div>
+        <div><h4 class="subtitulo-ir">Rendimentos sujeitos à tributação exclusiva</h4><div id="lista-exclusivos"></div></div>
+      </div>
+      <p class="dica">Os grupos e códigos são sugestões: confirme no programa da Receita, que muda a cada ano. O CNPJ da fonte
+        pagadora (empresa ou fundo) está no informe de rendimentos da corretora. Bonificações são declaradas pelo custo informado
+        pela empresa.</p>
+    </div>
+  </section>
+
+  <section id="tab-diversificacao" class="tab">
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Metas por categoria</h3>
+          <p class="dica" style="margin:0">Defina quanto da carteira quer em cada categoria. Dentro da categoria, valem as metas
+            dos ativos (ou divisão igual entre eles). O “Próximo aporte” passa a seguir essas metas.</p></div>
+        <span class="selo" id="soma-metas-classe"></span>
+      </div>
+      <form id="form-metas-classe">
+        <div class="rolagem"><table id="tabela-metas-classe"></table></div>
+        <div class="form-linha requer-edicao" style="margin-top:12px"><button type="submit">Salvar metas</button></div>
+      </form>
+      <canvas id="graf-metas-classe" height="70" style="margin-top:12px"></canvas>
+    </div>
+    <div class="grade2">
+      <div class="painel"><h3>Por setor</h3><canvas id="graf-setores"></canvas>
+        <p class="dica">Setor das ações vem das fontes (brapi). Você pode corrigir em “Ativos e metas”.</p></div>
+      <div class="painel"><h3>Por indexador</h3><canvas id="graf-indexadores"></canvas></div>
+    </div>
+    <div class="grade2">
+      <div class="painel"><h3>Por prazo de resgate</h3><canvas id="graf-prazos"></canvas></div>
+      <div class="painel"><h3>Concentração</h3><div id="lista-concentracao"></div></div>
+    </div>
+  </section>
+
+  <section id="tab-acompanhamento" class="tab">
+    <div class="painel requer-edicao">
+      <form id="form-acompanhamento" class="form-linha">
+        <label>Ticker <input name="ticker" required placeholder="ex.: TAEE11"></label>
+        <label class="largo">Observação <input name="obs" placeholder="ex.: comprar abaixo de R$ 35"></label>
+        <button type="submit">Acompanhar</button>
+      </form>
+    </div>
+    <div class="painel">
+      <h3>Lista de acompanhamento</h3>
+      <div class="rolagem"><table id="tabela-acompanhamento" class="tabela-compacta"></table></div>
+      <p class="dica"><strong>Preço-teto (Bazin)</strong>: preço para o ativo render 6% ao ano com os proventos dos últimos 12 meses.
+        <strong>Preço justo (Graham)</strong>: √(22,5 × LPA × VPA). São referências simples, não recomendações. Margem positiva:
+        cotação abaixo da referência.</p>
+    </div>
+  </section>
+
+  <section id="tab-aportes" class="tab">
+    <div class="painel requer-edicao">
+      <h3>Registrar operação</h3>
+      <form id="form-aporte" class="form-linha">
+        <label>Data <input type="date" name="data" required></label>
+        <label>Ticker <input name="ticker" list="lista-tickers" required placeholder="PETR4"></label>
+        <label>Tipo <select name="tipo"><option value="compra">Compra</option><option value="venda">Venda</option></select></label>
+        <label>Quantidade <input type="number" name="quantidade" step="any" min="0" required></label>
+        <label>Preço unitário <input type="number" name="preco" step="any" min="0" required></label>
+        <label>Taxas <input type="number" name="taxas" step="any" min="0" value="0"></label>
+        <label>Obs. <input name="obs"></label>
+        <button type="submit">Salvar</button>
+      </form>
+      <datalist id="lista-tickers"></datalist>
+    </div>
+    <div class="painel requer-edicao">
+      <h3>Importar extratos e relatórios de investimentos</h3>
+      <div class="abas-fonte" role="tablist" aria-label="Origem dos arquivos">
+        <button type="button" role="tab" class="ativo" data-fonte="b3">B3 · Área do Investidor</button>
+        <button type="button" role="tab" data-fonte="tesouro">Tesouro Direto</button>
+        <button type="button" role="tab" data-fonte="banco">Bancos e corretoras</button>
+      </div>
+      <div class="ajuda-fonte" data-ajuda="b3">
+        <p>Baixe em <strong>investidor.b3.com.br</strong>, em Excel: <strong>Posição</strong> (o que você tem hoje, de todas as
+          corretoras, inclusive Tesouro Direto e renda fixa registrada na B3), e em Extratos: <strong>Negociação</strong>,
+          <strong>Movimentação</strong> e <strong>Eventos</strong>. Envie todos juntos: a Posição é tratada como a sua posição completa na B3.</p>
+      </div>
+      <div class="ajuda-fonte oculto" data-ajuda="tesouro">
+        <p>Em <strong>tesourodireto.com.br</strong> → Extrato consolidado, baixe o Excel de cada instituição e envie todos juntos.
+          Eles são tratados como a posição completa <strong>só dos títulos do Tesouro</strong>: ações e outros ativos não são afetados.
+          O extrato traz o <strong>valor investido</strong>, usado como preço médio. A Posição da B3 também traz o Tesouro:
+          se enviar os dois juntos, vale a B3.</p>
+      </div>
+      <div class="ajuda-fonte oculto" data-ajuda="banco">
+        <p>Relatório de investimentos do banco ou corretora (BB, XP, Itaú, Nubank...) em PDF ou Excel. Serve para o que
+          <strong>não</strong> aparece na B3: fundos, poupança, previdência e aplicações do próprio banco.
+          Escolha abaixo se o relatório é a sua posição inteira ou de uma instituição só.</p>
+      </div>
+      <form id="form-importar-b3" class="form-linha">
+        <div class="seletor-arquivos">
+          <span class="rotulo-campo">Arquivos Excel (.xlsx, .xls), CSV ou PDF</span>
+          <input type="file" id="input-arquivos" accept=".xlsx,.xls,.csv,.pdf,.htm,.html" multiple hidden>
+          <ul id="lista-arquivos" class="lista-arquivos"></ul>
+          <div class="zona-arquivos" id="zona-arquivos">
+            <button type="button" class="secundario btn-pequeno" id="btn-add-arquivo">
+              <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Adicionar arquivo</span></button>
+            <span class="dica">ou arraste os arquivos para cá</span>
+          </div>
+        </div>
+        <button type="submit" id="btn-ler-arquivos" disabled>Ler arquivos</button>
+        <fieldset class="modo-importacao oculto">
+          <legend>Os relatórios de posição desta importação mostram:</legend>
+          <label class="check"><input type="radio" name="modo" value="completa" checked>
+            <span><strong>Toda a minha posição</strong> (B3 e/ou todas as instituições de uma vez)</span></label>
+          <label class="check"><input type="radio" name="modo" value="parcial">
+            <span><strong>Só uma instituição</strong>: somar ao que já está no sistema (ex.: importar a XP depois do BB)</span></label>
+        </fieldset>
+      </form>
+      <details class="dica">
+        <summary>Como importar todo o patrimônio</summary>
+        <ol>
+          <li>Entre na Área do Investidor (investidor.b3.com.br).</li>
+          <li>Em <strong>Posição</strong>, baixe em Excel: é o que você tem hoje (ações, FIIs, ETFs, Tesouro, renda fixa).</li>
+          <li>Em <strong>Extratos</strong>, baixe:</li>
+          <li><strong>Negociação</strong>: compras e vendas de ações, FIIs, ETFs e BDRs (o maior período possível).</li>
+          <li><strong>Movimentação</strong>: dividendos, JCP, rendimentos e Tesouro Direto.</li>
+          <li><strong>Eventos</strong>: proventos recebidos e provisionados (alternativa à Movimentação para proventos; use só um dos dois para não duplicar).</li>
+          <li>Antes de gravar, o sistema faz automaticamente uma <strong>cópia de segurança</strong> do banco
+            (pasta de cópias, arquivo <code>antes-importacao-...</code>): se algo der errado, dá para voltar.</li>
+          <li>Selecione <strong>todos os arquivos juntos</strong> (Ctrl+clique) e clique em “Ler arquivo”.
+            O sistema calcula a <strong>posição inicial</strong> (o que você já tinha antes do período dos extratos) comparando a Posição com as operações.</li>
+        </ol>
+        <p><strong>Vários relatórios juntos:</strong> o sistema identifica a origem de cada arquivo (B3, Banco do Brasil, XP,
+        Itaú, Nubank...). Ações, FIIs, ETFs, BDRs e Tesouro Direto aparecem na posição da B3 de todas as corretoras: quando ela
+        é enviada, vale a B3 e os relatórios das instituições não duplicam esses ativos. O que só existe no banco (fundos,
+        poupança, previdência) vem do relatório da instituição. Sem a B3, o mesmo ativo em instituições diferentes é somado.
+        CDB/LCA podem aparecer com nomes diferentes na B3 e no banco: confira se não ficaram duplicados.
+        <br><strong>Combinação recomendada:</strong> Posição + Negociação + Movimentação da B3 e o relatório de cada banco ou corretora.</p>
+        <p><strong>Relatórios de bancos e corretoras</strong> (ex.: extrato de investimentos do Banco do Brasil, posição da corretora)
+        também podem ser enviados em PDF ou Excel: o sistema procura uma tabela com o nome do ativo/produto e a quantidade ou o saldo.
+        Fundos, previdência e aplicações informados só pelo saldo entram como 1 unidade, com o saldo como valor atual.
+        PDFs escaneados (imagem) não podem ser lidos.</p>
+        Taxas de corretagem não constam nesses extratos. Desdobramentos e bonificações precisam ser ajustados manualmente.
+      </details>
+      <div id="resultado-importar-b3"></div>
+      <details class="dica" id="historico-importacoes" style="margin-top:10px"><summary>Importações anteriores</summary><div></div></details>
+      <details class="zona-perigo so-admin requer-edicao" id="zerar-carteira">
+        <summary>Zerar dados da carteira</summary>
+        <p class="dica">Apaga todos os aportes, proventos, eventos, ativos (inclusive a configuração de renda fixa) e o histórico de
+          importações <strong>desta carteira</strong>, para importar tudo de novo do zero. Usuários, acessos e as outras carteiras
+          não são afetados. Antes de apagar, o sistema faz uma cópia de segurança (arquivo <code>antes-importacao-...</code>).</p>
+        <form id="form-zerar" class="form-linha">
+          <label>Digite o nome da carteira para confirmar <input name="confirmacao" autocomplete="off" required style="min-width:260px"></label>
+          <label class="check"><input type="checkbox" name="tudo"> Apagar também metas, acompanhamento e alertas</label>
+          <button type="submit" class="perigo">Zerar dados</button>
+        </form>
+      </details>
+    </div>
+    <div class="painel" id="painel-conferencia">
+      <div class="cabecalho-painel">
+        <div><h3>Conferência com os relatórios</h3>
+          <p class="dica" style="margin:0">Depois de cada importação, o sistema compara o patrimônio com os últimos relatórios
+            (B3, bancos, Tesouro Direto) e sugere o ajuste do que não bate.</p></div>
+        <button type="button" class="secundario btn-pequeno" id="btn-conferir">Conferir de novo</button>
+      </div>
+      <div id="resultado-conferencia"></div>
+    </div>
+
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Eventos corporativos</h3>
+          <p class="dica" style="margin:0">Desdobramentos, grupamentos e bonificações mudam a quantidade sem mudar o valor investido.
+            O sistema procura os eventos dos seus ativos nas fontes e propõe o ajuste.</p></div>
+        <button type="button" class="secundario btn-pequeno" id="btn-verificar-eventos">Verificar agora</button>
+      </div>
+      <div id="eventos-sugeridos"></div>
+      <div class="rolagem"><table id="tabela-eventos"></table></div>
+      <details class="requer-edicao" style="margin-top:12px">
+        <summary class="dica">Registrar evento manualmente</summary>
+        <form id="form-evento" class="form-linha" style="margin-top:10px">
+          <label>Ticker <input name="ticker" list="lista-tickers" required></label>
+          <label>Data com <input type="date" name="data" required></label>
+          <label>Tipo <select name="tipo">
+            <option value="desdobramento">Desdobramento</option><option value="grupamento">Grupamento</option>
+            <option value="bonificacao">Bonificação</option><option value="outro">Outro</option></select></label>
+          <label>Fator <input type="number" name="fator" step="any" min="0" required placeholder="ex.: 2"></label>
+          <button type="submit">Registrar</button>
+        </form>
+        <p class="dica">Fator = quantidade nova por ação antiga. Desdobramento 1:2 → <strong>2</strong>; grupamento 10:1 → <strong>0,1</strong>;
+          bonificação de 10% → <strong>1,1</strong>.</p>
+      </details>
+    </div>
+    <div class="painel">
+      <h3>Histórico</h3>
+      <div class="rolagem"><table id="tabela-aportes"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-proventos" class="tab">
+    <div class="cards" id="cards-proventos"></div>
+
+    <div class="painel painel-destaque">
+      <div class="cabecalho-painel">
+        <div><h3>Renda passiva prevista: próximos 12 meses</h3>
+          <p class="dica" style="margin:0"><strong>Confirmado</strong>: a receber e anunciado pelas empresas.
+            <strong>Projetado</strong>: repete os proventos dos últimos 12 meses com a quantidade atual (estimativa).</p></div>
+        <form id="form-meta-renda" class="form-linha requer-edicao">
+          <label>Meta de renda mensal (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor" placeholder="0,00" style="width:130px"></label>
+          <button type="submit" class="btn-pequeno">Salvar meta</button>
+        </form>
+      </div>
+      <div class="cards compacto" id="cards-renda"></div>
+      <canvas id="graf-projecao" height="80"></canvas>
+      <p class="dica" id="aviso-agenda"></p>
+    </div>
+
+    <div class="grade2">
+      <div class="painel">
+        <h3>Agenda de proventos</h3>
+        <div id="agenda-proventos"></div>
+      </div>
+      <div class="painel">
+        <h3>Número mágico dos FIIs</h3>
+        <p class="dica" style="margin-top:0">Quantas cotas fazem o rendimento de um mês comprar uma cota nova.</p>
+        <table id="tabela-magico" class="tabela-magico"></table>
+      </div>
+    </div>
+
+    <div class="painel"><h3>Proventos recebidos por mês</h3><canvas id="graf-proventos" height="90"></canvas></div>
+    <div class="painel">
+      <h3>Buscar proventos nas fontes</h3>
+      <div class="form-linha">
+        <button type="button" id="btn-estimar" class="btn">Buscar proventos da carteira</button>
+        <label class="check"><input type="checkbox" id="estimar-atualizar"> Forçar atualização</label>
+      </div>
+      <p class="dica">Consulta os proventos por ação/cota nas fontes configuradas e multiplica pela sua quantidade na data com.
+        JCP é calculado líquido de 15% de IR. Quando a fonte não informa a data de pagamento (Yahoo), ela é estimada em 30 dias após a data com.
+        Confira com o extrato da corretora antes de importar.</p>
+      <div id="resultado-estimar"></div>
+    </div>
+    <div class="grade2">
+      <div class="painel"><h3>Por ativo</h3><div class="rolagem"><table id="tabela-proventos-ativo"></table></div></div>
+      <div class="painel requer-edicao">
+        <h3>Lançar manualmente</h3>
+        <form id="form-provento" class="form-linha">
+          <label>Ticker <input name="ticker" list="lista-tickers" required></label>
+          <label>Tipo <select name="tipo">
+            {% for k, v in tipos_provento.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select></label>
+          <label>Data com <input type="date" name="data_com"></label>
+          <label>Pagamento <input type="date" name="data_pagamento" required></label>
+          <label>Valor total (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor_total" placeholder="0,00" required></label>
+          <label>Obs. <input name="obs"></label>
+          <button type="submit">Salvar</button>
+        </form>
+      </div>
+    </div>
+    <div class="painel"><h3>Histórico de proventos</h3><div class="rolagem"><table id="tabela-proventos"></table></div></div>
+  </section>
+
+  <section id="tab-ativos" class="tab">
+    <div class="painel requer-edicao">
+      <h3>Cadastrar / editar ativo</h3>
+      <form id="form-ativo" class="form-linha">
+        <label>Ticker <input name="ticker" required placeholder="KNRI11"></label>
+        <label>Nome <input name="nome"></label>
+        <label>Classe <select name="classe">
+          {% for k, v in classes.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+        </select></label>
+        <label>Meta (%) <input type="number" name="meta_pct" step="any" min="0" value="0"></label>
+        <label>Setor <input name="setor" list="lista-setores" placeholder="automático"></label>
+        <datalist id="lista-setores"><option value="Bancos"><option value="Energia elétrica"><option value="Petróleo e gás">
+          <option value="Mineração"><option value="Saneamento"><option value="Seguros"><option value="Bens industriais">
+          <option value="Varejo"><option value="Saúde"><option value="Tecnologia"><option value="Telecomunicações">
+          <option value="Agronegócio"><option value="Logística"><option value="Lajes corporativas"><option value="Shoppings">
+          <option value="Papel (recebíveis)"><option value="Híbrido"></datalist>
+        <label>Preço manual <input type="number" name="preco_manual" step="any" min="0" placeholder="opcional"></label>
+        <div class="campos-rf form-linha oculto">
+          <label>Indexador <select name="indexador">
+            <option value="">Manual (preço manual)</option>
+            {% for k, v in indexadores.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select></label>
+          <label class="campo-taxa">Taxa <input type="number" name="taxa" step="any" min="0" placeholder="ex.: 110"></label>
+          <label>Vencimento <input type="date" name="vencimento"></label>
+          <label class="check"><input type="checkbox" name="isento_ir"> Isento de IR (LCI, LCA, CRI, CRA)</label>
+        </div>
+        <button type="submit">Salvar</button>
+      </form>
+      <p class="dica">O preço manual substitui a cotação online. Metas são normalizadas para somar 100%.</p>
+      <p class="dica campos-rf oculto" id="dica-taxa"><strong>Renda fixa:</strong> com o indexador, o valor é calculado
+        automaticamente todo dia. Taxa: <strong>% do CDI</strong> (ex.: 110), <strong>IPCA +</strong> taxa real ao ano (ex.: 6,2),
+        <strong>Prefixado</strong> taxa ao ano (ex.: 12,5). Para o Tesouro Direto, escolha <strong>Preço oficial do Tesouro</strong>:
+        o ticker precisa ter o nome e o ano do título (ex.: TESOURO IPCA+ 2035).</p>
+    </div>
+    <div class="painel">
+      <h3>Ativos cadastrados <span id="soma-metas" class="selo"></span></h3>
+      <div class="rolagem"><table id="tabela-ativos"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-sugestao" class="tab">
+    <div class="painel">
+      <h3>Quanto você vai aportar?</h3>
+      <form id="form-sugestao" class="form-linha">
+        <label>Valor (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="valor" placeholder="0,00" required></label>
+        <button type="submit">Calcular distribuição</button>
+      </form>
+      <p class="dica">A sugestão direciona o dinheiro para os ativos mais abaixo da meta, considerando o patrimônio após o aporte, e respeita lotes inteiros para ações, FIIs, ETFs e BDRs.</p>
+      <div id="resultado-sugestao"></div>
+    </div>
+  </section>
+
+  <section id="tab-mercado" class="tab">
+    <div class="painel">
+      <form id="form-mercado" class="form-linha">
+        <label>Ticker <input name="ticker" list="lista-tickers" required placeholder="ITUB4"></label>
+        <label>Período <select name="dias">
+          <option value="63">3 meses</option><option value="126">6 meses</option>
+          <option value="252" selected>1 ano</option><option value="0">Tudo</option>
+        </select></label>
+        <label>Taxa livre de risco (% a.a.) <input type="number" name="rf" step="any" value="10"></label>
+        <label class="check"><input type="checkbox" name="atualizar"> Forçar atualização</label>
+        <button type="submit">Analisar</button>
+      </form>
+      <details class="fontes"><summary>Fontes de cotação</summary>
+        <table id="tabela-fontes"></table>
+        <p class="dica">As fontes são consultadas nesta ordem até uma responder; o resultado fica em cache por um dia.
+        Configure tokens no arquivo <code>.env</code> (veja <code>.env.example</code>) e reinicie o servidor.</p>
+      </details>
+    </div>
+    <div id="resultado-mercado" class="oculto">
+      <div class="cards" id="cards-mercado"></div>
+      <div class="painel" id="painel-fundamentos">
+        <h3>Fundamentos e proventos <span id="fonte-fundamentos" class="selo"></span></h3>
+        <div class="cards compacto" id="cards-fundamentos"></div>
+        <div id="sem-fundamentos" class="dica"></div>
+        <canvas id="graf-proventos-ano" height="70"></canvas>
+      </div>
+      <div class="painel"><h3 id="titulo-preco">Preço</h3><canvas id="graf-preco" height="110"></canvas></div>
+      <div class="grade2">
+        <div class="painel"><h3>RSI (14)</h3><canvas id="graf-rsi"></canvas></div>
+        <div class="painel"><h3>MACD (12, 26, 9)</h3><canvas id="graf-macd"></canvas></div>
+      </div>
+      <div class="painel"><h3>Leitura dos indicadores</h3><ul id="lista-sinais" class="sinais"></ul>
+        <p class="dica">Leitura automática de indicadores técnicos, apenas para fins educacionais. Não é recomendação de investimento.</p></div>
+    </div>
+  </section>
+
+  {% if "planejamento" in modulos %}{% include "planejamento.html" %}{% endif %}
+
+  <section id="tab-acessos" class="tab">
+    <div class="painel" id="painel-carteiras">
+      <h3>Carteiras</h3>
+      <div class="rolagem"><table id="tabela-carteiras"></table></div>
+      <form id="form-carteira" class="form-linha" style="margin-top:14px">
+        <label>Nova carteira <input name="nome" required placeholder="ex.: Carteira Eliandra"></label>
+        <label class="so-admin">Dono <select name="dono_id" id="sel-dono"></select></label>
+        <button type="submit">Criar carteira</button>
+      </form>
+    </div>
+
+    <div class="painel oculto" id="painel-acessos">
+      <h3>Acessos à carteira <span id="nome-carteira-acessos"></span></h3>
+      <p class="dica" id="dono-carteira-acessos"></p>
+      <div class="rolagem"><table id="tabela-acessos"></table></div>
+      <form id="form-acesso" class="form-linha" style="margin-top:14px">
+        <label class="largo">E-mail do usuário <input type="email" name="email" list="lista-emails" required></label>
+        <label class="check"><input type="checkbox" name="ver" checked disabled> Visualizar</label>
+        <label class="check"><input type="checkbox" name="editar"> Controlar</label>
+        <label class="check"><input type="checkbox" name="gerenciar"> Gerenciar acessos</label>
+        <button type="submit">Conceder acesso</button>
+      </form>
+      <datalist id="lista-emails"></datalist>
+      <p class="dica"><strong>Visualizar</strong>: vê a carteira, proventos e análises (somente leitura).
+        <strong>Controlar</strong>: registra e exclui aportes, ativos e proventos.
+        <strong>Gerenciar acessos</strong>: concede e revoga acessos a outras pessoas.
+        O dono e os administradores sempre têm acesso total.</p>
+    </div>
+
+    <div class="painel so-admin" id="painel-usuarios">
+      <h3>Usuários</h3>
+      <div class="rolagem"><table id="tabela-usuarios"></table></div>
+      <h3 style="margin-top:18px">Novo usuário</h3>
+      <form id="form-usuario" class="form-linha">
+        <label>Nome <input name="nome" required placeholder="ex.: Eliandra"></label>
+        <label>E-mail <input type="email" name="email" required></label>
+        <label>Senha provisória <input type="text" name="senha" required minlength="8" autocomplete="off"></label>
+        <label class="check"><input type="checkbox" name="admin"> Administrador</label>
+        <label class="check"><input type="checkbox" name="criar_carteira" checked> Criar carteira própria</label>
+        <button type="submit">Cadastrar</button>
+      </form>
+      <p class="dica">Informe a senha provisória à pessoa; ela pode trocá-la em “Minha conta”. Administradores veem e controlam todas as carteiras.</p>
+    </div>
+
+    <div class="painel so-admin" id="painel-backup">
+      <h3>Cópia de segurança</h3>
+      <p class="dica" style="margin-top:0">Enquanto o servidor estiver no ar, uma cópia do banco é feita automaticamente uma vez por dia
+        (as dos últimos 30 dias são mantidas). Para ter uma cópia fora do computador, aponte a pasta para o OneDrive ou o Google Drive
+        no arquivo <code>.env</code>: <code>CARTEIRA_BACKUP_DIR=C:\Users\SeuUsuario\OneDrive\Carteira</code>.</p>
+      <p><strong>Pasta:</strong> <code id="pasta-backup"></code></p>
+      <div class="form-linha" style="margin-bottom:12px">
+        <button type="button" class="btn" id="btn-backup-agora">Fazer cópia agora</button>
+        <a class="btn secundario" id="btn-backup-baixar" href="/api/backup/baixar" style="text-decoration:none">Baixar uma cópia</a>
+      </div>
+      <div class="rolagem"><table id="tabela-backup"></table></div>
+    </div>
+
+    <div class="painel so-admin">
+      <h3>Alertas por Telegram</h3>
+      <p class="dica" style="margin-top:0">Receba os alertas (preço-alvo, quedas, data com, vencimentos, DARF) no celular.
+        1) No Telegram, fale com o <strong>@BotFather</strong>, crie um bot e copie o token.
+        2) Mande uma mensagem para o bot (ou adicione-o ao grupo da família) e descubra o id da conversa
+        (por exemplo, com o <strong>@userinfobot</strong>).
+        3) No arquivo <code>.env</code>: <code>TELEGRAM_BOT_TOKEN=...</code> e <code>TELEGRAM_CHAT_ID=...</code>; reinicie o servidor.
+        Com o servidor no ar, os alertas são verificados a cada hora e cada um é enviado uma vez.</p>
+      <button type="button" class="btn" id="btn-teste-telegram">Enviar mensagem de teste</button>
+    </div>
+
+    <div class="painel">
+      <h3>Minha conta</h3>
+      <form id="form-senha" class="form-linha">
+        <label>Senha atual <input type="password" name="atual" required autocomplete="current-password"></label>
+        <label>Nova senha <input type="password" name="nova" required minlength="8" autocomplete="new-password"></label>
+        <button type="submit">Alterar senha</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="tab-comparar" class="tab">
+    <div class="painel">
+      <form id="form-comparar" class="form-linha">
+        <label class="largo">Tickers (separados por vírgula) <input name="tickers" required placeholder="PETR4, VALE3, BOVA11"></label>
+        <label>Período <select name="dias"><option value="126">6 meses</option><option value="252" selected>1 ano</option><option value="504">2 anos</option></select></label>
+        <button type="submit">Comparar</button>
+        <button type="button" id="btn-comparar-carteira" class="secundario">Usar ativos da carteira</button>
+      </form>
+    </div>
+    <div id="resultado-comparar" class="oculto">
+      <div class="painel"><h3>Desempenho (base 100)</h3><canvas id="graf-comparar" height="100"></canvas></div>
+      <div class="grade2">
+        <div class="painel"><h3>Estatísticas</h3><div class="rolagem"><table id="tabela-comparar"></table></div></div>
+        <div class="painel"><h3>Correlação dos retornos diários</h3><div class="rolagem"><table id="tabela-correlacao" class="correlacao"></table></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+  </div>
+</div>
+<div id="toast"></div>
+<script>window.USUARIO = {{ usuario|tojson }}; window.CLASSES = {{ classes|tojson }}; window.TIPOS_PROVENTO = {{ tipos_provento|tojson }};</script>
+<script src="{{ url_for('static', filename='app.js', v=versao) }}"></script>
+{% if "planejamento" in modulos %}<script src="{{ url_for('static', filename='planejamento.js', v=versao) }}"></script>{% endif %}
+</body>
+</html>

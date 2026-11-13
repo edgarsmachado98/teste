@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ "Configuração inicial" if configurar else "Entrar" }} · Carteira de Aportes</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#15181c">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Carteira">
+  <script>try { var t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='tema.js') }}" defer></script>
+</head>
+<body class="pagina-login">
+  <aside class="login-apresentacao">
+    <div class="marca">
+      <span class="logo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6 4 4 6-8"/><path d="M14 7h6v6"/></svg></span>
+      <div><strong>Carteira</strong><small>de Aportes</small></div>
+    </div>
+    <div>
+      <h2>Seu patrimônio organizado em um só lugar.</h2>
+      <p>Acompanhe aportes, proventos e rentabilidade das carteiras da família, com cotações atualizadas durante o pregão.</p>
+      <ul>
+        <li>Posição consolidada de ações, FIIs, renda fixa e Tesouro</li>
+        <li>Rentabilidade comparada ao CDI, IPCA e Ibovespa</li>
+        <li>Agenda de proventos e apoio à declaração do IR</li>
+      </ul>
+    </div>
+    <p class="rodape-login">Acesso restrito · uso familiar</p>
+  </aside>
+  <div class="login-form">
+  <main class="caixa-login">
+    <div class="marca marca-login">
+      <span class="logo"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6 4 4 6-8"/><path d="M14 7h6v6"/></svg></span>
+      <div><strong>Carteira</strong><small>de Aportes</small></div>
+    </div>
+    <h1>{{ "Configuração inicial" if configurar else "Entrar na sua conta" }}</h1>
+    {% if configurar %}
+      <p class="dica">Primeiro acesso: crie a conta de <strong>administrador</strong>. Os dados já existentes
+        no sistema passam a pertencer à carteira dele. Depois você cadastra os demais usuários e carteiras.</p>
+      <form id="form-login" data-url="{{ url_for('auth_setup') }}">
+        <label>Seu nome <input name="nome" required autocomplete="name" placeholder="ex.: Edgar Machado"></label>
+        <label>E-mail <input type="email" name="email" required autocomplete="email"></label>
+        <label>Senha (mín. 8 caracteres) <input type="password" name="senha" required minlength="8" autocomplete="new-password"></label>
+        <label>Confirme a senha <input type="password" name="confirmar" required minlength="8" autocomplete="new-password"></label>
+        <label>Nome da sua carteira <input name="nome_carteira" placeholder="ex.: Carteira Edgar Machado"></label>
+        <button type="submit">Criar administrador e entrar</button>
+      </form>
+    {% else %}
+      <form id="form-login" data-url="{{ url_for('auth_login') }}">
+        <label>E-mail <input type="email" name="email" required autocomplete="username" autofocus></label>
+        <label>Senha <input type="password" name="senha" required autocomplete="current-password"></label>
+        <button type="submit">Entrar</button>
+      </form>
+      <p class="dica">Esqueceu a senha? Peça ao administrador para redefini-la.</p>
+    {% endif %}
+    <p id="msg-erro" class="erro-login" role="alert"></p>
+  </main>
+  </div>
+<button type="button" class="btn-tema btn-tema-flutuante" id="btn-tema" title="Mudar o tema" aria-label="Mudar o tema">
+  <svg class="icone ic-lua" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  <svg class="icone ic-sol" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/></svg>
+</button>
+<script>
+document.getElementById("form-login").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const f = ev.target, msg = document.getElementById("msg-erro");
+  const dados = Object.fromEntries(new FormData(f).entries());
+  if (dados.confirmar !== undefined && dados.confirmar !== dados.senha) {
+    msg.textContent = "As senhas não conferem."; return;
+  }
+  msg.textContent = "";
+  f.querySelector("button").disabled = true;
+  try {
+    const r = await fetch(f.dataset.url, { method: "POST", body: JSON.stringify(dados),
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.erro || `Erro ${r.status}`);
+    location.href = "/";
+  } catch (e) { msg.textContent = e.message; f.querySelector("button").disabled = false; }
+});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+</script>
+</body>
+</html>
