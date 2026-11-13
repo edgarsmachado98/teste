@@ -39,7 +39,7 @@
   function recarregar() {
     const aba = document.querySelector("nav button.ativo")?.dataset.tab;
     ({ "plan-resumo": carregarResumo, "plan-lancamentos": carregarLancamentos, "plan-orcamento": carregarOrcamento,
-       "plan-familia": carregarFamilia, "plan-cartao": carregarCartaoPagina }[aba] || (() => {}))();
+       "plan-familia": carregarFamilia, "plan-cartao": carregarCartaoPagina, "plan-cartoes": carregarCartoesResumo }[aba] || (() => {}))();
   }
 
   async function garantirCategorias() {
@@ -1354,18 +1354,36 @@
   const lugarFatura = { pai: $("#painel-fatura").parentNode, depois: $("#painel-fatura").nextSibling };
   document.body.appendChild($("#dialogo-cartao"));
 
+  let pontosCartao = {};  // cartão -> "vermelho" (fatura vencendo) | "amarelo" (limite alto)
   function renderNavCartoes() {
     let caixa = $("#nav-cartoes");
     if (!caixa) {
-      const ref = document.querySelector('nav button[data-tab="plan-lancamentos"]');
+      const ref = $("#nav-btn-cartoes");
       if (!ref) return;
       ref.insertAdjacentHTML("afterend", `<div class="nav-cartoes" id="nav-cartoes"></div>`);
       caixa = $("#nav-cartoes");
     }
     caixa.innerHTML = cartoesPlan.map(c => `<button type="button" class="nav-sub ${c.id === cartaoAtualId && $("#tab-plan-cartao").classList.contains("visivel") ? "ativo" : ""}"
-        data-tab="plan-cartao" data-cartao-nav="${c.id}" title="Faturas do cartão ${esc(c.nome)}">${ICONE_CARTAO}<span>${esc(c.nome)}</span></button>`).join("");
+        data-tab="plan-cartao" data-cartao-nav="${c.id}" title="Faturas do cartão ${esc(c.nome)}">${ICONE_CARTAO}<span>${esc(c.nome)}</span>${
+        pontosCartao[c.id] ? `<i class="ponto-aviso ${pontosCartao[c.id]}" title="${pontosCartao[c.id] === "vermelho" ? "Fatura vence em breve" : "Limite alto"}"></i>` : ""}</button>`).join("");
+  }
+  function atualizarPontos(cartoes) {
+    pontosCartao = {};
+    cartoes.forEach(c => {
+      const cods = new Set(c.alertas.map(a => a.codigo));
+      if (cods.has("vencimento")) pontosCartao[c.cartao.id] = "vermelho";
+      else if (cods.has("limite")) pontosCartao[c.cartao.id] = "amarelo";
+    });
+    renderNavCartoes();
   }
   api("/api/plan/cartoes").then(l => { cartoesPlan = l; renderNavCartoes(); }).catch(() => {});
+  api("/api/plan/cartoes/resumo").then(r => atualizarPontos(r.cartoes)).catch(() => {});
+  // "Cartões" abre e mostra os bancos; em outra aba eles se recolhem
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("nav button");
+    if (!b) return;
+    document.body.classList.toggle("cartoes-aberto", b.id === "nav-btn-cartoes" || b.hasAttribute("data-cartao-nav"));
+  });
 
   document.addEventListener("click", ev => {
     const b = ev.target.closest("[data-cartao-nav]");
@@ -1373,6 +1391,7 @@
     cartaoAtualId = +b.dataset.cartaoNav;
     const c = cartoesPlan.find(x => x.id === cartaoAtualId);
     document.querySelectorAll("nav button").forEach(x => x.classList.toggle("ativo", x === b));
+    $("#nav-btn-cartoes").classList.add("aberto-pai");
     $("#titulo-pagina").textContent = c ? c.nome : "Cartão";
     $("#sub-pagina").textContent = "Faturas mês a mês, limite e avisos do cartão";
     document.title = `${c ? c.nome : "Cartão"} · Carteira de Aportes`;
@@ -1397,7 +1416,7 @@
       : `<button type="button" class="link acao" data-config-cartao>informe os dias de fechamento e vencimento</button>`;
     $("#cartao-topo").innerHTML = `
       <div class="cartao-visual">
-        <div class="cartao-plastico"><span>${esc(c.nome)}</span><small>${c.final ? `•••• ${esc(c.final)}` : "&nbsp;"}</small></div>
+        <div class="cartao-plastico cor-${corBanco(c.nome)}"><span>${esc(c.nome)}</span><small>${c.final ? `•••• ${esc(c.final)}` : "&nbsp;"}</small></div>
         <div class="cartao-info">
           <strong>${esc(c.nome)}</strong>
           <small>${c.dono ? `de ${esc(c.dono)} · ` : ""}${dias}${c.dias_estimados ? " <span class=\"dica\">(fechamento estimado)</span>" : ""}</small>
@@ -1447,11 +1466,78 @@
     renderNavCartoes();
   }
 
+  document.addEventListener("click", ev => {
+    if (ev.target.closest("[data-todos-cartoes]")) $("#nav-btn-cartoes").click();
+    const v = ev.target.closest("[data-ver-cartao]");
+    if (v) document.querySelector(`[data-cartao-nav="${v.dataset.verCartao}"]`)?.click();
+  });
+
+  // ---------- página "Cartões": resumo de todos ----------
+  const CORES_BANCO = [[/nubank|\bnu\b/i, "nu"], [/banco do brasil|ourocard|\bbb\b/i, "bb"], [/sicredi/i, "sicredi"],
+    [/ita[uú]/i, "itau"], [/inter\b/i, "inter"], [/santander/i, "santander"], [/bradesco/i, "bradesco"], [/caixa/i, "caixa"],
+    [/c6/i, "c6"], [/xp\b/i, "xp"]];
+  const corBanco = nome => (CORES_BANCO.find(([re]) => re.test(nome)) || [null, "padrao"])[1];
+  let dadosCartoes = null;
+  async function carregarCartoesResumo() {
+    document.body.classList.add("cartoes-aberto");
+    try {
+      await garantirCategorias();
+      dadosCartoes = await api("/api/plan/cartoes/resumo");
+    } catch (e) { return toast(e.message, true); }
+    cartoesPlan = dadosCartoes.cartoes.map(c => c.cartao);
+    atualizarPontos(dadosCartoes.cartoes);
+    const t = dadosCartoes.totais, prox = dadosCartoes.proximo_vencimento;
+    const pctLimite = t.limite ? t.usado / t.limite * 100 : null;
+    $("#cartoes-totais").innerHTML = [
+      ["Total em aberto", brl.format(t.em_aberto), "faturas abertas e fechadas a pagar"],
+      ["Próximo vencimento", prox ? brl.format(prox.total) : "—", prox ? `${esc(prox.cartao)} · vence ${fmtData(prox.vencimento).slice(0, 5)}` : "informe os dias dos cartões"],
+      ["Parcelas futuras", brl.format(t.futuras), "já comprometido nos próximos meses"],
+      ["Limite usado", pctLimite == null ? "—" : `${Math.round(pctLimite)}%`, pctLimite == null ? "informe o limite dos cartões"
+        : `<span class="barra-limite ${pctLimite >= 95 ? "neg" : pctLimite >= 80 ? "atencao" : ""}" style="display:block;margin:6px 0 4px"><span style="width:${Math.min(100, pctLimite)}%"></span></span>${brl.format(t.usado)} de ${brl.format(t.limite)}`],
+    ].map(([r, v, s]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div><small class="var-sub">${s}</small></div>`).join("");
+    const avisos = dadosCartoes.cartoes.flatMap(c => c.alertas).sort((a, b) => (a.nivel === "alerta" ? 0 : 1) - (b.nivel === "alerta" ? 0 : 1));
+    $("#cartoes-avisos").innerHTML = avisos.map(a => `<div class="aviso-cartao ${a.nivel}"><strong>${esc(a.titulo)}</strong><span>${esc(a.texto)}</span></div>`).join("");
+    $("#cartoes-grade").innerHTML = dadosCartoes.cartoes.length ? dadosCartoes.cartoes.map(({ cartao: c, resumo: r }) => {
+      const pct = c.limite ? Math.min(100, r.usado / c.limite * 100) : null;
+      const ult = [...r.ultimas].reverse(), maior = Math.max(1, ...ult.map(u => u.total));
+      const dias = c.dia_fechamento || c.dia_vencimento ? `fecha dia ${c.dia_fechamento || "≈"} · vence dia ${c.dia_vencimento || "—"}` : "dias de fechamento e vencimento não informados";
+      return `<div class="tile-cartao" data-ver-cartao="${c.id}" role="button" tabindex="0">
+        <div class="tile-topo"><div class="mini-cartao cor-${corBanco(c.nome)}"><span>${esc(c.nome)}</span><small>${c.final ? `•••• ${esc(c.final)}` : "&nbsp;"}</small></div>
+          <div><strong>${esc(c.nome)}</strong><small>${c.dono ? `de ${esc(c.dono)} · ` : ""}${dias}</small></div></div>
+        <div class="tile-linhas">
+          <span>Fatura aberta${r.aberta_fecha ? ` · fecha ${fmtData(r.aberta_fecha).slice(0, 5)}` : ""}</span><span>${brl.format(r.aberta)}</span>
+          <span>Próxima a vencer${r.proxima?.vencimento ? ` · ${fmtData(r.proxima.vencimento).slice(0, 5)}` : ""}</span><span>${r.proxima ? brl.format(r.proxima.total) : "—"}</span>
+          <span>Parcelas futuras</span><span>${r.futuras ? brl.format(r.futuras) : "—"}</span>
+        </div>
+        ${pct == null ? `<small class="dica">Sem limite informado</small>` : `<div><div class="barra-limite ${pct >= 95 ? "neg" : pct >= 80 ? "atencao" : ""}"><span style="width:${pct}%"></span></div>
+          <small class="dica">${Math.round(r.usado / c.limite * 100)}% do limite · ${brl.format(r.disponivel)} disponível</small></div>`}
+        ${ult.length ? `<div class="mini-grafico" title="Últimas faturas">${ult.map((u, i) => `<b class="${i === ult.length - 1 ? "atual" : ""}" style="height:${Math.max(4, u.total / maior * 100)}%" title="${nomeMes(u.mes)}: ${brl.format(u.total)}"></b>`).join("")}</div>
+          <div class="mini-grafico-leg"><span>${nomeMes(ult[0].mes).slice(0, 3).toLowerCase()}</span><span>últimas ${ult.length} fatura(s)</span><span>${nomeMes(ult[ult.length - 1].mes).slice(0, 3).toLowerCase()}</span></div>` : ""}
+        <span class="ver-faturas">Ver faturas →</span>
+      </div>`;
+    }).join("") : `<div class="painel"><p class="dica" style="margin:0">Nenhum cartão cadastrado. Clique em <strong>Novo cartão</strong> para começar.</p></div>`;
+  }
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" && ev.target.matches?.("[data-ver-cartao]")) ev.target.click();
+  });
+  document.addEventListener("click", ev => {
+    if (!ev.target.closest("[data-novo-cartao]")) return;
+    const f = $("#form-config-cartao");
+    f.reset(); f.id.value = "";
+    const ps = dadosCartoes?.pessoas || pessoasPlan.filter(p => p.editar);
+    f.carteira_id.innerHTML = ps.map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join("");
+    $("#dialogo-cartao h3").textContent = "Novo cartão";
+    $("#btn-remover-cartao").classList.add("oculto");
+    $("#dialogo-cartao").showModal();
+  });
+
   function abrirConfigCartao() {
     const f = $("#form-config-cartao"), c = dadosCartao.cartao;
     f.id.value = c.id; f.nome.value = c.nome; f.final.value = c.final || ""; f.limite.value = fmtMoeda(c.limite);
     f.dia_fechamento.value = c.dia_fechamento || ""; f.dia_vencimento.value = c.dia_vencimento || "";
     f.carteira_id.innerHTML = dadosCartao.pessoas.map(p => `<option value="${p.id}" ${p.id === c.carteira_id ? "selected" : ""}>${esc(p.nome)}</option>`).join("");
+    $("#dialogo-cartao h3").textContent = "Configurar cartão";
+    $("#btn-remover-cartao").classList.remove("oculto");
     $("#dialogo-cartao").showModal();
   }
   document.addEventListener("click", ev => { if (ev.target.closest("[data-config-cartao]")) abrirConfigCartao(); });
@@ -1460,6 +1546,14 @@
     ev.preventDefault();
     const d = formDados(ev.target);
     try {
+      if (!d.id) {  // novo cartão (pela página Cartões)
+        await api("/api/plan/cartoes", { method: "POST", body: d });
+        $("#dialogo-cartao").close();
+        toast("Cartão cadastrado.");
+        cartoesPlan = await api("/api/plan/cartoes");
+        renderNavCartoes();
+        return carregarCartoesResumo();
+      }
       await api(`/api/plan/cartoes/${d.id}`, { method: "PUT", body: d });
       $("#dialogo-cartao").close();
       toast("Cartão atualizado.");
@@ -1476,10 +1570,11 @@
       $("#dialogo-cartao").close();
       cartoesPlan = await api("/api/plan/cartoes");
       renderNavCartoes();
-      document.querySelector('nav button[data-tab="plan-lancamentos"]').click();
+      $("#nav-btn-cartoes").click();
     } catch (e) { toast(e.message, true); }
   });
 
   window.ABAS_MODULOS = { ...(window.ABAS_MODULOS || {}), "plan-resumo": carregarResumo, "plan-lancamentos": carregarLancamentos,
-    "plan-orcamento": carregarOrcamento, "plan-objetivos": carregarObjetivos, "plan-familia": carregarFamilia };
+    "plan-orcamento": carregarOrcamento, "plan-objetivos": carregarObjetivos, "plan-familia": carregarFamilia,
+    "plan-cartoes": carregarCartoesResumo };
 })();

@@ -597,6 +597,7 @@ def registrar(app, ctx):
                            "dias_estimados": not cartao["dia_fechamento"] and bool(cartao["dia_vencimento"])},
                 "alertas": alertas_do_cartao(cartao, faturas, hoje),
                 "resumo": {"aberta": aberta["total"] if aberta else 0.0, "aberta_fecha": aberta["fechamento"] if aberta else None,
+                           "em_aberto": round(sum(x["total"] for x in faturas if x["situacao"] in ("aberta", "fechada")), 2),
                            "proxima": sem_itens(a_vencer[0]) if a_vencer else None, "futuras": round(futuras, 2),
                            "usado": round(usado, 2),
                            "disponivel": round(cartao["limite"] - usado, 2) if cartao.get("limite") else None,
@@ -617,6 +618,7 @@ def registrar(app, ctx):
                            and c["resumo"]["proxima"]["vencimento"] >= hoje), key=lambda x: x["vencimento"])
         return jsonify({"cartoes": cartoes, "hoje": hoje,
                         "totais": {"aberta": round(sum(x["aberta"] for x in r), 2),
+                                   "em_aberto": round(sum(x["em_aberto"] for x in r), 2),
                                    "a_vencer": round(sum(x["proxima"]["total"] for x in r if x["proxima"]), 2),
                                    "futuras": round(sum(x["futuras"] for x in r), 2), "limite": round(limites, 2),
                                    "usado": round(usado_com_limite, 2), "aguardando": sum(x["aguardando"] for x in r)},

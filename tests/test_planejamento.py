@@ -762,3 +762,17 @@ def test_pagina_do_cartao_e_avisos(novo_app, com_modulo):
     assert c.put(f"/api/plan/cartoes/{cartao}", json={"nome": "Nubank Ultravioleta", "dia_vencimento": 15,
                                                       "dia_fechamento": 8, "limite": 5000}).status_code == 200
     assert c.get(f"/api/plan/cartoes/{cartao}/faturas").get_json()["cartao"]["nome"] == "Nubank Ultravioleta"
+
+
+def test_resumo_de_todos_os_cartoes(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    hoje = dt.date.today()
+    a = c.post("/api/plan/cartoes", json={"nome": "Nubank", "limite": 2000, "dia_fechamento": 1, "dia_vencimento": 8}).get_json()["id"]
+    c.post("/api/plan/cartoes", json={"nome": "Sicredi"})
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": hoje.isoformat(), "descricao": "Mercado", "valor": 300,
+                                          "forma": "credito", "cartao_id": a})
+    r = c.get("/api/plan/cartoes/resumo").get_json()
+    assert [x["cartao"]["nome"] for x in r["cartoes"]] == ["Nubank", "Sicredi"]
+    nu = r["cartoes"][0]["resumo"]
+    assert nu["em_aberto"] == 300 and nu["ultimas"][0]["total"] == 300
+    assert r["totais"]["em_aberto"] == 300 and r["totais"]["limite"] == 2000 and r["totais"]["usado"] == 300

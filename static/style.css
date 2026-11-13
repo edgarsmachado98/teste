@@ -926,3 +926,47 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .tabela-fatura-mes td:nth-child(-n+3), .tabela-fatura-mes th:nth-child(-n+3) { text-align: left; }
 :root[data-theme="dark"] .aviso-cartao { background: #3a3220; color: #f3dfa8; border-color: #6b5a2a; }
 :root[data-theme="dark"] .aviso-cartao.alerta { background: #3d2220; color: #f4c1bb; border-color: #74403a; }
+
+/* ---------- Cartões: grupo no menu e resumo de todos ---------- */
+.nav-cartoes { display: none; }
+body.cartoes-aberto .nav-cartoes { display: flex; }
+.sidebar nav button .seta-nav { margin-left: auto; width: 14px; height: 14px; transition: transform .15s; }
+body.cartoes-aberto #nav-btn-cartoes .seta-nav { transform: rotate(90deg); }
+.ponto-aviso { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; flex: none; }
+.ponto-aviso.vermelho { background: #c0392b; }
+.ponto-aviso.amarelo { background: #d4a017; }
+.cabecalho-pagina-acoes { display: flex; justify-content: flex-end; margin: -6px 0 14px; }
+.cabecalho-pagina-acoes .btn { display: inline-flex; align-items: center; gap: 6px; }
+.grade-cartoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.tile-cartao { background: var(--painel); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; display: grid; gap: 12px;
+  cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.tile-cartao:hover, .tile-cartao:focus-visible { border-color: var(--primaria); box-shadow: 0 4px 14px rgba(15, 92, 69, .1); outline: none; }
+.tile-topo { display: flex; gap: 12px; align-items: center; }
+.tile-topo strong { display: block; }
+.tile-topo small { color: var(--texto-2); font-size: .8rem; }
+.mini-cartao { width: 92px; height: 58px; border-radius: 8px; padding: 7px 9px; color: #fff; font-size: .7rem; font-weight: 650;
+  display: flex; flex-direction: column; justify-content: space-between; flex: none; overflow: hidden; }
+.mini-cartao small { font-weight: 400; letter-spacing: .06em; opacity: .85; font-size: .62rem; white-space: nowrap; }
+.tile-linhas { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: .86rem; }
+.tile-linhas span:nth-child(odd) { color: var(--texto-2); }
+.tile-linhas span:nth-child(even) { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mini-grafico { display: flex; align-items: flex-end; gap: 5px; height: 40px; padding: 0 2px; }
+.mini-grafico b { flex: 1; background: #cfe3da; border-radius: 3px 3px 0 0; min-height: 3px; }
+.mini-grafico b.atual { background: var(--primaria); }
+.mini-grafico-leg { display: flex; justify-content: space-between; font-size: .68rem; color: var(--texto-2); margin-top: -6px; }
+.ver-faturas { font-size: .84rem; color: var(--primaria); font-weight: 600; }
+.voltar-cartoes { margin: -4px 0 10px; font-size: .86rem !important; }
+.cor-padrao { background: linear-gradient(135deg, #1f3a33, #0f5c45 60%, #2f7d63); }
+.cor-nu { background: linear-gradient(135deg, #5b1a9c, #8a3ffc); }
+.cor-bb { background: linear-gradient(135deg, #0b3d91, #1e5bc6); }
+.cor-sicredi { background: linear-gradient(135deg, #2d6a1f, #49a12f); }
+.cor-itau { background: linear-gradient(135deg, #c2410c, #f97316); }
+.cor-inter { background: linear-gradient(135deg, #ea580c, #fb923c); }
+.cor-santander { background: linear-gradient(135deg, #b91c1c, #ef4444); }
+.cor-bradesco { background: linear-gradient(135deg, #9f1239, #e11d48); }
+.cor-caixa { background: linear-gradient(135deg, #1d4ed8, #0ea5e9); }
+.cor-c6 { background: linear-gradient(135deg, #111827, #374151); }
+.cor-xp { background: linear-gradient(135deg, #1c1917, #44403c); }
+:root[data-theme="dark"] .mini-grafico b { background: #2f4a40; }
+.mini-cartao span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.mini-cartao small { opacity: .95; }

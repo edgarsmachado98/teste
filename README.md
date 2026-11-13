@@ -210,7 +210,10 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
   pagas pelos outros membros (somente leitura) com a parte de cada um, e a aba Família lista cada conta do mês
   com a divisão por membro. No modo **Tudo junto**, receitas, faturas de cartão e contas de quem divide formam
   um orçamento só: as compras no cartão de cada login entram nas despesas do mês de todos, sem precisar marcar.
-- **Cartões no menu:** cada cartão aparece no menu, abaixo de Receitas e despesas, com uma página própria:
+- **Cartões:** o item Cartões do menu abre o resumo de todos (total em aberto, próximo vencimento, parcelas
+  futuras, limite usado, avisos e um quadro por banco com o mini-gráfico das últimas faturas) e mostra os
+  bancos como subitens, com um pontinho quando há fatura vencendo (vermelho) ou limite alto (amarelo).
+  Cada banco tem uma página própria:
   faturas mês a mês (expansíveis, pelo dia de fechamento do cartão), fatura aberta, próxima a vencer,
   parcelas futuras, limite usado e importação da fatura já com o cartão escolhido. Avisos (na página, no sino
   e no Telegram): vencimento em até 5 dias, fatura fechada e ainda não importada, 80% do limite comprometido e
