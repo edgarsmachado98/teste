@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block titulo %}Orçamento {{ o.numero }}{% endblock %}
+{% block conteudo %}
+<form id="fm" method="post"></form>
+<div class="barra">
+  <h1>Orçamento {{ o.numero }} <span class="status {{ o.status }}">{{ o.status }}</span></h1>
+  <div>
+    <button form="fm">Salvar</button>
+    <a class="botao sec" href="{{ url_for('proposta', oid=o.id) }}">Proposta ao cliente (PDF)</a>
+    <a class="botao sec" href="{{ url_for('cotacao', oid=o.id) }}">Lista para cotação (PDF)</a>
+  </div>
+</div>
+<p class="suave">Salve antes de abrir a proposta ou a lista: os botões de PDF mostram o que já foi salvo.</p>
+
+<div class="cartao">
+  <div class="linha">
+    <label>Título <input form="fm" name="titulo" value="{{ o.titulo }}"></label>
+    <label>Cliente
+      <select form="fm" name="cliente_id">
+        <option value="">— sem cliente —</option>
+        {% for c in clientes %}<option value="{{ c.id }}" {% if c.id == o.cliente_id %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select form="fm" name="status">
+        {% for s in STATUS %}<option {% if s == o.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="suave">Tipo: {{ o.tipos }}</p>
+</div>
+
+<div class="cartao totais">
+  <div><span>Subtotal</span><b>{{ tot.subtotal | brl }}</b></div>
+  <div><span>Desconto</span><b>{{ o.desconto | brl }}</b></div>
+  <div><span>Total ao cliente</span><b>{{ tot.total | brl }}</b></div>
+  <div><span>Custo</span><b>{{ tot.custo | brl }}</b></div>
+  <div><span>Margem sobre o total</span><b>{{ '%.1f' | format(tot.margem) | replace('.', ',') }}%</b></div>
+  {% if tot.opcionais %}<div><span>Opcionais (fora do total)</span><b>{{ tot.opcionais | brl }}</b></div>{% endif %}
+</div>
+
+{% for s in secoes %}
+<h2 id="s{{ s.secao.id }}">{% if varios %}{{ s.secao.grupo }} · {% endif %}{{ s.secao.nome }}</h2>
+<div class="tabela-rolagem">
+<table>
+  <tr><th>Descrição</th><th>Un.</th><th class="n">Qtd.</th><th class="n">Custo un.</th><th class="n">Preço un.</th><th class="n">Total</th><th>Opcional</th><th></th></tr>
+  {% for i in s.itens %}
+  <tr>
+    <td><input form="fm" name="i{{ i.id }}_desc" value="{{ i.descricao }}"></td>
+    <td>{{ i.unidade }}</td>
+    <td class="n"><input form="fm" class="w-qtd" name="i{{ i.id }}_qtd" value="{{ i.quantidade | qtd }}" inputmode="decimal"></td>
+    <td class="n"><input form="fm" class="w-val" name="i{{ i.id }}_custo" value="{{ '%.2f' | format(i.custo) | replace('.', ',') }}" inputmode="decimal"></td>
+    <td class="n"><input form="fm" class="w-val" name="i{{ i.id }}_preco" value="{{ '%.2f' | format(i.preco) | replace('.', ',') }}" inputmode="decimal"></td>
+    <td class="n">{{ (i.quantidade * i.preco) | brl }}</td>
+    <td><input form="fm" type="checkbox" name="i{{ i.id }}_opc" {% if i.opcional %}checked{% endif %}></td>
+    <td>
+      <form method="post" action="{{ url_for('excluir_item', oid=o.id, iid=i.id) }}">
+        <button class="mini perigo" title="Excluir item">×</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  <tr><td colspan="5" class="n suave">Subtotal da seção</td><td class="n"><b>{{ s.subtotal | brl }}</b></td><td colspan="2"></td></tr>
+</table>
+</div>
+<details class="cartao">
+  <summary>Adicionar item em {{ s.secao.nome }}</summary>
+  <form method="post" action="{{ url_for('adicionar_item', oid=o.id) }}" class="linha" style="margin-top:12px">
+    <input type="hidden" name="secao_id" value="{{ s.secao.id }}">
+    <label>Do catálogo
+      <select name="produto_id">
+        <option value="">— item avulso (preencha ao lado) —</option>
+        {% for p in produtos %}<option value="{{ p.id }}">{{ p.categoria }} · {{ p.descricao }}{% if p.marca %} ({{ p.marca }}){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <label>ou descrição avulsa <input name="descricao"></label>
+    <label style="flex:0 0 80px">Un. <input name="unidade" value="un"></label>
+    <label style="flex:0 0 90px">Qtd. <input name="quantidade" value="1" inputmode="decimal"></label>
+    <label style="flex:0 0 110px">Custo <input name="custo" inputmode="decimal"></label>
+    <label style="flex:0 0 110px">Preço <input name="preco" inputmode="decimal"></label>
+    <label style="flex:0 0 120px">Tipo
+      <select name="tipo"><option value="produto">Produto</option><option value="servico">Serviço</option></select>
+    </label>
+    <button class="sec">Adicionar</button>
+  </form>
+  <p class="suave">Item do catálogo usa o custo e a margem cadastrados; custo e preço digitados aqui valem só para item avulso.</p>
+</details>
+{% endfor %}
+
+<h2>Proposta ao cliente</h2>
+<div class="cartao">
+  <div class="linha">
+    <label>Desconto (R$) <input form="fm" name="desconto" value="{{ '%.2f' | format(o.desconto) | replace('.', ',') }}" inputmode="decimal"></label>
+    <label>Validade (dias) <input form="fm" name="validade_dias" value="{{ o.validade_dias }}" inputmode="numeric"></label>
+    <label>Exibição de preços
+      <select form="fm" name="exibicao">
+        {% for v, t in EXIBICOES %}<option value="{{ v }}" {% if v == o.exibicao %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <label>Escopo da solução <textarea form="fm" name="escopo">{{ o.escopo }}</textarea></label>
+  <div class="linha">
+    <label>Pagamento <textarea form="fm" name="pagamento">{{ o.pagamento }}</textarea></label>
+    <label>Prazo de execução <textarea form="fm" name="prazo">{{ o.prazo }}</textarea></label>
+    <label>Garantia <textarea form="fm" name="garantia">{{ o.garantia }}</textarea></label>
+  </div>
+  <label>O que não está incluso <textarea form="fm" name="nao_incluso">{{ o.nao_incluso }}</textarea></label>
+</div>
+
+<div class="barra">
+  <button form="fm">Salvar</button>
+  <form method="post" action="{{ url_for('excluir_orcamento', oid=o.id) }}" onsubmit="return confirm('Excluir este orçamento? Não é possível desfazer.')">
+    <button class="perigo">Excluir orçamento</button>
+  </form>
+</div>
+<p class="suave">Itens com quantidade zero são sugestões do tipo: não aparecem na proposta nem na lista de cotação.</p>
+{% endblock %}

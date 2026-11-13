@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Orçamentos{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topo no-print">
+    <strong>Orçamentos</strong>
+    <nav>
+      <a href="{{ url_for('orcamentos') }}">Orçamentos</a>
+      <a href="{{ url_for('catalogo') }}">Catálogo</a>
+      <a href="{{ url_for('clientes') }}">Clientes</a>
+      <a href="{{ url_for('pagina_empresa') }}">Empresa</a>
+    </nav>
+  </header>
+  <main>{% block conteudo %}{% endblock %}</main>
+</body>
+</html>

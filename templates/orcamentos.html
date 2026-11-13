@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="barra">
+  <h1>Orçamentos</h1>
+  <a class="botao" href="{{ url_for('novo') }}">Novo orçamento</a>
+</div>
+<p class="no-print">
+  <a href="{{ url_for('orcamentos') }}">Todos</a>
+  {% for s in STATUS %} · <a href="{{ url_for('orcamentos', status=s) }}">{% if s == status %}<b>{{ s }}</b>{% else %}{{ s }}{% endif %}</a>{% endfor %}
+</p>
+<div class="tabela-rolagem">
+<table>
+  <tr><th>Número</th><th>Cliente</th><th>Título</th><th>Tipo</th><th>Data</th><th>Status</th><th class="n">Total</th></tr>
+  {% for o in lista %}
+  <tr>
+    <td><a href="{{ url_for('editar', oid=o.id) }}">{{ o.numero }}</a></td>
+    <td>{{ o.cliente_nome or '—' }}</td>
+    <td>{{ o.titulo }}</td>
+    <td>{{ o.tipos }}</td>
+    <td>{{ o.data[8:10] }}/{{ o.data[5:7] }}/{{ o.data[0:4] }}</td>
+    <td><span class="status {{ o.status }}">{{ o.status }}</span></td>
+    <td class="n">{{ [o.total, 0] | max | brl }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7">Nenhum orçamento ainda. Clique em <b>Novo orçamento</b> para começar.</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

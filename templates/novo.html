@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Novo orçamento</h1>
+{% if erro %}<p class="erro">{{ erro }}</p>{% endif %}
+<form method="post">
+  <h2>1. Tipo de orçamento</h2>
+  <p class="suave">Escolha um ou mais. Cada tipo traz suas seções e itens sugeridos.</p>
+  <div class="tipos">
+    {% for t in tipos %}
+    <label><input type="checkbox" name="tipos" value="{{ t.id }}"> {{ t.nome }}</label>
+    {% endfor %}
+  </div>
+  <h2>2. Cliente</h2>
+  <div class="cartao linha">
+    <label>Cliente cadastrado
+      <select name="cliente_id">
+        <option value="">— escolher —</option>
+        {% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>ou novo cliente
+      <input name="novo_cliente" placeholder="Nome do cliente">
+    </label>
+  </div>
+  <h2>3. Título (opcional)</h2>
+  <div class="cartao"><input name="titulo" placeholder="Ex.: CFTV — Loja matriz"></div>
+  <button>Criar orçamento</button>
+  <a class="botao sec" href="{{ url_for('orcamentos') }}">Cancelar</a>
+</form>
+{% endblock %}

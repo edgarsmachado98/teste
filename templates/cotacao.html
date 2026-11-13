@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block titulo %}Pedido de cotação {{ o.numero }}{% endblock %}
+{% block conteudo %}
+<div class="barra no-print">
+  <a href="{{ url_for('editar', oid=o.id) }}">← Voltar ao orçamento</a>
+  <button onclick="window.print()">Exportar lista para cotação (PDF)</button>
+</div>
+<div class="cartao no-print">
+  <p>Marque o que vai para este fornecedor. Só os itens marcados saem no PDF; custo, preço de venda e nome do cliente não aparecem.</p>
+  <div class="linha">
+    <label>Fornecedor <input id="in-forn" placeholder="Nome do fornecedor"></label>
+    <label>Responder até <input id="in-prazo" type="date"></label>
+    <button type="button" class="sec" onclick="marcarTudo(true)">Marcar tudo</button>
+    <button type="button" class="sec" onclick="marcarTudo(false)">Desmarcar tudo</button>
+  </div>
+</div>
+
+<div class="folha">
+  <div class="cab">
+    <div>{% if tem_logo %}<img src="{{ url_for('logo') }}" alt="Logotipo">{% else %}<h1>{{ emp.nome }}</h1>{% endif %}</div>
+    <div class="suave" style="text-align:right">
+      {% if tem_logo %}<b>{{ emp.nome }}</b><br>{% endif %}
+      {% if emp.documento %}{{ emp.documento }}<br>{% endif %}
+      {% if emp.telefone %}{{ emp.telefone }}<br>{% endif %}
+      {% if emp.email %}{{ emp.email }}{% endif %}
+    </div>
+  </div>
+  <div class="capa">
+    <h1>Pedido de cotação</h1>
+    <div><b>Referência:</b> {{ o.numero }} · <b>Data:</b> {{ hoje }}</div>
+    <div id="l-forn" hidden><b>Fornecedor:</b> <span></span></div>
+    <div id="l-prazo" hidden><b>Responder até:</b> <span></span></div>
+  </div>
+  <p>Solicitamos cotação dos itens abaixo, com preço unitário e prazo de entrega.</p>
+
+  {% for cat, itens in categorias %}
+  <div class="categoria">
+    <h2><label style="font-size:inherit;color:inherit"><input type="checkbox" class="no-print cat" checked> {{ cat }}</label></h2>
+    <table>
+      <tr><th class="no-print"></th><th>Nº</th><th>Descrição</th><th>Marca / modelo</th><th>Un.</th><th class="n">Qtd.</th><th>Preço un.</th><th>Prazo</th><th>Observações</th></tr>
+      {% for i in itens %}
+      <tr class="item">
+        <td class="no-print"><input type="checkbox" class="sel" checked></td>
+        <td class="nro"></td>
+        <td>{{ i.descricao }}</td><td>{{ i.marca }}</td><td>{{ i.unidade }}</td>
+        <td class="n">{{ i.quantidade | qtd }}</td>
+        <td class="branco"></td><td class="branco"></td><td class="branco"></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% else %}
+  <p>Nenhum material com quantidade preenchida neste orçamento.</p>
+  {% endfor %}
+</div>
+
+<script>
+  function atualizar() {
+    let n = 0;
+    document.querySelectorAll('.categoria').forEach(cat => {
+      let algum = false;
+      cat.querySelectorAll('tr.item').forEach(tr => {
+        const on = tr.querySelector('.sel').checked;
+        tr.classList.toggle('fora', !on);
+        tr.style.opacity = on ? 1 : 0.4;
+        tr.querySelector('.nro').textContent = on ? ++n : '';
+        algum = algum || on;
+      });
+      cat.classList.toggle('fora', !algum);
+      cat.querySelector('.cat').checked = algum;
+    });
+  }
+  function marcarTudo(v) {
+    document.querySelectorAll('.sel').forEach(c => c.checked = v);
+    atualizar();
+  }
+  document.querySelectorAll('.cat').forEach(c => c.addEventListener('change', () => {
+    c.closest('.categoria').querySelectorAll('.sel').forEach(s => s.checked = c.checked);
+    atualizar();
+  }));
+  document.querySelectorAll('.sel').forEach(c => c.addEventListener('change', atualizar));
+  function campo(entrada, linha, formato) {
+    const el = document.getElementById(entrada), alvo = document.getElementById(linha);
+    el.addEventListener('input', () => {
+      alvo.hidden = !el.value;
+      alvo.querySelector('span').textContent = formato ? formato(el.value) : el.value;
+    });
+  }
+  campo('in-forn', 'l-forn');
+  campo('in-prazo', 'l-prazo', v => v.split('-').reverse().join('/'));
+  atualizar();
+</script>
+{% endblock %}

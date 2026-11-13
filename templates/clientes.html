@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Clientes</h1>
+<details class="cartao" open>
+  <summary>Novo cliente</summary>
+  <form method="post" class="linha" style="margin-top:12px">
+    <label>Nome <input name="nome" required></label>
+    <label>CNPJ / CPF <input name="documento"></label>
+    <label>Contato <input name="contato"></label>
+    <label>Telefone <input name="telefone"></label>
+    <label>E-mail <input name="email"></label>
+    <label>Endereço <input name="endereco"></label>
+    <button>Adicionar</button>
+  </form>
+</details>
+<div class="tabela-rolagem">
+<table>
+  <tr><th>Nome</th><th>CNPJ / CPF</th><th>Contato</th><th>Telefone</th><th>E-mail</th><th>Endereço</th><th></th></tr>
+  {% for c in clientes %}
+  <tr>
+    <td><form id="c{{ c.id }}" method="post" action="{{ url_for('salvar_cliente', cid=c.id) }}"></form>
+      <input form="c{{ c.id }}" name="nome" value="{{ c.nome }}"></td>
+    <td><input form="c{{ c.id }}" name="documento" value="{{ c.documento or '' }}"></td>
+    <td><input form="c{{ c.id }}" name="contato" value="{{ c.contato or '' }}"></td>
+    <td><input form="c{{ c.id }}" name="telefone" value="{{ c.telefone or '' }}"></td>
+    <td><input form="c{{ c.id }}" name="email" value="{{ c.email or '' }}"></td>
+    <td><input form="c{{ c.id }}" name="endereco" value="{{ c.endereco or '' }}"></td>
+    <td style="white-space:nowrap">
+      <button form="c{{ c.id }}" class="mini">Salvar</button>
+      <button form="c{{ c.id }}" class="mini perigo" name="acao" value="excluir" onclick="return confirm('Excluir este cliente? Os orçamentos dele ficam sem cliente.')">×</button>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7">Nenhum cliente cadastrado.</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

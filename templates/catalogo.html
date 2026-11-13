@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Catálogo de produtos e serviços</h1>
+<p class="suave">Preço de venda = custo + margem. Mudanças aqui valem para itens adicionados depois; orçamentos já montados mantêm seus valores.</p>
+<details class="cartao" open>
+  <summary>Novo item</summary>
+  <form method="post" class="linha" style="margin-top:12px">
+    <label>Descrição <input name="descricao" required></label>
+    <label>Categoria <input name="categoria" list="cats"></label>
+    <label>Marca / modelo <input name="marca"></label>
+    <label style="flex:0 0 80px">Un. <input name="unidade" value="un"></label>
+    <label style="flex:0 0 110px">Custo <input name="custo" inputmode="decimal"></label>
+    <label style="flex:0 0 100px">Margem % <input name="margem" value="30" inputmode="decimal"></label>
+    <label style="flex:0 0 120px">Tipo <select name="tipo"><option value="produto">Produto</option><option value="servico">Serviço</option></select></label>
+    <button>Adicionar</button>
+  </form>
+</details>
+<datalist id="cats">{% for c in produtos | map(attribute='categoria') | unique %}<option value="{{ c }}">{% endfor %}</datalist>
+<div class="tabela-rolagem">
+<table>
+  <tr><th>Descrição</th><th>Categoria</th><th>Marca / modelo</th><th>Un.</th><th>Custo</th><th>Margem %</th><th class="n">Preço</th><th>Tipo</th><th></th></tr>
+  {% for p in produtos %}
+  <tr>
+    <td><form id="p{{ p.id }}" method="post" action="{{ url_for('salvar_produto', pid=p.id) }}"></form>
+      <input form="p{{ p.id }}" name="descricao" value="{{ p.descricao }}"></td>
+    <td><input form="p{{ p.id }}" name="categoria" value="{{ p.categoria or '' }}" list="cats"></td>
+    <td><input form="p{{ p.id }}" name="marca" value="{{ p.marca or '' }}"></td>
+    <td><input form="p{{ p.id }}" class="w-qtd" name="unidade" value="{{ p.unidade }}"></td>
+    <td><input form="p{{ p.id }}" class="w-val" name="custo" value="{{ '%.2f' | format(p.custo) | replace('.', ',') }}" inputmode="decimal"></td>
+    <td><input form="p{{ p.id }}" class="w-qtd" name="margem" value="{{ p.margem | qtd }}" inputmode="decimal"></td>
+    <td class="n">{{ (p.custo * (1 + p.margem / 100)) | brl }}</td>
+    <td><select form="p{{ p.id }}" name="tipo"><option value="produto" {% if p.tipo == 'produto' %}selected{% endif %}>Produto</option><option value="servico" {% if p.tipo == 'servico' %}selected{% endif %}>Serviço</option></select></td>
+    <td style="white-space:nowrap">
+      <button form="p{{ p.id }}" class="mini">Salvar</button>
+      <button form="p{{ p.id }}" class="mini perigo" name="acao" value="excluir" onclick="return confirm('Excluir este item do catálogo?')">×</button>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

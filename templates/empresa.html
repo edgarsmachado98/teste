@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Empresa</h1>
+<p class="suave">Estes dados aparecem no cabeçalho da proposta e do pedido de cotação. As condições são o padrão de cada novo orçamento.</p>
+<form method="post" enctype="multipart/form-data" class="cartao">
+  <div class="linha">
+    <label>Nome <input name="nome" value="{{ emp.nome or '' }}"></label>
+    <label>CNPJ <input name="documento" value="{{ emp.documento or '' }}"></label>
+    <label>Telefone <input name="telefone" value="{{ emp.telefone or '' }}"></label>
+    <label>E-mail <input name="email" value="{{ emp.email or '' }}"></label>
+  </div>
+  <label>Endereço <input name="endereco" value="{{ emp.endereco or '' }}"></label>
+  <label>Apresentação da empresa <textarea name="apresentacao">{{ emp.apresentacao or '' }}</textarea></label>
+  <div class="linha">
+    <label>Pagamento (padrão) <textarea name="pagamento">{{ emp.pagamento or '' }}</textarea></label>
+    <label>Prazo de execução (padrão) <textarea name="prazo">{{ emp.prazo or '' }}</textarea></label>
+    <label>Garantia (padrão) <textarea name="garantia">{{ emp.garantia or '' }}</textarea></label>
+  </div>
+  <div class="linha">
+    <label>Logotipo (PNG ou JPG, até 5 MB) <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+    {% if tem_logo %}
+    <div><img src="{{ url_for('logo') }}" alt="Logotipo atual" style="max-height:60px"></div>
+    <label style="flex:0 0 auto"><input type="checkbox" name="remover_logo"> Remover logotipo</label>
+    {% endif %}
+  </div>
+  <p><button>Salvar</button></p>
+</form>
+{% endblock %}

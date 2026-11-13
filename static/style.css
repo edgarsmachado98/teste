@@ -1,0 +1,62 @@
+:root { --cor: #1f5fa8; --borda: #d5d9e0; --fundo: #f4f6f9; --texto: #1c2430; --suave: #5b6675; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, "Segoe UI", Arial, sans-serif; color: var(--texto); background: var(--fundo); font-size: 15px; }
+.topo { display: flex; gap: 24px; align-items: center; padding: 12px 24px; background: #fff; border-bottom: 1px solid var(--borda); }
+.topo nav { display: flex; gap: 16px; }
+a { color: var(--cor); text-decoration: none; }
+a:hover { text-decoration: underline; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 16px; }
+h2 { font-size: 17px; margin: 24px 0 8px; }
+.cartao { background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.linha { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.linha > label { flex: 1 1 180px; }
+.barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+label { display: block; font-size: 13px; color: var(--suave); }
+input, select, textarea { width: 100%; padding: 7px 8px; border: 1px solid var(--borda); border-radius: 6px; font: inherit; color: inherit; background: #fff; }
+input[type=checkbox] { width: auto; }
+textarea { min-height: 64px; resize: vertical; }
+button, .botao { display: inline-block; padding: 8px 14px; border: 1px solid var(--cor); border-radius: 6px; background: var(--cor); color: #fff; font: inherit; cursor: pointer; }
+.botao:hover { text-decoration: none; }
+button.sec, .botao.sec { background: #fff; color: var(--cor); }
+button.perigo { background: #fff; color: #b3261e; border-color: #b3261e; }
+button.mini { padding: 4px 8px; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; background: #fff; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--borda); text-align: left; vertical-align: middle; }
+th { font-size: 13px; color: var(--suave); font-weight: 600; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+td input { padding: 5px 6px; }
+.w-qtd { width: 80px; } .w-val { width: 110px; }
+.tabela-rolagem { overflow-x: auto; }
+.status { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #e6ebf2; }
+.status.Aprovado { background: #d9f0dc; } .status.Recusado { background: #f7dcda; } .status.Enviado { background: #dbe8fb; }
+.erro { color: #b3261e; margin-bottom: 12px; }
+.suave { color: var(--suave); font-size: 13px; }
+.tipos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.tipos label { border: 1px solid var(--borda); border-radius: 8px; padding: 12px; background: #fff; color: var(--texto); font-size: 15px; cursor: pointer; }
+.totais { display: flex; gap: 24px; flex-wrap: wrap; }
+.totais div span { display: block; font-size: 12px; color: var(--suave); }
+.totais div b { font-size: 18px; }
+
+/* Documentos para impressão (proposta e lista de cotação) */
+.folha { background: #fff; max-width: 800px; margin: 0 auto; padding: 40px; border: 1px solid var(--borda); }
+.folha h1 { font-size: 24px; }
+.folha h2 { font-size: 16px; border-bottom: 2px solid var(--cor); padding-bottom: 4px; margin-top: 28px; }
+.folha h3 { font-size: 14px; margin: 16px 0 4px; }
+.folha .cab { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.folha .cab img { max-height: 70px; max-width: 220px; }
+.folha .capa { margin: 32px 0; padding: 20px; background: var(--fundo); border-left: 4px solid var(--cor); }
+.folha p { white-space: pre-line; margin: 6px 0; }
+.folha .total-final { font-size: 18px; }
+.folha .aceite { margin-top: 48px; display: flex; gap: 40px; }
+.folha .aceite div { flex: 1; border-top: 1px solid var(--texto); padding-top: 6px; font-size: 13px; }
+.folha td.branco { min-width: 90px; }
+@media print {
+  body { background: #fff; font-size: 12px; }
+  .no-print { display: none !important; }
+  main { max-width: none; padding: 0; }
+  .folha { border: 0; padding: 0; max-width: none; }
+  tr, .capa, .aceite { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
+  .fora { display: none !important; }
+}
