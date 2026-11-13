@@ -39,7 +39,7 @@
   function recarregar() {
     const aba = document.querySelector("nav button.ativo")?.dataset.tab;
     ({ "plan-resumo": carregarResumo, "plan-lancamentos": carregarLancamentos, "plan-orcamento": carregarOrcamento,
-       "plan-familia": carregarFamilia }[aba] || (() => {}))();
+       "plan-familia": carregarFamilia, "plan-cartao": carregarCartaoPagina }[aba] || (() => {}))();
   }
 
   async function garantirCategorias() {
@@ -325,6 +325,7 @@
 
   async function carregarLancamentos() {
     atualizarSeletoresMes();
+    if ($("#painel-fatura").parentNode !== lugarFatura.pai) lugarFatura.pai.insertBefore($("#painel-fatura"), lugarFatura.depois);
     try {
       await garantirCategorias();
       const pessoa = $("#plan-pessoa").value;
@@ -755,6 +756,7 @@
         <span class="plan-nome">${esc(c.nome)}<small>${c.dia_vencimento ? `vence dia ${c.dia_vencimento}` : "sem dia de vencimento"}</small></span>
         <button type="button" class="link" data-remover-cartao="${c.id}">remover</button></li>`).join("")}</ul>` : "";
     $("#novo-cartao").open = !cartoesPlan.length;
+    renderNavCartoes();
     ajustarForm();
   }
 
@@ -923,14 +925,14 @@
       previaFatura = null;
       $("#previa-fatura").innerHTML = "";
       escolherArquivoFatura(null);
-      carregarLancamentos();
+      recarregar();
     } catch (e) { toast(e.message, true); }
   });
 
   document.addEventListener("click", async ev => {
     const b = ev.target.closest("[data-remover-cartao]");
     if (!b || !confirm("Remover este cartão? Os lançamentos já feitos continuam.")) return;
-    try { await api(`/api/plan/cartoes/${b.dataset.removerCartao}`, { method: "DELETE" }); carregarCartoes(); }
+    try { await api(`/api/plan/cartoes/${b.dataset.removerCartao}`, { method: "DELETE" }); await carregarCartoes(); }
     catch (e) { toast(e.message, true); }
   });
 
@@ -1344,6 +1346,138 @@
     document.querySelectorAll("[data-peso]").forEach(i => (pesos[i.dataset.peso] = i.value));
     try { await api("/api/plan/familia", { method: "PUT", body: { modo, pesos } }); toast("Forma de dividir salva."); carregarFamilia(); }
     catch (e) { toast(e.message, true); }
+  });
+
+  // ================= Cartões: um item no menu por cartão, com as faturas mês a mês =================
+  let cartaoAtualId = null, dadosCartao = null;
+  const ICONE_CARTAO = `<svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/></svg>`;
+  const lugarFatura = { pai: $("#painel-fatura").parentNode, depois: $("#painel-fatura").nextSibling };
+  document.body.appendChild($("#dialogo-cartao"));
+
+  function renderNavCartoes() {
+    let caixa = $("#nav-cartoes");
+    if (!caixa) {
+      const ref = document.querySelector('nav button[data-tab="plan-lancamentos"]');
+      if (!ref) return;
+      ref.insertAdjacentHTML("afterend", `<div class="nav-cartoes" id="nav-cartoes"></div>`);
+      caixa = $("#nav-cartoes");
+    }
+    caixa.innerHTML = cartoesPlan.map(c => `<button type="button" class="nav-sub ${c.id === cartaoAtualId && $("#tab-plan-cartao").classList.contains("visivel") ? "ativo" : ""}"
+        data-tab="plan-cartao" data-cartao-nav="${c.id}" title="Faturas do cartão ${esc(c.nome)}">${ICONE_CARTAO}<span>${esc(c.nome)}</span></button>`).join("");
+  }
+  api("/api/plan/cartoes").then(l => { cartoesPlan = l; renderNavCartoes(); }).catch(() => {});
+
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-cartao-nav]");
+    if (!b) return;
+    cartaoAtualId = +b.dataset.cartaoNav;
+    const c = cartoesPlan.find(x => x.id === cartaoAtualId);
+    document.querySelectorAll("nav button").forEach(x => x.classList.toggle("ativo", x === b));
+    $("#titulo-pagina").textContent = c ? c.nome : "Cartão";
+    $("#sub-pagina").textContent = "Faturas mês a mês, limite e avisos do cartão";
+    document.title = `${c ? c.nome : "Cartão"} · Carteira de Aportes`;
+    document.body.classList.remove("menu-aberto");
+    window.scrollTo({ top: 0 });
+    document.querySelectorAll(".tab").forEach(t => t.classList.toggle("visivel", t.id === "tab-plan-cartao"));
+    carregarCartaoPagina();
+  });
+
+  const SITUACAO_FATURA = { aberta: "aberta", fechada: "fechada", encerrada: "encerrada", futura: "futura" };
+  async function carregarCartaoPagina() {
+    if (!cartaoAtualId) return;
+    try {
+      await garantirCategorias();
+      if (!pessoasPlan.length) pessoasPlan = (await api(`/api/plan/lancamentos?mes=${mesPlan}`)).pessoas || [];
+      [dadosCartao] = await Promise.all([api(`/api/plan/cartoes/${cartaoAtualId}/faturas`), carregarCartoes()]);
+    } catch (e) { return toast(e.message, true); }
+    const { cartao: c, resumo: r, faturas, alertas } = dadosCartao;
+    const usadoPct = c.limite ? Math.min(100, r.usado / c.limite * 100) : null;
+    const dias = c.dia_fechamento || c.dia_vencimento
+      ? `fecha dia ${c.dia_fechamento || "≈" + ((c.dia_vencimento > 7 ? c.dia_vencimento - 7 : Math.min(c.dia_vencimento + 23, 28)))} · vence dia ${c.dia_vencimento || "—"}`
+      : `<button type="button" class="link acao" data-config-cartao>informe os dias de fechamento e vencimento</button>`;
+    $("#cartao-topo").innerHTML = `
+      <div class="cartao-visual">
+        <div class="cartao-plastico"><span>${esc(c.nome)}</span><small>${c.final ? `•••• ${esc(c.final)}` : "&nbsp;"}</small></div>
+        <div class="cartao-info">
+          <strong>${esc(c.nome)}</strong>
+          <small>${c.dono ? `de ${esc(c.dono)} · ` : ""}${dias}${c.dias_estimados ? " <span class=\"dica\">(fechamento estimado)</span>" : ""}</small>
+          ${c.limite ? `<div class="barra-limite ${usadoPct >= 95 ? "neg" : usadoPct >= 80 ? "atencao" : ""}"><span style="width:${usadoPct}%"></span></div>
+            <small>${brl.format(r.usado)} usados de ${brl.format(c.limite)} · <strong>${brl.format(r.disponivel)}</strong> disponível</small>`
+            : `<small class="dica">Informe o limite para acompanhar quanto já está comprometido.</small>`}
+        </div>
+        ${c.pode_editar ? `<button type="button" class="secundario btn-pequeno" data-config-cartao>Configurar</button>` : ""}
+      </div>`;
+    $("#cartao-alertas").innerHTML = alertas.map(a => `<div class="aviso-cartao ${a.nivel}"><strong>${esc(a.titulo)}</strong><span>${esc(a.texto)}</span></div>`).join("");
+    const prox = r.proxima;
+    $("#cartao-cards").innerHTML = [
+      ["Fatura aberta", brl.format(r.aberta), (faturas.find(f => f.situacao === "aberta")?.fechamento ? `fecha em ${fmtData(faturas.find(f => f.situacao === "aberta").fechamento)}` : "compras do ciclo atual")],
+      ["Próxima a vencer", prox ? brl.format(prox.total) : "—", prox?.vencimento ? `vence em ${fmtData(prox.vencimento)}` : "informe o dia do vencimento"],
+      ["Parcelas futuras", brl.format(r.futuras), "já comprometido nos próximos meses"],
+      ["Aguardando fatura", String(r.aguardando), "compras lançadas à mão ainda não conferidas"],
+    ].map(([t, v, s]) => `<div class="card"><div class="rotulo">${t}</div><div class="valor">${v}</div><small class="var-sub">${s}</small></div>`).join("");
+    // a importação da fatura aparece aqui, já com este cartão escolhido
+    $("#cartao-importar").appendChild($("#painel-fatura"));
+    $("#sel-cartao-fatura").value = c.id;
+    const nomeP = id => pessoasPlan.find(p => p.id === id)?.nome || "";
+    // primeiro a fatura atual, depois as anteriores e, por último, as futuras (só parcelas)
+    const ordem = { fechada: 0, aberta: 1, encerrada: 2, futura: 3 };
+    const lista = [...faturas].sort((a, b) => ordem[a.situacao] - ordem[b.situacao] ||
+      (a.situacao === "futura" ? a.mes.localeCompare(b.mes) : b.mes.localeCompare(a.mes)));
+    let tituloFuturas = false;
+    $("#cartao-faturas").innerHTML = lista.length ? lista.map(f => (f.situacao === "futura" && !tituloFuturas && (tituloFuturas = true)
+        ? `<h4 class="titulo-futuras">Próximas faturas <small class="dica">parcelas já lançadas</small></h4>` : "") + `
+      <details class="fatura-mes ${f.situacao}" ${f.situacao === "aberta" || f.situacao === "fechada" ? "open" : ""}>
+        <summary>
+          <span class="fatura-mes-nome">${nomeMes(f.mes)}</span>
+          <span class="selo situacao-${f.situacao}">${SITUACAO_FATURA[f.situacao]}</span>
+          <small class="dica">${f.vencimento ? `vence ${fmtData(f.vencimento)}` : ""}${f.importada && f.situacao !== "futura" ? " · importada" : ""} · ${f.qtd} ${f.situacao === "futura" ? "parcela(s)" : "compra(s)"}</small>
+          <strong class="fatura-mes-total">${brl.format(f.total)}</strong>
+        </summary>
+        <div class="rolagem"><table class="tabela-fatura-mes"><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr>
+          ${f.itens.map(l => `<tr><td>${fmtData(l.data)}</td>
+            <td>${esc(l.descricao)} ${l.parcela_total ? `<span class="selo">${l.parcela_num}/${l.parcela_total}</span>` : ""}
+              ${l.conferido_em ? `<span class="selo">✓ conferida</span>` : !l.chave_import && l.tipo === "despesa" && !l.parcela_total ? `<span class="selo">aguardando fatura</span>` : ""}
+              ${pessoasPlan.length > 1 && l.carteira_id !== c.carteira_id ? `<small class="var-sub">${esc(nomeP(l.carteira_id))}</small>` : ""}</td>
+            <td>${esc(nomeCat(l.categoria_id))}</td>
+            <td class="${l.tipo === "receita" ? "pos" : ""}">${l.tipo === "receita" ? "−" : ""}${brl.format(l.valor)}</td></tr>`).join("")}
+          ${f.creditos ? `<tr class="linha-total"><td></td><td>Compras ${brl.format(f.compras)} · créditos e estornos −${brl.format(f.creditos)}</td><td></td><td>${brl.format(f.total)}</td></tr>` : ""}
+        </table></div>
+      </details>`).join("")
+      : `<p class="dica">Nenhuma compra neste cartão ainda. Importe a fatura acima ou lance uma compra no crédito.</p>`;
+    renderNavCartoes();
+  }
+
+  function abrirConfigCartao() {
+    const f = $("#form-config-cartao"), c = dadosCartao.cartao;
+    f.id.value = c.id; f.nome.value = c.nome; f.final.value = c.final || ""; f.limite.value = fmtMoeda(c.limite);
+    f.dia_fechamento.value = c.dia_fechamento || ""; f.dia_vencimento.value = c.dia_vencimento || "";
+    f.carteira_id.innerHTML = dadosCartao.pessoas.map(p => `<option value="${p.id}" ${p.id === c.carteira_id ? "selected" : ""}>${esc(p.nome)}</option>`).join("");
+    $("#dialogo-cartao").showModal();
+  }
+  document.addEventListener("click", ev => { if (ev.target.closest("[data-config-cartao]")) abrirConfigCartao(); });
+  $("#btn-cancelar-cartao").addEventListener("click", () => $("#dialogo-cartao").close());
+  $("#form-config-cartao").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const d = formDados(ev.target);
+    try {
+      await api(`/api/plan/cartoes/${d.id}`, { method: "PUT", body: d });
+      $("#dialogo-cartao").close();
+      toast("Cartão atualizado.");
+      cartoesPlan = await api("/api/plan/cartoes");
+      $("#titulo-pagina").textContent = d.nome;
+      carregarCartaoPagina();
+    } catch (e) { toast(e.message, true); }
+  });
+  $("#btn-remover-cartao").addEventListener("click", async () => {
+    const f = $("#form-config-cartao");
+    if (!confirm(`Remover o cartão ${f.nome.value}? As compras já lançadas continuam.`)) return;
+    try {
+      await api(`/api/plan/cartoes/${f.id.value}`, { method: "DELETE" });
+      $("#dialogo-cartao").close();
+      cartoesPlan = await api("/api/plan/cartoes");
+      renderNavCartoes();
+      document.querySelector('nav button[data-tab="plan-lancamentos"]').click();
+    } catch (e) { toast(e.message, true); }
   });
 
   window.ABAS_MODULOS = { ...(window.ABAS_MODULOS || {}), "plan-resumo": carregarResumo, "plan-lancamentos": carregarLancamentos,

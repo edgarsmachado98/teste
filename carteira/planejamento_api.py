@@ -456,22 +456,148 @@ def registrar(app, ctx):
     def plan_cartoes():
         return jsonify(listar_cartoes(cids_plan()))
 
+    def ler_cartao(d):
+        nome = (d.get("nome") or "").strip()[:40]
+        if not nome:
+            raise ValueError("Informe o nome do cartão (ex.: Nubank, Itaú Visa).")
+        dias = {}
+        for campo, rotulo in (("dia_vencimento", "vencimento"), ("dia_fechamento", "fechamento")):
+            try:
+                dias[campo] = int(d.get(campo) or 0) or None
+            except (TypeError, ValueError):
+                dias[campo] = None
+            if dias[campo] is not None and not 1 <= dias[campo] <= 31:
+                raise ValueError(f"Dia de {rotulo} inválido.")
+        limite = d.get("limite")
+        limite = numero(limite, "um limite") if limite not in (None, "") else None
+        final = re.sub(r"\D", "", str(d.get("final") or ""))[-4:] or None
+        return {"nome": nome, "limite": limite if limite and limite > 0 else None, "final": final, **dias}
+
     @app.post("/api/plan/cartoes")
     def plan_criar_cartao():
         d = request.get_json(silent=True) or {}
         cid = cid_escrita(d.get("carteira_id"))
-        nome = (d.get("nome") or "").strip()[:40]
         try:
-            dia = int(d.get("dia_vencimento") or 0) or None
-        except ValueError:
-            dia = None
-        if not nome:
-            return erro("Informe o nome do cartão (ex.: Nubank, Itaú Visa).")
-        if dia is not None and not 1 <= dia <= 31:
-            return erro("Dia de vencimento inválido.")
-        cur = conn.execute("INSERT INTO fin_cartoes (carteira_id, nome, dia_vencimento) VALUES (?, ?, ?)", (cid, nome, dia))
+            c = ler_cartao(d)
+        except ValueError as e:
+            return erro(str(e))
+        cur = conn.execute("""INSERT INTO fin_cartoes (carteira_id, nome, dia_vencimento, dia_fechamento, limite, final)
+                              VALUES (?, ?, ?, ?, ?, ?)""",
+                           (cid, c["nome"], c["dia_vencimento"], c["dia_fechamento"], c["limite"], c["final"]))
         conn.commit()
         return jsonify({"ok": True, "id": cur.lastrowid}), 201
+
+    @app.put("/api/plan/cartoes/<int:cartao_id>")
+    def plan_editar_cartao(cartao_id):
+        atual = conn.execute("SELECT * FROM fin_cartoes WHERE id = ? AND ativo = 1", (cartao_id,)).fetchone()
+        if atual is None:
+            return erro("Cartão não encontrado.", 404)
+        exigir_edicao(atual["carteira_id"])
+        d = request.get_json(silent=True) or {}
+        try:
+            c = ler_cartao(d)
+        except ValueError as e:
+            return erro(str(e))
+        dono = atual["carteira_id"]
+        if d.get("carteira_id") not in (None, "") and int(d["carteira_id"]) != dono:
+            dono = cid_escrita(d["carteira_id"])  # passa o cartão (e as compras dele) para outro membro
+            conn.execute("UPDATE fin_lancamentos SET carteira_id = ? WHERE cartao_id = ?", (dono, cartao_id))
+        conn.execute("""UPDATE fin_cartoes SET nome = ?, dia_vencimento = ?, dia_fechamento = ?, limite = ?, final = ?,
+                        carteira_id = ? WHERE id = ?""",
+                     (c["nome"], c["dia_vencimento"], c["dia_fechamento"], c["limite"], c["final"], dono, cartao_id))
+        conn.commit()
+        return jsonify({"ok": True})
+
+    # ---------- faturas de um cartão, mês a mês ----------
+    def faturas_do_cartao(cartao, hoje, meses_atras=12):
+        f, v = cartao["dia_fechamento"], cartao["dia_vencimento"]
+        desde = plan.somar_meses(hoje[:7], -meses_atras - 1) + "-01"
+        lancs = db.rows(conn.execute(
+            """SELECT * FROM fin_lancamentos WHERE cartao_id = ? AND data >= ? ORDER BY data, id""", (cartao["id"], desde)))
+        grupos = {}
+        for l in lancs:
+            grupos.setdefault(plan.fatura_da_compra(l["data"], f, v), []).append(l)
+        faturas = []
+        for mes in sorted(grupos, reverse=True):
+            if mes < plan.somar_meses(hoje[:7], -meses_atras):
+                continue
+            itens = grupos[mes]
+            compras = sum(l["valor"] for l in itens if l["tipo"] == "despesa")
+            creditos = sum(l["valor"] for l in itens if l["tipo"] == "receita")
+            fecha, vence = plan.datas_da_fatura(mes, f, v)
+            faturas.append({"mes": mes, "fechamento": fecha, "vencimento": vence,
+                            "situacao": plan.situacao_fatura(mes, f, v, hoje), "total": round(compras - creditos, 2),
+                            "compras": round(compras, 2), "creditos": round(creditos, 2),
+                            "qtd": sum(1 for l in itens if l["tipo"] == "despesa"),
+                            "importada": any(l["chave_import"] for l in itens), "itens": itens})
+        return faturas
+
+    def alertas_do_cartao(cartao, faturas, hoje):
+        """Avisos de um cartão: vencimento chegando, fatura fechada sem importar, limite e gasto acima da média."""
+        nome, out = cartao["nome"], []
+        brl_ = lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")  # noqa: E731
+        data_br = lambda d: "/".join(reversed(d.split("-")))[:5]  # noqa: E731
+        h = dt.date.fromisoformat(hoje)
+        for fat_ in faturas:
+            if fat_["vencimento"] and fat_["total"] > 0 and hoje <= fat_["vencimento"] and fat_["situacao"] in ("fechada", "aberta"):
+                dias = (dt.date.fromisoformat(fat_["vencimento"]) - h).days
+                if dias <= 5:
+                    out.append({"nivel": "alerta", "codigo": "vencimento",
+                                "titulo": f"Fatura do {nome} vence {'hoje' if dias == 0 else f'em {dias} dia(s)'} ({data_br(fat_['vencimento'])})",
+                                "texto": f"Valor da fatura: {brl_(fat_['total'])}.", "chave": f"vence:{fat_['mes']}"})
+        ja_importou = conn.execute("SELECT 1 FROM fin_lancamentos WHERE cartao_id = ? AND chave_import IS NOT NULL LIMIT 1",
+                                   (cartao["id"],)).fetchone()
+        fechadas = [x for x in faturas if x["situacao"] == "fechada" and x["fechamento"]]
+        if ja_importou:
+            for fat_ in fechadas:
+                if not fat_["importada"] and (h - dt.date.fromisoformat(fat_["fechamento"])).days >= 1:
+                    out.append({"nivel": "info", "codigo": "importar",
+                                "titulo": f"A fatura de {plan.nome_mes(fat_['mes'])} do {nome} já fechou",
+                                "texto": f"Fechou em {data_br(fat_['fechamento'])}. Importe o PDF/OFX para conferir as compras.",
+                                "chave": f"importar:{fat_['mes']}"})
+        if cartao.get("limite"):
+            usado = sum(x["total"] for x in faturas if x["situacao"] in ("aberta", "fechada", "futura"))
+            pct_ = usado / cartao["limite"] * 100
+            if pct_ >= 80:
+                out.append({"nivel": "alerta" if pct_ >= 95 else "info", "codigo": "limite",
+                            "titulo": f"{nome}: {pct_:.0f}% do limite comprometido",
+                            "texto": f"{brl_(usado)} de {brl_(cartao['limite'])}, somando a fatura atual e as parcelas futuras.",
+                            "chave": f"limite:{int(pct_ // 5) * 5}"})
+        aberta = next((x for x in faturas if x["situacao"] == "aberta"), None)
+        anteriores = [x["total"] for x in faturas if x["situacao"] == "encerrada" and x["total"] > 0][:3]
+        if aberta and len(anteriores) >= 2:
+            media = sum(anteriores) / len(anteriores)
+            if aberta["total"] >= 100 and aberta["total"] > media * 1.3:
+                out.append({"nivel": "info", "codigo": "media",
+                            "titulo": f"{nome}: fatura atual acima da média",
+                            "texto": f"{brl_(aberta['total'])} até agora, contra a média de {brl_(media)} das últimas faturas.",
+                            "chave": f"media:{aberta['mes']}"})
+        return out
+
+    @app.get("/api/plan/cartoes/<int:cartao_id>/faturas")
+    def plan_faturas_cartao(cartao_id):
+        cartao = next((c for c in listar_cartoes(cids_plan()) if c["id"] == cartao_id), None)
+        if cartao is None:
+            return erro("Cartão não encontrado.", 404)
+        hoje = ctx.hoje()
+        faturas = faturas_do_cartao(cartao, hoje)
+        dono = next((p for p in pessoas() if p["id"] == cartao["carteira_id"]), None)
+        aberta = next((x for x in faturas if x["situacao"] == "aberta"), None)
+        proxima = sorted((x for x in faturas if x["situacao"] in ("fechada", "aberta")), key=lambda x: x["mes"])
+        futuras = sum(x["total"] for x in faturas if x["situacao"] == "futura")
+        usado = sum(x["total"] for x in faturas if x["situacao"] in ("aberta", "fechada", "futura"))
+        aguardando = conn.execute("""SELECT COUNT(*) FROM fin_lancamentos WHERE cartao_id = ? AND tipo = 'despesa'
+                                     AND chave_import IS NULL AND parcela_total IS NULL""", (cartao_id,)).fetchone()[0]
+        return jsonify({"cartao": {**cartao, "dono": dono["nome"] if dono else None,
+                                   "pode_editar": bool(dono and dono["editar"]),
+                                   "dias_estimados": not cartao["dia_fechamento"] and bool(cartao["dia_vencimento"])},
+                        "faturas": faturas, "alertas": alertas_do_cartao(cartao, faturas, hoje),
+                        "resumo": {"aberta": aberta["total"] if aberta else 0.0,
+                                   "proxima": proxima[0] if proxima else None, "futuras": round(futuras, 2),
+                                   "usado": round(usado, 2),
+                                   "disponivel": round(cartao["limite"] - usado, 2) if cartao.get("limite") else None,
+                                   "aguardando": aguardando},
+                        "pessoas": [{"id": p["id"], "nome": p["nome"]} for p in pessoas() if p["editar"]], "hoje": hoje})
 
     @app.delete("/api/plan/cartoes/<int:cartao_id>")
     def plan_excluir_cartao(cartao_id):
@@ -1280,6 +1406,10 @@ def registrar(app, ctx):
                         "texto": "Compra lançada há mais de dois meses e ainda não conferida com a fatura. "
                                  "Verifique se foi cancelada ou se a fatura foi importada.",
                         "chave": f"{chave}:cartao-pendente:{l['id']}"})
+        for cartao in listar_cartoes(cids):
+            for a in alertas_do_cartao(cartao, faturas_do_cartao(cartao, hoje, 4), hoje):
+                out.append({"tipo": "cartao", "nivel": a["nivel"], "titulo": a["titulo"], "texto": a["texto"],
+                            "chave": f"{chave}:cartao:{cartao['id']}:{a['chave']}"})
         orc = orcamento_do_mes(cids, mes)
         for i in orc["itens"]:
             if i["estado"] in ("atencao", "estourado"):

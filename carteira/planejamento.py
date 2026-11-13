@@ -199,6 +199,11 @@ def preparar(conn):
                               ("nota_id", "INTEGER REFERENCES fin_notas(id) ON DELETE SET NULL")):  # veio de uma NFC-e
         if coluna not in colunas:
             conn.execute(f"ALTER TABLE fin_lancamentos ADD COLUMN {coluna} {definicao}")
+    cols_cartoes = {r["name"] for r in conn.execute("PRAGMA table_info(fin_cartoes)")}
+    for coluna, definicao in (("final", "TEXT"), ("limite", "REAL"),
+                              ("dia_fechamento", "INTEGER CHECK (dia_fechamento BETWEEN 1 AND 31)")):
+        if coluna not in cols_cartoes:
+            conn.execute(f"ALTER TABLE fin_cartoes ADD COLUMN {coluna} {definicao}")
     cols_membros = {r["name"] for r in conn.execute("PRAGMA table_info(fin_membros)")}
     for coluna, definicao in (("nascimento", "TEXT"), ("ativo", "INTEGER NOT NULL DEFAULT 1")):
         if coluna not in cols_membros:
@@ -234,10 +239,66 @@ def meses_entre(inicio, fim):
         m = somar_meses(m, 1)
 
 
+NOMES_MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
+               "novembro", "dezembro")
+
+
+def nome_mes(mes):
+    """'2026-11' -> 'novembro/2026'."""
+    return f"{NOMES_MESES[int(mes[5:7]) - 1]}/{mes[:4]}"
+
+
 def data_no_mes(mes, dia):
     """Dia `dia` do mês, limitado ao último dia (31 em fevereiro vira 28/29)."""
     a, m = int(mes[:4]), int(mes[5:7])
     return dt.date(a, m, min(int(dia), calendar.monthrange(a, m)[1])).isoformat()
+
+
+# ------------------------------------------------------------------ faturas do cartão
+
+def dias_do_cartao(fechamento, vencimento):
+    """(fechamento, vencimento) efetivos. Sem o fechamento, estima 7 dias antes do vencimento
+    (o comum nos bancos); sem nenhum dos dois, None (as compras ficam no mês em que foram feitas)."""
+    if not fechamento and not vencimento:
+        return None
+    if not fechamento:
+        fechamento = vencimento - 7 if vencimento > 7 else min(vencimento + 23, 28)
+    if not vencimento:
+        vencimento = fechamento + 7 if fechamento <= 21 else fechamento + 7 - 28
+    return int(fechamento), int(vencimento)
+
+
+def fatura_da_compra(data_iso, fechamento, vencimento):
+    """Mês (AAAA-MM) do vencimento da fatura em que a compra entra."""
+    dias = dias_do_cartao(fechamento, vencimento)
+    if dias is None:
+        return data_iso[:7]
+    f, v = dias
+    d = dt.date.fromisoformat(data_iso[:10])
+    fecha_mes = data_iso[:7]
+    if d.isoformat() > data_no_mes(fecha_mes, f):  # depois do fechamento: entra na fatura seguinte
+        fecha_mes = somar_meses(fecha_mes, 1)
+    return fecha_mes if v > f else somar_meses(fecha_mes, 1)
+
+
+def datas_da_fatura(mes, fechamento, vencimento):
+    """Fechamento e vencimento (datas) da fatura que vence no mês `mes`."""
+    dias = dias_do_cartao(fechamento, vencimento)
+    if dias is None:
+        return None, None
+    f, v = dias
+    mes_fecha = mes if v > f else somar_meses(mes, -1)
+    return data_no_mes(mes_fecha, f), data_no_mes(mes, v)
+
+
+def situacao_fatura(mes, fechamento, vencimento, hoje):
+    fecha, vence = datas_da_fatura(mes, fechamento, vencimento)
+    if fecha is None:
+        return "aberta" if mes == hoje[:7] else ("futura" if mes > hoje[:7] else "encerrada")
+    if hoje <= fecha:
+        anterior_fecha = datas_da_fatura(somar_meses(mes, -1), fechamento, vencimento)[0]
+        return "aberta" if hoje > anterior_fecha else "futura"
+    return "fechada" if hoje <= vence else "encerrada"
 
 
 # ------------------------------------------------------------------ recorrências e parcelas

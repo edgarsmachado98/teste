@@ -385,3 +385,42 @@
       <div class="rolagem"><table id="fam-itens" class="tabela-fam-itens"></table></div>
     </div>
   </section>
+
+  <section id="tab-plan-cartao" class="tab">
+    <div class="painel cartao-topo" id="cartao-topo"></div>
+    <div id="cartao-alertas" class="cartao-alertas"></div>
+    <div class="cards" id="cartao-cards"></div>
+    <div id="cartao-importar"></div>
+    <div class="painel">
+      <div class="cabecalho-painel">
+        <div><h3>Faturas mês a mês</h3>
+          <p class="dica" style="margin:0">Clique em um mês para ver as compras. As compras entram na fatura pelo dia de fechamento do cartão.</p></div>
+      </div>
+      <div id="cartao-faturas" class="cartao-faturas"></div>
+    </div>
+    <dialog id="dialogo-cartao" class="dialogo">
+      <form id="form-config-cartao" method="dialog" autocomplete="off">
+        <h3>Configurar cartão</h3>
+        <p>Com os dias de fechamento e vencimento, cada compra cai na fatura certa e os avisos chegam na hora.</p>
+        <input type="hidden" name="id">
+        <div class="form-membro-campos">
+          <label>Nome do cartão <input name="nome" required maxlength="40" placeholder="Ex.: Nubank, Ourocard Visa"></label>
+          <div class="form-linha">
+            <label>Final <input name="final" inputmode="numeric" maxlength="4" placeholder="1234" style="width:90px"></label>
+            <label>Limite (R$) <input type="text" inputmode="decimal" data-moeda autocomplete="off" name="limite" placeholder="0,00" style="width:140px"></label>
+          </div>
+          <div class="form-linha">
+            <label>Dia do fechamento <input type="number" name="dia_fechamento" min="1" max="31" placeholder="ex.: 3" style="width:110px"></label>
+            <label>Dia do vencimento <input type="number" name="dia_vencimento" min="1" max="31" placeholder="ex.: 10" style="width:110px"></label>
+          </div>
+          <label>De quem é o cartão <select name="carteira_id"></select></label>
+        </div>
+        <div class="dialogo-acoes">
+          <button type="button" class="link" id="btn-remover-cartao">Remover cartão</button>
+          <span style="flex:1"></span>
+          <button type="button" class="secundario" id="btn-cancelar-cartao">Cancelar</button>
+          <button type="submit" class="btn">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+  </section>

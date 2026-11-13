@@ -723,3 +723,42 @@ def test_corrige_descricoes_antigas_do_bb_e_nao_duplica(novo_app, com_modulo):
     por = {i["descricao"]: i for i in r["itens"]}
     assert all(por[d]["ja_importado"] for d in ("CANTINA DO BAIRRO LTD", "EMPORIO CENTRAL", "LAVANDERIA AZUL"))
     assert not por["LOJA DE MOVEIS PARC 02/05"]["ja_importado"]
+
+
+def test_ciclo_da_fatura():
+    # Nubank: fecha dia 3 e vence dia 10; BB: fecha dia 28 e vence dia 5 do mês seguinte
+    assert plan.fatura_da_compra("2026-10-03", 3, 10) == "2026-10" and plan.fatura_da_compra("2026-10-04", 3, 10) == "2026-11"
+    assert plan.fatura_da_compra("2026-10-28", 28, 5) == "2026-11" and plan.fatura_da_compra("2026-10-29", 28, 5) == "2026-12"
+    assert plan.datas_da_fatura("2026-11", 28, 5) == ("2026-10-28", "2026-11-05")
+    assert plan.dias_do_cartao(None, 10) == (3, 10)  # sem o fechamento: 7 dias antes do vencimento
+    assert plan.fatura_da_compra("2026-10-20", None, None) == "2026-10"
+    assert [plan.situacao_fatura("2026-11", 3, 10, h) for h in ("2026-11-02", "2026-11-05", "2026-11-12")] == \
+        ["aberta", "fechada", "encerrada"]
+
+
+def test_pagina_do_cartao_e_avisos(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    hoje = dt.date.today()
+    venc = (hoje + dt.timedelta(days=3)).day
+    fecha = (hoje - dt.timedelta(days=4)).day
+    cartao = c.post("/api/plan/cartoes", json={"nome": "Nubank", "dia_vencimento": venc, "dia_fechamento": fecha,
+                                               "limite": "1.000,00", "final": "•••• 1234"}).get_json()["id"]
+    antes = (hoje - dt.timedelta(days=10)).isoformat()   # entra na fatura que já fechou e vence em 3 dias
+    depois = (hoje - dt.timedelta(days=1)).isoformat()   # entra na fatura aberta
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": antes, "descricao": "Mercado", "valor": 600,
+                                          "forma": "credito", "cartao_id": cartao})
+    c.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": depois, "descricao": "TV", "valor": 900,
+                                          "forma": "credito", "cartao_id": cartao, "repetir": "parcelado", "parcelas": 3})
+    d = c.get(f"/api/plan/cartoes/{cartao}/faturas").get_json()
+    assert d["cartao"]["final"] == "1234" and d["cartao"]["limite"] == 1000
+    sit = {f["situacao"]: f for f in d["faturas"]}
+    assert sit["fechada"]["total"] == 600 and sit["aberta"]["total"] == 300 and d["resumo"]["futuras"] == 600
+    assert d["resumo"]["usado"] == 1500 and d["resumo"]["disponivel"] == -500
+    codigos = {a["codigo"] for a in d["alertas"]}
+    assert {"vencimento", "limite"} <= codigos
+    # os avisos dos cartões também vão para o sino
+    titulos = " ".join(a["titulo"] for a in c.get("/api/alertas").get_json()["itens"])
+    assert "Fatura do Nubank vence" in titulos and "limite" in titulos
+    assert c.put(f"/api/plan/cartoes/{cartao}", json={"nome": "Nubank Ultravioleta", "dia_vencimento": 15,
+                                                      "dia_fechamento": 8, "limite": 5000}).status_code == 200
+    assert c.get(f"/api/plan/cartoes/{cartao}/faturas").get_json()["cartao"]["nome"] == "Nubank Ultravioleta"

@@ -884,3 +884,45 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .tabela-fam-itens td:nth-child(-n+3), .tabela-fam-itens th:nth-child(-n+3) { text-align: left; }
 .tabela-fixas td:only-child { text-align: left !important; white-space: normal; }
 .trocar-membro { border-top: 1px solid var(--borda); padding-top: 10px; } .trocar-membro summary { cursor: pointer; font-size: .84rem; } .trocar-membro p { margin: 8px 0; font-size: .82rem; }
+
+/* ---------- Cartões no menu e página do cartão ---------- */
+.nav-cartoes { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 2px; }
+.sidebar nav button.nav-sub { padding: 5px 10px 5px 30px; font-size: .82rem; }
+.sidebar nav button.nav-sub .icone { width: 15px; height: 15px; }
+.sidebar nav button.nav-sub span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cartao-visual { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.cartao-plastico { width: 150px; height: 94px; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column;
+  justify-content: space-between; color: #fff; background: linear-gradient(135deg, #1f3a33, #0f5c45 60%, #2f7d63);
+  box-shadow: 0 6px 16px rgba(15, 92, 69, .25); flex: none; }
+.cartao-plastico span { font-weight: 650; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cartao-plastico small { letter-spacing: .12em; opacity: .85; font-variant-numeric: tabular-nums; }
+.cartao-info { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 220px; }
+.cartao-info strong { font-size: 1.1rem; }
+.cartao-info small { color: var(--texto-2); font-size: .84rem; }
+.barra-limite { height: 8px; border-radius: 999px; background: var(--painel-2); border: 1px solid var(--borda); overflow: hidden; max-width: 420px; }
+.barra-limite span { display: block; height: 100%; background: var(--primaria); border-radius: 999px; }
+.barra-limite.atencao span { background: #c99a2e; }
+.barra-limite.neg span { background: var(--neg); }
+.cartao-alertas { display: grid; gap: 8px; margin-bottom: 14px; }
+.cartao-alertas:empty { display: none; }
+.aviso-cartao { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: var(--raio-p);
+  border: 1px solid #e8c56a; background: #fff8e6; color: #5c4300; font-size: .88rem; }
+.aviso-cartao.alerta { border-color: #e6a6a0; background: #fdeeec; color: #7a2018; }
+.aviso-cartao span { font-size: .82rem; opacity: .9; }
+.cartao-faturas { display: grid; gap: 8px; margin-top: 12px; }
+.fatura-mes { border: 1px solid var(--borda); border-radius: var(--raio-p); background: var(--painel); }
+.fatura-mes summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; cursor: pointer; list-style: none; }
+.fatura-mes summary::-webkit-details-marker { display: none; }
+.fatura-mes summary::before { content: "›"; font-size: 1.1rem; color: var(--texto-2); transition: transform .15s; width: 10px; }
+.fatura-mes[open] summary::before { transform: rotate(90deg); }
+.fatura-mes-nome { font-weight: 600; }
+.titulo-futuras { margin: 10px 2px 0; font-size: .9rem; }
+.fatura-mes-total { margin-left: auto; font-variant-numeric: tabular-nums; }
+.fatura-mes .rolagem { padding: 0 14px 12px; }
+.fatura-mes.futura { opacity: .8; }
+.selo.situacao-aberta { background: #e3efe9; color: #0f5c45; border-color: #c4ddd1; }
+.selo.situacao-fechada { background: #fff4d6; color: #7a5a12; border-color: #ecd9a6; }
+.tabela-fatura-mes td:last-child, .tabela-fatura-mes th:last-child { text-align: right; white-space: nowrap; }
+.tabela-fatura-mes td:nth-child(-n+3), .tabela-fatura-mes th:nth-child(-n+3) { text-align: left; }
+:root[data-theme="dark"] .aviso-cartao { background: #3a3220; color: #f3dfa8; border-color: #6b5a2a; }
+:root[data-theme="dark"] .aviso-cartao.alerta { background: #3d2220; color: #f4c1bb; border-color: #74403a; }
