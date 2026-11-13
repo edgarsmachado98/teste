@@ -119,9 +119,9 @@
   border-radius:50%; background:var(--cor); color:#fff; font-weight:bold; font-size:11px; flex-shrink:0; }
 .editor-viewport { overflow:auto; background:#e8e8e8; border:1px solid var(--borda);
   max-height:80vh; position:relative; }
-.editor-container { position:relative; cursor:crosshair; transform-origin:0 0;
-  display:inline-block; min-width:100%; }
-.editor-container img { display:block; width:100%; user-select:none; -webkit-user-drag:none; }
+.editor-container { position:relative; cursor:crosshair;
+  display:inline-block; }
+.editor-container img { display:block; user-select:none; -webkit-user-drag:none; }
 #camada-marcacoes { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
 .marcador { position:absolute; transform:translate(-50%,-50%); pointer-events:all; cursor:grab;
   user-select:none; z-index:2; touch-action:none; }
@@ -170,8 +170,7 @@ const camada = document.getElementById('camada-marcacoes');
 const img = document.getElementById('img-planta');
 
 function aplicarZoom() {
-  editor.style.transform = `scale(${escala})`;
-  editor.style.width = (100 / escala) + '%';
+  img.style.width = (escala * 100) + '%';
   document.getElementById('zoom-label').textContent = Math.round(escala * 100) + '%';
 }
 
@@ -296,9 +295,11 @@ function coordenadas(e) {
   const rect = img.getBoundingClientRect();
   const clientX = e.clientX !== undefined ? e.clientX : (e.touches ? e.touches[0].clientX : 0);
   const clientY = e.clientY !== undefined ? e.clientY : (e.touches ? e.touches[0].clientY : 0);
+  const w = rect.width || 1;
+  const h = rect.height || 1;
   return {
-    x: Math.max(0, Math.min(100, (clientX - rect.left) / rect.width * 100)),
-    y: Math.max(0, Math.min(100, (clientY - rect.top) / rect.height * 100))
+    x: Math.max(0, Math.min(100, (clientX - rect.left) / w * 100)),
+    y: Math.max(0, Math.min(100, (clientY - rect.top) / h * 100))
   };
 }
 
