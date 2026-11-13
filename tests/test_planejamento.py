@@ -619,3 +619,22 @@ def test_contas_da_familia_aparecem_para_todos(novo_app, com_modulo):
     r = eli.get(f"/api/plan/resumo?mes={mes}").get_json()
     assert r["despesas"] >= 2300  # aluguel + fatura do Edgar compõem as despesas do mês dela
     assert ids["Eliandra"] in {p["id"] for p in eli.get(f"/api/plan/lancamentos?mes={mes}").get_json()["pessoas"] if p["minha"]}
+
+
+def test_trocar_membros_de_lugar(novo_app, com_modulo):
+    c = cliente_logado(novo_app(fonte))
+    eu = next(p for p in c.get("/api/plan/membros").get_json()["membros"] if p["minha"])
+    # o login do Edgar foi cadastrado como "Eliandra", e o Edgar virou um membro sem login
+    c.put(f"/api/plan/membros/{eu['id']}", json={"nome": "Eliandra Lopes dos Santos", "parentesco": "conjuge", "divide": True})
+    edgar = c.post("/api/plan/membros", json={"nome": "Edgar da Silva Machado", "parentesco": "titular", "divide": True}).get_json()["id"]
+    c.post("/api/plan/lancamentos", json={"tipo": "receita", "data": "2026-11-05", "descricao": "Salario Moinho", "valor": 5100})
+    c.post("/api/plan/lancamentos", json={"tipo": "receita", "data": "2026-11-05", "descricao": "Salario Edgar", "valor": 7200,
+                                          "carteira_id": edgar, "repetir": "mensal"})
+    assert c.post(f"/api/plan/membros/{eu['id']}/trocar", json={"com": edgar}).get_json()["ok"]
+    m = {p["id"]: p for p in c.get("/api/plan/membros").get_json()["membros"]}
+    assert (m[eu["id"]]["nome"], m[eu["id"]]["parentesco"]) == ("Edgar da Silva Machado", "titular")
+    assert (m[edgar]["nome"], m[edgar]["parentesco"]) == ("Eliandra Lopes dos Santos", "conjuge")
+    d = c.get("/api/plan/lancamentos?mes=2026-11").get_json()
+    dono = {l["descricao"]: l["carteira_id"] for l in d["lancamentos"]}
+    assert dono == {"Salario Edgar": eu["id"], "Salario Moinho": edgar}
+    assert {r["descricao"]: r["carteira_id"] for r in d["recorrencias"]} == {"Salario Edgar": eu["id"]}

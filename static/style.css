@@ -883,3 +883,4 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .tabela-fam-itens .col-minha { background: color-mix(in srgb, var(--primaria) 7%, transparent); font-weight: 600; }
 .tabela-fam-itens td:nth-child(-n+3), .tabela-fam-itens th:nth-child(-n+3) { text-align: left; }
 .tabela-fixas td:only-child { text-align: left !important; white-space: normal; }
+.trocar-membro { border-top: 1px solid var(--borda); padding-top: 10px; } .trocar-membro summary { cursor: pointer; font-size: .84rem; } .trocar-membro p { margin: 8px 0; font-size: .82rem; }

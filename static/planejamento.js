@@ -1182,7 +1182,8 @@
     $("#dica-membros").innerHTML = !pode ? "Só o administrador altera os membros da família."
       : minha && minha.login && minha.parentesco !== "titular" && minha.nome.split(" ")[0] !== minha.login.split(" ")[0] && !avisoNomeDispensado(minha)
         ? `<span class="neg">Atenção:</span> o cadastro ligado ao seu login (${esc(minha.login)}) está com o nome <strong>${esc(minha.nome)}</strong>. Se foi engano, clique em editar e corrija; para cadastrar outra pessoa use “Cadastrar membro”.
-           <button type="button" class="link acao" data-dispensar-nome="${minha.id}:${esc(minha.nome)}">Está certo assim</button>`
+           <button type="button" class="link acao" data-editar-membro="${minha.id}">Corrigir</button>
+           <button type="button" class="link" data-dispensar-nome="${minha.id}:${esc(minha.nome)}">Está certo assim</button>`
         : !m.configurado ? "Confira o seu cadastro e cadastre os demais membros da família. Para dar login a alguém, use Acessos e conta → Usuários." : "";
   }
 
@@ -1212,6 +1213,10 @@
     $("#login-membro").textContent = p?.tem_login ? `Acessa o sistema com o login de ${p.login || p.carteira}. Para mudar o acesso, use Acessos e conta.`
       : p ? "Não tem acesso ao sistema: os lançamentos dele são feitos por quem tem login." : "";
     $("#btn-remover-membro").classList.toggle("oculto", !p || p.tem_login);
+    const outros = p ? m.membros.filter(x => x.id !== p.id && x.editar !== false) : [];
+    $("#trocar-membro").classList.toggle("oculto", !outros.length);
+    $("#trocar-membro").open = false;
+    $("#sel-trocar-membro").innerHTML = outros.map(x => `<option value="${x.id}">${esc(x.nome)} (${esc(m.parentescos[x.parentesco] || "")})</option>`).join("");
     $("#dialogo-membro").showModal();
     f.nome.focus();
   }
@@ -1227,6 +1232,19 @@
     }
   });
   $("#btn-cancelar-membro").addEventListener("click", () => $("#dialogo-membro").close());
+  $("#btn-trocar-membro").addEventListener("click", async () => {
+    const f = $("#form-membro"), sel = $("#sel-trocar-membro");
+    const outro = sel.options[sel.selectedIndex]?.text.replace(/ \(.*\)$/, "");
+    if (!confirm(`Trocar ${f.nome.value} e ${outro} de lugar? Os nomes e todos os lançamentos dos dois serão trocados.`)) return;
+    try {
+      await api(`/api/plan/membros/${f.id.value}/trocar`, { method: "POST", body: { com: sel.value } });
+      $("#dialogo-membro").close();
+      toast("Membros trocados. Confira os nomes e, se quiser, edite o seu.");
+      try { localStorage.removeItem("aviso-nome-membro"); } catch { /* sem armazenamento */ }
+      dadosMembros = null;
+      recarregar();
+    } catch (e) { toast(e.message, true); }
+  });
   $("#form-membro").addEventListener("submit", async ev => {
     ev.preventDefault();
     const d = formDados(ev.target);

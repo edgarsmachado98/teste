@@ -847,6 +847,36 @@ def registrar(app, ctx):
         conn.commit()
         return jsonify({"ok": True})
 
+    @app.post("/api/plan/membros/<int:cid>/trocar")
+    def plan_trocar_membros(cid):
+        """Troca dois membros de lugar: nomes, parentesco e todo o planejamento (lançamentos, contas fixas,
+        cartões, notas, orçamento e categorias aprendidas). Para quando tudo foi lançado no cadastro errado
+        (ex.: o login do Edgar cadastrado com o nome da Eliandra). Os investimentos de cada carteira não mudam."""
+        if not ctx.eh_admin():
+            return erro("Apenas o administrador cadastra os membros da família.", 403)
+        try:
+            outro = int((request.get_json(silent=True) or {}).get("com"))
+        except (TypeError, ValueError):
+            return erro("Escolha com quem trocar.")
+        ps = {p["id"]: p for p in pessoas()}
+        if cid not in ps or outro not in ps or outro == cid:
+            return erro("Escolha com quem trocar.")
+        temp = -cid  # lugar provisório durante a troca (as chaves estrangeiras são conferidas no fim)
+        conn.execute("PRAGMA defer_foreign_keys = ON")
+        for tabela in ("fin_lancamentos", "fin_recorrencias", "fin_cartoes", "fin_notas", "fin_orcamento", "fin_regras"):
+            conn.execute(f"UPDATE {tabela} SET carteira_id = ? WHERE carteira_id = ?", (temp, cid))
+            conn.execute(f"UPDATE {tabela} SET carteira_id = ? WHERE carteira_id = ?", (cid, outro))
+            conn.execute(f"UPDATE {tabela} SET carteira_id = ? WHERE carteira_id = ?", (outro, temp))
+        a, b = ps[cid], ps[outro]
+        for alvo, origem in ((cid, b), (outro, a)):
+            conn.execute("""INSERT INTO fin_membros (carteira_id, nome, parentesco, divide, nascimento) VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT(carteira_id) DO UPDATE SET nome = excluded.nome, parentesco = excluded.parentesco,
+                            divide = excluded.divide, nascimento = excluded.nascimento, ativo = 1""",
+                         (alvo, origem["nome"], origem["parentesco"], 1 if origem["divide"] else 0, origem["nascimento"]))
+        salvar_config("membros_configurados", True)
+        conn.commit()
+        return jsonify({"ok": True})
+
     @app.delete("/api/plan/membros/<int:cid>")
     def plan_remover_membro(cid):
         """Tira o membro da família. Os lançamentos dele ficam guardados; quem tem login sai em Acessos e conta."""
