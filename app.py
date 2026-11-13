@@ -1,9 +1,10 @@
 """Sistema de orçamentos — aplicação local (Flask + SQLite)."""
 import datetime
+import json
 import os
 import sqlite3
 
-from flask import (Flask, abort, g, redirect, render_template, request,
+from flask import (Flask, abort, g, jsonify, redirect, render_template, request,
                    send_file, url_for)
 
 import seed
@@ -55,6 +56,14 @@ CREATE TABLE IF NOT EXISTS itens (
     quantidade REAL DEFAULT 0, custo REAL DEFAULT 0, preco REAL DEFAULT 0,
     opcional INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS plantas (
+    id INTEGER PRIMARY KEY, orcamento_id INTEGER NOT NULL REFERENCES orcamentos(id) ON DELETE CASCADE,
+    nome TEXT DEFAULT '', arquivo TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS marcacoes (
+    id INTEGER PRIMARY KEY, planta_id INTEGER NOT NULL REFERENCES plantas(id) ON DELETE CASCADE,
+    x REAL NOT NULL, y REAL NOT NULL, tipo TEXT NOT NULL, rotulo TEXT DEFAULT ''
+);
 """
 
 # Colunas acrescentadas depois da primeira versão (bancos já criados são atualizados).
@@ -99,7 +108,9 @@ def create_app(data_dir=None):
     os.makedirs(data_dir, exist_ok=True)
     db_path = os.path.join(data_dir, "orcamentos.db")
     logo_path = os.path.join(data_dir, "logo")
-    app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+    plantas_dir = os.path.join(data_dir, "plantas")
+    os.makedirs(plantas_dir, exist_ok=True)
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB para plantas
     app.jinja_env.filters.update(brl=brl, qtd=qtd)
 
     def db():
@@ -380,6 +391,123 @@ def create_app(data_dir=None):
         categorias = [(c, list(v.values())) for c, v in sorted(grupos.items())]
         return render_template("cotacao.html", o=o, categorias=categorias, emp=empresa(),
                                hoje=datetime.date.today().strftime("%d/%m/%Y"))
+
+    # ---------- Plantas / marcação ----------
+    TIPOS_MARCACAO = [
+        ("camera-dome", "Câmera dome", "#2563eb"),
+        ("camera-bullet", "Câmera bullet", "#1d4ed8"),
+        ("sensor-presenca", "Sensor de presença", "#dc2626"),
+        ("sensor-abertura", "Sensor de abertura", "#ea580c"),
+        ("rack", "Rack de rede", "#6b7280"),
+        ("access-point", "Access point", "#16a34a"),
+        ("switch", "Switch", "#0891b2"),
+        ("impressora", "Impressora", "#7c3aed"),
+        ("nvr", "NVR / gravador", "#1e3a5f"),
+        ("sirene", "Sirene", "#ca8a04"),
+        ("outro", "Outro", "#525252"),
+    ]
+
+    @app.route("/orcamentos/<int:oid>/planta")
+    def planta(oid):
+        o = db().execute("SELECT * FROM orcamentos WHERE id = ?", (oid,)).fetchone()
+        if o is None:
+            abort(404)
+        plantas = db().execute(
+            "SELECT * FROM plantas WHERE orcamento_id = ? ORDER BY id", (oid,)).fetchall()
+        pid = request.args.get("p", type=int)
+        planta_atual = None
+        marcacoes = []
+        if plantas:
+            planta_atual = next((p for p in plantas if p["id"] == pid), plantas[0])
+            marcacoes = db().execute(
+                "SELECT * FROM marcacoes WHERE planta_id = ? ORDER BY id",
+                (planta_atual["id"],)).fetchall()
+        return render_template(
+            "planta.html", o=o, plantas=plantas, planta=planta_atual,
+            marcacoes=[dict(m) for m in marcacoes],
+            tipos_marcacao=TIPOS_MARCACAO)
+
+    @app.route("/orcamentos/<int:oid>/planta/upload", methods=["POST"])
+    def upload_planta(oid):
+        con = db()
+        o = con.execute("SELECT id FROM orcamentos WHERE id = ?", (oid,)).fetchone()
+        if o is None:
+            abort(404)
+        arq = request.files.get("arquivo")
+        if not arq or not arq.filename:
+            return redirect(url_for("planta", oid=oid))
+        nome = request.form.get("nome", "").strip() or "Planta"
+        ext = os.path.splitext(arq.filename)[1].lower() or ".png"
+        pid = con.execute(
+            "INSERT INTO plantas (orcamento_id, nome, arquivo) VALUES (?, ?, '')",
+            (oid, nome)).lastrowid
+        arquivo = f"{pid}{ext}"
+        arq.save(os.path.join(plantas_dir, arquivo))
+        con.execute("UPDATE plantas SET arquivo = ? WHERE id = ?", (arquivo, pid))
+        con.commit()
+        return redirect(url_for("planta", oid=oid, p=pid))
+
+    @app.route("/orcamentos/<int:oid>/planta/<int:pid>/excluir", methods=["POST"])
+    def excluir_planta(oid, pid):
+        con = db()
+        p = con.execute("SELECT * FROM plantas WHERE id = ? AND orcamento_id = ?",
+                        (pid, oid)).fetchone()
+        if p:
+            caminho = os.path.join(plantas_dir, p["arquivo"])
+            if os.path.exists(caminho):
+                os.remove(caminho)
+            con.execute("DELETE FROM plantas WHERE id = ?", (pid,))
+            con.commit()
+        return redirect(url_for("planta", oid=oid))
+
+    @app.route("/plantas/<int:pid>/imagem")
+    def imagem_planta(pid):
+        p = db().execute("SELECT arquivo FROM plantas WHERE id = ?", (pid,)).fetchone()
+        if p is None:
+            abort(404)
+        return send_file(os.path.join(plantas_dir, p["arquivo"]), max_age=0)
+
+    @app.route("/orcamentos/<int:oid>/planta/marcacoes", methods=["GET", "POST"])
+    def api_marcacoes(oid):
+        con = db()
+        pid = request.args.get("p", type=int)
+        if not pid:
+            return jsonify([])
+        p = con.execute("SELECT id FROM plantas WHERE id = ? AND orcamento_id = ?",
+                        (pid, oid)).fetchone()
+        if p is None:
+            abort(404)
+        if request.method == "POST":
+            dados = request.get_json(force=True)
+            con.execute("DELETE FROM marcacoes WHERE planta_id = ?", (pid,))
+            for m in dados:
+                con.execute(
+                    "INSERT INTO marcacoes (planta_id, x, y, tipo, rotulo)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (pid, m["x"], m["y"], m["tipo"], m.get("rotulo", "")))
+            con.commit()
+            return jsonify({"ok": True})
+        marcacoes = con.execute(
+            "SELECT * FROM marcacoes WHERE planta_id = ? ORDER BY id", (pid,)).fetchall()
+        return jsonify([dict(m) for m in marcacoes])
+
+    @app.route("/orcamentos/<int:oid>/instalacao")
+    def instalacao(oid):
+        o, secoes, tot, varios = carregar(oid)
+        plantas = db().execute(
+            "SELECT * FROM plantas WHERE orcamento_id = ? ORDER BY id", (oid,)).fetchall()
+        plantas_marcacoes = []
+        for p in plantas:
+            ms = db().execute(
+                "SELECT * FROM marcacoes WHERE planta_id = ? ORDER BY id",
+                (p["id"],)).fetchall()
+            plantas_marcacoes.append({"planta": p, "marcacoes": [dict(m) for m in ms]})
+        return render_template(
+            "instalacao.html", o=o, secoes=secoes, tot=tot, varios=varios,
+            plantas_marcacoes=plantas_marcacoes,
+            tipos_marcacao={t[0]: (t[1], t[2]) for t in TIPOS_MARCACAO},
+            emp=empresa(), data=datetime.date.today().strftime("%d/%m/%Y"),
+            linhas=lambda txt: [l.strip() for l in (txt or "").splitlines() if l.strip()])
 
     # ---------- Catálogo ----------
     def dados_produto(f):

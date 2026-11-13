@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block titulo %}Pacote de instalação — {{ o.numero }}{% endblock %}
+{% block conteudo %}
+<div class="barra no-print">
+  <a href="{{ url_for('planta', oid=o.id) }}">← Voltar às plantas</a>
+  <button onclick="window.print()">Exportar PDF</button>
+</div>
+<p class="suave no-print">O botão abre a impressão do navegador: escolha "Salvar como PDF" como destino.</p>
+
+<div class="folha doc">
+{% include "_cab.html" %}
+<div class="doc-titulo">Pacote de Instalação</div>
+<div class="doc-sub">{{ o.titulo }}</div>
+<div class="doc-dados">
+  {% if o.obra %}<div><b>Obra:</b> {{ o.obra }}</div>{% endif %}
+  <div class="cinza"><b>Referência:</b> {{ o.numero }} &nbsp;·&nbsp; {{ data }}</div>
+</div>
+
+{% for pm in plantas_marcacoes %}
+<h2>{{ pm.planta.nome or 'Planta ' ~ loop.index }} — Mapa de pontos</h2>
+<div class="mapa-container junto">
+  <img src="{{ url_for('imagem_planta', pid=pm.planta.id) }}" class="mapa-img" id="mapa-{{ pm.planta.id }}">
+  {% for m in pm.marcacoes %}
+  <div class="mapa-pin" style="left:{{ m.x }}%;top:{{ m.y }}%;--cor:{{ tipos_marcacao.get(m.tipo, ('','#525252'))[1] }}">
+    {{ loop.index }}
+  </div>
+  {% endfor %}
+</div>
+
+<table class="grade" style="margin-top:8px">
+  <tr><th style="width:40px">Nº</th><th>Tipo</th><th>Rótulo</th><th style="width:60px">X %</th><th style="width:60px">Y %</th></tr>
+  {% for m in pm.marcacoes %}
+  <tr>
+    <td style="text-align:center">{{ loop.index }}</td>
+    <td>{{ tipos_marcacao.get(m.tipo, (m.tipo,''))[0] }}</td>
+    <td>{{ m.rotulo }}</td>
+    <td style="text-align:center">{{ '%.1f' | format(m.x) }}</td>
+    <td style="text-align:center">{{ '%.1f' | format(m.y) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>Nenhuma planta cadastrada neste orçamento.</p>
+{% endfor %}
+
+<h2>Lista de materiais</h2>
+{% for s in secoes %}
+{% set itens_secao = [] %}
+{% for i in s.itens if i.quantidade > 0 %}{% if itens_secao.append(i) %}{% endif %}{% endfor %}
+{% if itens_secao %}
+<h3 style="font-size:12px;color:#3c4a57;margin:10px 0 4px">{% if varios %}{{ s.secao.grupo }} · {% endif %}{{ s.secao.nome }}</h3>
+<table class="grade">
+  <tr><th style="width:40px">Nº</th><th>Descrição</th><th>Marca</th><th style="width:50px">Un.</th><th style="width:60px">Qtd.</th></tr>
+  {% for i in itens_secao %}
+  <tr>
+    <td style="text-align:center">{{ loop.index }}</td>
+    <td>{{ i.descricao }}</td><td>{{ i.marca or '' }}</td>
+    <td style="text-align:center">{{ i.unidade }}</td><td style="text-align:center">{{ i.quantidade | qtd }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endfor %}
+
+{% include "_rodape.html" %}
+</div>
+
+<style>
+.mapa-container { position:relative; page-break-inside:avoid; }
+.mapa-img { width:100%; display:block; border:1px solid #d9d9d9; }
+.mapa-pin { position:absolute; transform:translate(-50%,-50%); width:22px; height:22px;
+  border-radius:50%; background:var(--cor,#525252); color:#fff; font-size:10px; font-weight:bold;
+  display:flex; align-items:center; justify-content:center; border:2px solid #fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.4); }
+@media print { .mapa-container { break-inside:avoid; } }
+</style>
+{% endblock %}

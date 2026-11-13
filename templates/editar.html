@@ -6,6 +6,7 @@
   <h1>Orçamento {{ o.numero }} <span class="status {{ o.status }}">{{ o.status }}</span></h1>
   <div>
     <button form="fm">Salvar</button>
+    <a class="botao sec" href="{{ url_for('planta', oid=o.id) }}">Plantas e marcação</a>
     <a class="botao sec" href="{{ url_for('proposta', oid=o.id) }}">Proposta ao cliente (PDF)</a>
     <a class="botao sec" href="{{ url_for('cotacao', oid=o.id) }}">Lista para cotação (PDF)</a>
   </div>

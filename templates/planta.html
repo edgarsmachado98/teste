@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block titulo %}Planta — {{ o.numero }}{% endblock %}
+{% block conteudo %}
+<div class="barra">
+  <div>
+    <a href="{{ url_for('editar', oid=o.id) }}">← Voltar ao orçamento</a>
+    <h1 style="display:inline;margin-left:12px">Marcação em planta</h1>
+  </div>
+  <div>
+    {% if planta %}
+    <a class="botao sec" href="{{ url_for('instalacao', oid=o.id) }}">Pacote de instalação (PDF)</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="cartao">
+  <form method="post" action="{{ url_for('upload_planta', oid=o.id) }}" enctype="multipart/form-data" class="linha">
+    <label>Nome da planta <input name="nome" placeholder="Ex.: Térreo — Pavilhão A"></label>
+    <label>Arquivo (imagem) <input type="file" name="arquivo" accept="image/*" required></label>
+    <button>Enviar planta</button>
+  </form>
+</div>
+
+{% if plantas | length > 1 %}
+<div class="cartao linha" style="gap:8px">
+  {% for p in plantas %}
+  <a class="botao {% if planta and p.id == planta.id %}{% else %}sec{% endif %}"
+     href="{{ url_for('planta', oid=o.id, p=p.id) }}">{{ p.nome or 'Planta ' ~ loop.index }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if planta %}
+<div class="cartao" style="padding:8px">
+  <div class="barra" style="margin-bottom:8px">
+    <div>
+      <b>{{ planta.nome or 'Planta' }}</b>
+      <span class="suave" id="contagem"></span>
+    </div>
+    <div>
+      <button class="sec mini" id="btn-salvar" onclick="salvar()">Salvar marcações</button>
+      <button class="sec mini" onclick="desfazer()">Desfazer última</button>
+      <form method="post" action="{{ url_for('excluir_planta', oid=o.id, pid=planta.id) }}"
+            style="display:inline" onsubmit="return confirm('Excluir esta planta e todas as marcações?')">
+        <button class="mini perigo">Excluir planta</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="editor-toolbar" id="toolbar">
+    {% for tipo, label, cor in tipos_marcacao %}
+    <button type="button" class="ferramenta{% if loop.first %} ativa{% endif %}"
+            data-tipo="{{ tipo }}" data-cor="{{ cor }}" title="{{ label }}"
+            onclick="selecionarFerramenta(this)">
+      <span class="icone-marca" style="--cor:{{ cor }}">{{ label[0] }}</span>
+      <small>{{ label }}</small>
+    </button>
+    {% endfor %}
+  </div>
+
+  <div class="editor-container" id="editor">
+    <img src="{{ url_for('imagem_planta', pid=planta.id) }}" id="img-planta" draggable="false"
+         alt="{{ planta.nome }}">
+    <div id="camada-marcacoes"></div>
+  </div>
+</div>
+
+<div class="cartao suave">
+  <b>Como usar:</b> Escolha o tipo de equipamento na barra acima e clique na planta para marcar a posição.
+  Arraste um marcador para mover. Clique com botão direito para remover.
+  Clique em <b>Salvar</b> ao terminar.
+</div>
+
+<style>
+.editor-toolbar { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px; }
+.ferramenta { display:flex; align-items:center; gap:4px; padding:4px 8px; border:2px solid var(--borda);
+  border-radius:6px; background:#fff; cursor:pointer; font-size:12px; }
+.ferramenta.ativa { border-color:var(--cor); background:#eef3fb; }
+.ferramenta small { color:var(--suave); }
+.icone-marca { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+  border-radius:50%; background:var(--cor); color:#fff; font-weight:bold; font-size:11px; flex-shrink:0; }
+.editor-container { position:relative; overflow:auto; background:#f0f0f0; border:1px solid var(--borda);
+  cursor:crosshair; max-height:80vh; }
+.editor-container img { display:block; max-width:100%; user-select:none; -webkit-user-drag:none; }
+#camada-marcacoes { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+.marcador { position:absolute; transform:translate(-50%,-50%); pointer-events:all; cursor:grab;
+  user-select:none; z-index:2; }
+.marcador:active { cursor:grabbing; }
+.marcador .pin { width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; color:#fff; font-weight:bold; font-size:11px; border:2px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.35); }
+.marcador .rotulo-marca { position:absolute; top:30px; left:50%; transform:translateX(-50%);
+  white-space:nowrap; font-size:10px; background:rgba(255,255,255,.9); padding:1px 4px;
+  border-radius:3px; box-shadow:0 1px 2px rgba(0,0,0,.2); pointer-events:none; }
+.salvo { color:#16a34a; font-weight:bold; }
+</style>
+
+<script>
+const oid = {{ o.id }};
+const pid = {{ planta.id }};
+const tiposCores = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ c }}"{% if not loop.last %},{% endif %}{% endfor %} };
+const tiposLetras = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ l[0] }}"{% if not loop.last %},{% endif %}{% endfor %} };
+const tiposNomes = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ l }}"{% if not loop.last %},{% endif %}{% endfor %} };
+
+let marcacoes = {{ marcacoes | tojson }};
+let ferramentaAtual = "{{ tipos_marcacao[0][0] }}";
+let arrastando = null, offX = 0, offY = 0;
+let sujo = false;
+
+const editor = document.getElementById('editor');
+const camada = document.getElementById('camada-marcacoes');
+const img = document.getElementById('img-planta');
+
+function selecionarFerramenta(btn) {
+  document.querySelectorAll('.ferramenta').forEach(b => b.classList.remove('ativa'));
+  btn.classList.add('ativa');
+  ferramentaAtual = btn.dataset.tipo;
+}
+
+function criarElemento(m, idx) {
+  const el = document.createElement('div');
+  el.className = 'marcador';
+  el.dataset.idx = idx;
+  const cor = tiposCores[m.tipo] || '#525252';
+  el.innerHTML = `<div class="pin" style="background:${cor}">${m.rotulo || tiposLetras[m.tipo] || '?'}</div>
+    <div class="rotulo-marca">${m.rotulo || ''} ${tiposNomes[m.tipo] || m.tipo}</div>`;
+  posicionar(el, m.x, m.y);
+  el.addEventListener('mousedown', iniciarArrasto);
+  el.addEventListener('touchstart', iniciarArrasto, {passive:false});
+  el.addEventListener('contextmenu', e => { e.preventDefault(); remover(idx); });
+  camada.appendChild(el);
+}
+
+function posicionar(el, xPct, yPct) {
+  el.style.left = xPct + '%';
+  el.style.top = yPct + '%';
+}
+
+function renderizar() {
+  camada.innerHTML = '';
+  marcacoes.forEach((m, i) => criarElemento(m, i));
+  document.getElementById('contagem').textContent = `— ${marcacoes.length} marcações`;
+}
+
+function coordenadas(e) {
+  const rect = img.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: Math.max(0, Math.min(100, (clientX - rect.left) / rect.width * 100)),
+    y: Math.max(0, Math.min(100, (clientY - rect.top) / rect.height * 100))
+  };
+}
+
+editor.addEventListener('click', e => {
+  if (arrastando !== null) return;
+  if (e.target.closest('.marcador')) return;
+  const c = coordenadas(e);
+  const rotulo = '';
+  marcacoes.push({x: c.x, y: c.y, tipo: ferramentaAtual, rotulo: rotulo});
+  sujo = true;
+  renderizar();
+  atualizarBotao();
+});
+
+function iniciarArrasto(e) {
+  e.preventDefault();
+  const idx = parseInt(e.currentTarget.dataset.idx);
+  arrastando = idx;
+  const c = coordenadas(e);
+  offX = marcacoes[idx].x - c.x;
+  offY = marcacoes[idx].y - c.y;
+}
+
+function mover(e) {
+  if (arrastando === null) return;
+  e.preventDefault();
+  const c = coordenadas(e);
+  marcacoes[arrastando].x = Math.max(0, Math.min(100, c.x + offX));
+  marcacoes[arrastando].y = Math.max(0, Math.min(100, c.y + offY));
+  const el = camada.querySelector(`[data-idx="${arrastando}"]`);
+  if (el) posicionar(el, marcacoes[arrastando].x, marcacoes[arrastando].y);
+}
+
+function parar(e) {
+  if (arrastando !== null) { sujo = true; atualizarBotao(); }
+  setTimeout(() => { arrastando = null; }, 50);
+}
+
+document.addEventListener('mousemove', mover);
+document.addEventListener('mouseup', parar);
+document.addEventListener('touchmove', mover, {passive:false});
+document.addEventListener('touchend', parar);
+
+function remover(idx) {
+  marcacoes.splice(idx, 1);
+  sujo = true;
+  renderizar();
+  atualizarBotao();
+}
+
+function desfazer() {
+  if (marcacoes.length) {
+    marcacoes.pop();
+    sujo = true;
+    renderizar();
+    atualizarBotao();
+  }
+}
+
+function atualizarBotao() {
+  const btn = document.getElementById('btn-salvar');
+  btn.textContent = sujo ? 'Salvar marcações *' : 'Salvar marcações';
+  btn.classList.toggle('sec', !sujo);
+}
+
+async function salvar() {
+  const dados = marcacoes.map(m => ({x: m.x, y: m.y, tipo: m.tipo, rotulo: m.rotulo || ''}));
+  const res = await fetch(`/orcamentos/${oid}/planta/marcacoes?p=${pid}`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados)
+  });
+  if (res.ok) {
+    sujo = false;
+    atualizarBotao();
+    document.getElementById('contagem').innerHTML =
+      `— ${marcacoes.length} marcações <span class="salvo">✓ salvo</span>`;
+    setTimeout(() => {
+      const sp = document.querySelector('.salvo');
+      if (sp) sp.remove();
+    }, 2000);
+  }
+}
+
+window.addEventListener('beforeunload', e => {
+  if (sujo) { e.preventDefault(); e.returnValue = ''; }
+});
+
+renderizar();
+</script>
+{% endif %}
+{% endblock %}
