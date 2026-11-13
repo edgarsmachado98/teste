@@ -69,7 +69,9 @@ CREATE TABLE IF NOT EXISTS marcacoes (
 # Colunas acrescentadas depois da primeira versão (bancos já criados são atualizados).
 NOVAS_COLUNAS = [("empresa", "slogan"), ("empresa", "razao_social"), ("empresa", "responsavel"),
                  ("empresa", "cidade"), ("orcamentos", "obra"), ("orcamentos", "objeto"),
-                 ("marcacoes", "item_id")]
+                 ("marcacoes", "item_id"), ("orcamentos", "vendedor"),
+                 ("orcamentos", "aprovado_em"), ("orcamentos", "aprovado_pagamento"),
+                 ("orcamentos", "aprovado_prazo"), ("orcamentos", "aprovado_obs")]
 MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
          "setembro", "outubro", "novembro", "dezembro"]
 
@@ -289,12 +291,19 @@ def create_app(data_dir=None):
             con.execute(
                 "UPDATE orcamentos SET titulo=?, cliente_id=?, status=?, validade_dias=?,"
                 " desconto=?, escopo=?, pagamento=?, prazo=?, garantia=?, nao_incluso=?,"
-                " exibicao=?, obra=?, objeto=? WHERE id=?",
+                " exibicao=?, obra=?, objeto=?, vendedor=?,"
+                " aprovado_em=?, aprovado_pagamento=?, aprovado_prazo=?, aprovado_obs=?"
+                " WHERE id=?",
                 (f.get("titulo", "").strip(), f.get("cliente_id") or None, status,
                  int(num(f.get("validade_dias"), 15)), num(f.get("desconto")),
                  f.get("escopo", ""), f.get("pagamento", ""), f.get("prazo", ""),
                  f.get("garantia", ""), f.get("nao_incluso", ""), exib,
-                 f.get("obra", "").strip(), f.get("objeto", ""), oid))
+                 f.get("obra", "").strip(), f.get("objeto", ""),
+                 f.get("vendedor", "").strip(),
+                 f.get("aprovado_em", "").strip() or None,
+                 f.get("aprovado_pagamento", "").strip(),
+                 f.get("aprovado_prazo", "").strip(),
+                 f.get("aprovado_obs", "").strip(), oid))
             for i in con.execute("SELECT id FROM itens WHERE orcamento_id = ?", (oid,)).fetchall():
                 k = f"i{i['id']}_"
                 if k + "qtd" in f:
@@ -347,6 +356,44 @@ def create_app(data_dir=None):
         db().execute("DELETE FROM orcamentos WHERE id = ?", (oid,))
         db().commit()
         return redirect(url_for("orcamentos"))
+
+    @app.route("/orcamentos/<int:oid>/duplicar", methods=["POST"])
+    def duplicar(oid):
+        con = db()
+        orig = con.execute("SELECT * FROM orcamentos WHERE id = ?", (oid,)).fetchone()
+        if orig is None:
+            abort(404)
+        hoje = datetime.date.today()
+        seq = con.execute(
+            "SELECT COUNT(*) FROM orcamentos WHERE numero LIKE ?",
+            (f"{hoje.year}-%",)).fetchone()[0] + 1
+        novo_id = con.execute(
+            "INSERT INTO orcamentos (numero, cliente_id, titulo, tipos, data, validade_dias,"
+            " desconto, escopo, pagamento, prazo, garantia, nao_incluso, exibicao, obra, objeto,"
+            " vendedor) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (f"{hoje.year}-{seq:04d}", orig["cliente_id"],
+             f"{orig['titulo']} (cópia)", orig["tipos"], hoje.isoformat(),
+             orig["validade_dias"], orig["desconto"], orig["escopo"], orig["pagamento"],
+             orig["prazo"], orig["garantia"], orig["nao_incluso"], orig["exibicao"],
+             orig["obra"], orig["objeto"], orig["vendedor"])).lastrowid
+        for s in con.execute(
+                "SELECT * FROM secoes WHERE orcamento_id = ? ORDER BY ordem, id",
+                (oid,)).fetchall():
+            sid = con.execute(
+                "INSERT INTO secoes (orcamento_id, grupo, nome, ordem) VALUES (?,?,?,?)",
+                (novo_id, s["grupo"], s["nome"], s["ordem"])).lastrowid
+            for i in con.execute(
+                    "SELECT * FROM itens WHERE secao_id = ? ORDER BY id",
+                    (s["id"],)).fetchall():
+                con.execute(
+                    "INSERT INTO itens (orcamento_id, secao_id, produto_id, descricao, marca,"
+                    " categoria, unidade, tipo, quantidade, custo, preco, opcional)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (novo_id, sid, i["produto_id"], i["descricao"], i["marca"],
+                     i["categoria"], i["unidade"], i["tipo"], i["quantidade"],
+                     i["custo"], i["preco"], i["opcional"]))
+        con.commit()
+        return redirect(url_for("editar", oid=novo_id))
 
     @app.route("/orcamentos/<int:oid>/proposta")
     def proposta(oid):

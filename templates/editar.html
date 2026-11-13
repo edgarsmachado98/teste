@@ -37,6 +37,7 @@
         {% for s in STATUS %}<option {% if s == o.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
       </select>
     </label>
+    <label>Vendedor <input form="fm" name="vendedor" value="{{ o.vendedor or '' }}"></label>
   </div>
   <p class="suave" style="margin-top:8px">Tipo: {{ o.tipos }}</p>
 </div>
@@ -121,10 +122,26 @@
   <label>Não incluído (um item por linha) <textarea form="fm" name="nao_incluso">{{ o.nao_incluso }}</textarea></label>
 </div>
 
+<h2>Aprovação</h2>
+<div class="cartao">
+  <p class="suave" style="margin-top:0;margin-bottom:12px">Preencha quando o cliente aprovar o orçamento.</p>
+  <div class="linha">
+    <label>Data de aprovação <input form="fm" type="date" name="aprovado_em" value="{{ o.aprovado_em or '' }}"></label>
+    <label>Condições de pagamento aceitas <textarea form="fm" name="aprovado_pagamento">{{ o.aprovado_pagamento or '' }}</textarea></label>
+    <label>Prazos de execução aceitos <textarea form="fm" name="aprovado_prazo">{{ o.aprovado_prazo or '' }}</textarea></label>
+  </div>
+  <label>Observações da aprovação <textarea form="fm" name="aprovado_obs">{{ o.aprovado_obs or '' }}</textarea></label>
+</div>
+
 <div class="barra">
   <button form="fm">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
     Salvar</button>
+  <form method="post" action="{{ url_for('duplicar', oid=o.id) }}" style="display:inline">
+    <button class="sec">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      Duplicar</button>
+  </form>
   <form method="post" action="{{ url_for('excluir_orcamento', oid=o.id) }}" onsubmit="return confirm('Excluir este orçamento? Não é possível desfazer.')">
     <button class="perigo">Excluir orçamento</button>
   </form>
