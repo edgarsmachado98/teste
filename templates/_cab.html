@@ -1,0 +1,10 @@
+<div class="doc-cab">
+  <div>{% if tem_logo %}<img src="{{ url_for('logo') }}" alt="Logotipo">{% else %}<div class="doc-nome">{{ emp.nome }}</div>{% endif %}</div>
+  <div class="doc-contato">
+    <b>{{ emp.slogan or emp.nome }}</b>
+    {% if emp.telefone %}<span>Tel/WhatsApp: {{ emp.telefone }}</span>{% endif %}
+    {% if emp.email %}<span>{{ emp.email }}</span>{% endif %}
+    {% if emp.endereco %}<span>{{ emp.endereco }}</span>{% endif %}
+  </div>
+</div>
+<div class="doc-linhas"></div>

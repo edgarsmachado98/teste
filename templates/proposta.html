@@ -1,93 +1,104 @@
 {% extends "base.html" %}
 {% block titulo %}Proposta {{ o.numero }}{% if o.cliente_nome %} - {{ o.cliente_nome }}{% endif %}{% endblock %}
 {% block conteudo %}
+{% set precos = o.exibicao == 'itens' %}
 <div class="barra no-print">
   <a href="{{ url_for('editar', oid=o.id) }}">← Voltar ao orçamento</a>
   <button onclick="window.print()">Exportar PDF</button>
 </div>
 <p class="suave no-print">O botão abre a impressão do navegador: escolha “Salvar como PDF” como destino.</p>
-<div class="folha">
-  <div class="cab">
-    <div>
-      {% if tem_logo %}<img src="{{ url_for('logo') }}" alt="Logotipo">{% else %}<h1>{{ emp.nome }}</h1>{% endif %}
-    </div>
-    <div class="suave" style="text-align:right">
-      {% if tem_logo %}<b>{{ emp.nome }}</b><br>{% endif %}
-      {% if emp.documento %}{{ emp.documento }}<br>{% endif %}
-      {% if emp.telefone %}{{ emp.telefone }}<br>{% endif %}
-      {% if emp.email %}{{ emp.email }}<br>{% endif %}
-      {% if emp.endereco %}{{ emp.endereco }}{% endif %}
-    </div>
+<div class="folha doc">
+<table class="pagina">
+<thead><tr><td>{% include "_cab.html" %}</td></tr></thead>
+<tfoot><tr><td>{% include "_rodape.html" %}</td></tr></tfoot>
+<tbody><tr><td>
+  <div class="doc-titulo">Proposta Comercial</div>
+  <div class="doc-sub">{{ o.titulo }}</div>
+
+  <div class="doc-dados">
+    <div><b>Cliente:</b> {{ o.cliente_nome or '—' }}</div>
+    {% if o.obra %}<div><b>Obra:</b> {{ o.obra }}</div>{% endif %}
+    {% if o.escopo %}<div><b>Escopo:</b> {{ linhas(o.escopo) | join(' ') }}</div>{% endif %}
+    <div class="cinza"><b>Proposta nº</b> {{ o.numero }} &nbsp;·&nbsp; {{ data }}</div>
   </div>
 
-  <div class="capa">
-    <div class="suave">Proposta comercial nº {{ o.numero }}</div>
-    <h1>{{ o.titulo }}</h1>
-    <div><b>Cliente:</b> {{ o.cliente_nome or '—' }}{% if o.cliente_documento %} · {{ o.cliente_documento }}{% endif %}</div>
-    {% if o.cliente_contato %}<div><b>Contato:</b> {{ o.cliente_contato }}</div>{% endif %}
-    {% if o.cliente_endereco %}<div><b>Local:</b> {{ o.cliente_endereco }}</div>{% endif %}
-    <div><b>Data:</b> {{ data }} · <b>Válida até:</b> {{ validade }}</div>
-  </div>
+  {% if o.objeto %}<h2>Objeto</h2><p class="justo">{{ o.objeto }}</p>{% endif %}
 
-  {% if emp.apresentacao %}<h2>Quem somos</h2><p>{{ emp.apresentacao }}</p>{% endif %}
-  {% if o.escopo %}<h2>Escopo da solução</h2><p>{{ o.escopo }}</p>{% endif %}
-
-  <h2>Itens da proposta</h2>
-  {% for s in secoes %}
-  <h3>{% if varios %}{{ s.secao.grupo }} · {% endif %}{{ s.secao.nome }}</h3>
-  <table>
-    <tr><th>Descrição</th><th>Un.</th><th class="n">Qtd.</th>{% if o.exibicao == 'itens' %}<th class="n">Valor un.</th><th class="n">Total</th>{% endif %}</tr>
-    {% for i in s.itens %}
-    <tr><td>{{ i.descricao }}{% if i.marca %} — {{ i.marca }}{% endif %}</td><td>{{ i.unidade }}</td><td class="n">{{ i.quantidade | qtd }}</td>
-      {% if o.exibicao == 'itens' %}<td class="n">{{ i.preco | brl }}</td><td class="n">{{ (i.quantidade * i.preco) | brl }}</td>{% endif %}</tr>
+  {% for b in blocos %}
+  {% set n = loop.index %}
+  <h2>{{ n }}. {{ b.titulo }}</h2>
+  <table class="grade">
+    <tr><th class="c-item">Item</th><th>Descrição</th><th class="c-un">Unid.</th><th class="c-qtd">Qtd.</th>{% if precos %}<th class="c-val">Valor un.</th><th class="c-val">Total</th>{% endif %}</tr>
+    {% for sub in b.subs %}
+    {% set k = loop.index %}
+    {% if sub.nome %}<tr class="sub"><td class="c-item">{{ k }}.</td><td colspan="{{ 5 if precos else 3 }}">{{ sub.nome | upper }}</td></tr>{% endif %}
+    {% for i in sub.itens %}
+    <tr>
+      <td class="c-item">{{ k if sub.nome else n }}.{{ loop.index }}</td>
+      <td>{{ i.descricao }}{% if i.marca %} — {{ i.marca }}{% endif %}</td>
+      <td class="c-un">{{ i.unidade }}</td><td class="c-qtd">{{ i.quantidade | qtd }}</td>
+      {% if precos %}<td class="c-val">{{ i.preco | brl }}</td><td class="c-val">{{ (i.quantidade * i.preco) | brl }}</td>{% endif %}
+    </tr>
+    {% endfor %}
     {% endfor %}
     {% if o.exibicao != 'total' %}
-    <tr><td colspan="{{ 4 if o.exibicao == 'itens' else 2 }}" class="n"><b>Subtotal</b></td><td class="n"><b>{{ s.subtotal | brl }}</b></td></tr>
+    <tr class="total"><td colspan="{{ 5 if precos else 3 }}">TOTAL — {{ b.titulo | upper }}</td><td class="c-val">{{ b.total | brl }}</td></tr>
     {% endif %}
   </table>
   {% else %}
   <p>Nenhum item com quantidade preenchida.</p>
   {% endfor %}
 
+  {% set n = blocos | length + 1 %}
   {% if opcionais %}
-  <h2>Itens opcionais</h2>
-  <p class="suave">Não incluídos no total.</p>
-  <table>
-    <tr><th>Descrição</th><th>Un.</th><th class="n">Qtd.</th><th class="n">Valor un.</th><th class="n">Total</th></tr>
+  <h2>{{ n }}. Itens Opcionais</h2>
+  <table class="grade">
+    <tr><th class="c-item">Item</th><th>Descrição</th><th class="c-un">Unid.</th><th class="c-qtd">Qtd.</th>{% if precos %}<th class="c-val">Valor un.</th><th class="c-val">Total</th>{% endif %}</tr>
     {% for i in opcionais %}
-    <tr><td>{{ i.descricao }}</td><td>{{ i.unidade }}</td><td class="n">{{ i.quantidade | qtd }}</td><td class="n">{{ i.preco | brl }}</td><td class="n">{{ (i.quantidade * i.preco) | brl }}</td></tr>
+    <tr><td class="c-item">{{ n }}.{{ loop.index }}</td><td>{{ i.descricao }}{% if i.marca %} — {{ i.marca }}{% endif %}</td><td class="c-un">{{ i.unidade }}</td><td class="c-qtd">{{ i.quantidade | qtd }}</td>
+      {% if precos %}<td class="c-val">{{ i.preco | brl }}</td><td class="c-val">{{ (i.quantidade * i.preco) | brl }}</td>{% endif %}</tr>
     {% endfor %}
+    <tr class="total"><td colspan="{{ 5 if precos else 3 }}">TOTAL — ITENS OPCIONAIS (não somados ao total geral)</td><td class="c-val">{{ total_opcionais | brl }}</td></tr>
   </table>
+  {% set n = n + 1 %}
   {% endif %}
 
-  <h2>Resumo do investimento</h2>
-  <table>
+  <div class="junto">
+  <h2>{{ n }}. Resumo do Investimento</h2>
+  <table class="grade resumo">
+    <tr><th>Descrição</th><th class="c-val">Valor</th></tr>
     {% if o.exibicao != 'total' %}
-    {% for s in secoes %}
-    <tr><td>{% if varios %}{{ s.secao.grupo }} · {% endif %}{{ s.secao.nome }}</td><td class="n">{{ s.subtotal | brl }}</td></tr>
-    {% endfor %}
+    {% for b in blocos %}<tr><td>{{ loop.index }}. {{ b.titulo }}</td><td class="c-val">{{ b.total | brl }}</td></tr>{% endfor %}
     {% endif %}
     {% if o.desconto %}
-    <tr><td>Subtotal</td><td class="n">{{ tot.subtotal | brl }}</td></tr>
-    <tr><td>Desconto</td><td class="n">− {{ o.desconto | brl }}</td></tr>
+    <tr><td>Subtotal</td><td class="c-val">{{ tot.subtotal | brl }}</td></tr>
+    <tr><td>Desconto</td><td class="c-val">− {{ o.desconto | brl }}</td></tr>
     {% endif %}
-    <tr class="total-final"><td><b>Total</b></td><td class="n"><b>{{ tot.total | brl }}</b></td></tr>
+    <tr class="total"><td>TOTAL GERAL DA PROPOSTA</td><td class="c-val">{{ tot.total | brl }}</td></tr>
   </table>
-
-  <h2>Condições comerciais</h2>
-  {% if o.pagamento %}<p><b>Pagamento:</b> {{ o.pagamento }}</p>{% endif %}
-  {% if o.prazo %}<p><b>Prazo de execução:</b> {{ o.prazo }}</p>{% endif %}
-  {% if o.garantia %}<p><b>Garantia:</b> {{ o.garantia }}</p>{% endif %}
-  <p><b>Validade da proposta:</b> {{ validade }}</p>
-
-  {% if o.nao_incluso %}<h2>O que não está incluso</h2><p>{{ o.nao_incluso }}</p>{% endif %}
-
-  <h2>Aceite</h2>
-  <p>De acordo com a proposta nº {{ o.numero }}.</p>
-  <div class="aceite">
-    <div>{{ o.cliente_nome or 'Cliente' }}</div>
-    <div>Data</div>
-    <div>{{ emp.nome }}</div>
   </div>
+
+  {% if linhas(o.nao_incluso) %}
+  <h2>Não Incluído</h2>
+  <ul>{% for l in linhas(o.nao_incluso) %}<li>{{ l }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <div class="junto">
+  <h2>Condições Comerciais</h2>
+  <ul>
+    {% if o.prazo %}<li><b>Prazo de execução:</b> {{ linhas(o.prazo) | join(' ') }}</li>{% endif %}
+    {% if o.pagamento %}<li><b>Forma de pagamento:</b> {{ linhas(o.pagamento) | join(' ') }}</li>{% endif %}
+    {% if o.garantia %}<li><b>Garantia:</b> {{ linhas(o.garantia) | join(' ') }}</li>{% endif %}
+    <li><b>Validade desta proposta:</b> {{ o.validade_dias }} dias.</li>
+  </ul>
+  <p>Ficamos à disposição para esclarecimentos e ajustes.<br>
+  {% if emp.cidade %}{{ emp.cidade }}, {% endif %}{{ data_extenso }}.</p>
+  <div class="assinaturas">
+    <div>{{ emp.nome }}<small>{{ emp.responsavel or '' }}</small></div>
+    <div>De acordo – Cliente<small>Nome / Data / Assinatura</small></div>
+  </div>
+  </div>
+</td></tr></tbody>
+</table>
 </div>
 {% endblock %}

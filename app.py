@@ -57,6 +57,12 @@ CREATE TABLE IF NOT EXISTS itens (
 );
 """
 
+# Colunas acrescentadas depois da primeira versão (bancos já criados são atualizados).
+NOVAS_COLUNAS = [("empresa", "slogan"), ("empresa", "razao_social"), ("empresa", "responsavel"),
+                 ("empresa", "cidade"), ("orcamentos", "obra"), ("orcamentos", "objeto")]
+MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
+         "setembro", "outubro", "novembro", "dezembro"]
+
 STATUS = ["Rascunho", "Enviado", "Aprovado", "Recusado"]
 EXIBICOES = [("itens", "Preços item a item"), ("secoes", "Só subtotais por seção"),
              ("total", "Só o total")]
@@ -112,6 +118,10 @@ def create_app(data_dir=None):
     def iniciar_banco():
         con = sqlite3.connect(db_path)
         con.executescript(SCHEMA)
+        for tabela, coluna in NOVAS_COLUNAS:
+            existentes = [r[1] for r in con.execute(f"PRAGMA table_info({tabela})")]
+            if coluna not in existentes:
+                con.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} TEXT")
         if con.execute("SELECT COUNT(*) FROM empresa").fetchone()[0] == 0:
             e = seed.EMPRESA
             con.execute(
@@ -221,7 +231,8 @@ def create_app(data_dir=None):
                 nomes = " + ".join(t["nome"] for t in tipos)
                 oid = con.execute(
                     "INSERT INTO orcamentos (numero, cliente_id, titulo, tipos, data, escopo,"
-                    " pagamento, prazo, garantia, nao_incluso) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    " pagamento, prazo, garantia, nao_incluso, exibicao)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,'secoes')",
                     (f"{hoje.year}-{seq:04d}", cliente_id,
                      request.form.get("titulo", "").strip() or nomes, nomes, hoje.isoformat(),
                      "\n".join(t["escopo"] or "" for t in tipos),
@@ -266,11 +277,12 @@ def create_app(data_dir=None):
             con.execute(
                 "UPDATE orcamentos SET titulo=?, cliente_id=?, status=?, validade_dias=?,"
                 " desconto=?, escopo=?, pagamento=?, prazo=?, garantia=?, nao_incluso=?,"
-                " exibicao=? WHERE id=?",
+                " exibicao=?, obra=?, objeto=? WHERE id=?",
                 (f.get("titulo", "").strip(), f.get("cliente_id") or None, status,
                  int(num(f.get("validade_dias"), 15)), num(f.get("desconto")),
                  f.get("escopo", ""), f.get("pagamento", ""), f.get("prazo", ""),
-                 f.get("garantia", ""), f.get("nao_incluso", ""), exib, oid))
+                 f.get("garantia", ""), f.get("nao_incluso", ""), exib,
+                 f.get("obra", "").strip(), f.get("objeto", ""), oid))
             for i in con.execute("SELECT id FROM itens WHERE orcamento_id = ?", (oid,)).fetchall():
                 k = f"i{i['id']}_"
                 if k + "qtd" in f:
@@ -327,17 +339,29 @@ def create_app(data_dir=None):
     @app.route("/orcamentos/<int:oid>/proposta")
     def proposta(oid):
         o, secoes, tot, varios = carregar(oid)
-        visiveis, opcionais = [], []
+        # Blocos numerados: um por tipo (com subgrupos por seção) quando há vários tipos;
+        # senão, um por seção.
+        blocos, opcionais = [], []
         for s in secoes:
             itens = [i for i in s["itens"] if i["quantidade"] > 0 and not i["opcional"]]
             opcionais += [i for i in s["itens"] if i["quantidade"] > 0 and i["opcional"]]
-            if itens:
-                visiveis.append({"secao": s["secao"], "itens": itens, "subtotal": s["subtotal"]})
+            if not itens:
+                continue
+            if varios:
+                grupo = s["secao"]["grupo"]
+                if not blocos or blocos[-1]["titulo"] != grupo:
+                    blocos.append({"titulo": grupo, "subs": [], "total": 0})
+                blocos[-1]["subs"].append({"nome": s["secao"]["nome"], "itens": itens})
+                blocos[-1]["total"] += s["subtotal"]
+            else:
+                blocos.append({"titulo": s["secao"]["nome"], "total": s["subtotal"],
+                               "subs": [{"nome": None, "itens": itens}]})
         data = datetime.date.fromisoformat(o["data"])
-        validade = data + datetime.timedelta(days=o["validade_dias"] or 0)
         return render_template(
-            "proposta.html", o=o, secoes=visiveis, opcionais=opcionais, tot=tot, varios=varios,
-            emp=empresa(), data=data.strftime("%d/%m/%Y"), validade=validade.strftime("%d/%m/%Y"))
+            "proposta.html", o=o, blocos=blocos, opcionais=opcionais, tot=tot, emp=empresa(),
+            total_opcionais=tot["opcionais"], data=data.strftime("%d/%m/%Y"),
+            data_extenso=f"{data.day} de {MESES[data.month - 1]} de {data.year}",
+            linhas=lambda txt: [l.strip() for l in (txt or "").splitlines() if l.strip()])
 
     @app.route("/orcamentos/<int:oid>/cotacao")
     def cotacao(oid):
@@ -420,16 +444,16 @@ def create_app(data_dir=None):
         return redirect(url_for("clientes"))
 
     # ---------- Empresa ----------
-    CAMPOS_EMPRESA = ["nome", "documento", "telefone", "email", "endereco", "apresentacao",
+    CAMPOS_EMPRESA = ["nome", "slogan", "razao_social", "responsavel", "cidade",
+                      "documento", "telefone", "email", "endereco", "apresentacao",
                       "pagamento", "prazo", "garantia"]
 
     @app.route("/empresa", methods=["GET", "POST"])
     def pagina_empresa():
         if request.method == "POST":
             d = [request.form.get(c, "").strip() for c in CAMPOS_EMPRESA]
-            db().execute("UPDATE empresa SET nome=?, documento=?, telefone=?, email=?,"
-                         " endereco=?, apresentacao=?, pagamento=?, prazo=?, garantia=?"
-                         " WHERE id = 1", d)
+            db().execute("UPDATE empresa SET " + ", ".join(f"{c}=?" for c in CAMPOS_EMPRESA)
+                         + " WHERE id = 1", d)
             db().commit()
             arq = request.files.get("logo")
             if arq and arq.filename and arq.mimetype in ("image/png", "image/jpeg", "image/gif", "image/webp"):

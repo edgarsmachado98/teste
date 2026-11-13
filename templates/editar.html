@@ -98,13 +98,15 @@
       </select>
     </label>
   </div>
-  <label>Escopo da solução <textarea form="fm" name="escopo">{{ o.escopo }}</textarea></label>
+  <label>Obra / local <input form="fm" name="obra" value="{{ o.obra or '' }}" placeholder="Ex.: Pavilhão e escritórios — Distrito Industrial"></label>
+  <label>Escopo (resumo em uma frase, no topo da proposta) <textarea form="fm" name="escopo">{{ o.escopo }}</textarea></label>
+  <label>Objeto (parágrafo de descrição; opcional) <textarea form="fm" name="objeto">{{ o.objeto or '' }}</textarea></label>
   <div class="linha">
     <label>Pagamento <textarea form="fm" name="pagamento">{{ o.pagamento }}</textarea></label>
     <label>Prazo de execução <textarea form="fm" name="prazo">{{ o.prazo }}</textarea></label>
     <label>Garantia <textarea form="fm" name="garantia">{{ o.garantia }}</textarea></label>
   </div>
-  <label>O que não está incluso <textarea form="fm" name="nao_incluso">{{ o.nao_incluso }}</textarea></label>
+  <label>Não incluído (um item por linha) <textarea form="fm" name="nao_incluso">{{ o.nao_incluso }}</textarea></label>
 </div>
 
 <div class="barra">

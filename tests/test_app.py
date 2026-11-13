@@ -38,8 +38,8 @@ def test_fluxo_orcamento(client):
 
     proposta = client.get("/orcamentos/1/proposta").get_data(as_text=True)
     assert "Loja Teste" in proposta
-    assert "R$ 1.200,00" in proposta      # subtotal
-    assert "R$ 1.100,00" in proposta      # total com desconto
+    assert "TOTAL — CÂMERAS" in proposta and "R$ 1.200,00" in proposta
+    assert "TOTAL GERAL DA PROPOSTA" in proposta and "R$ 1.100,00" in proposta
     assert "Câmera IP bullet" not in proposta  # quantidade zero não aparece
 
     cotacao = client.get("/orcamentos/1/cotacao").get_data(as_text=True)

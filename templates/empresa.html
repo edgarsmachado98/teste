@@ -5,12 +5,18 @@
 <form method="post" enctype="multipart/form-data" class="cartao">
   <div class="linha">
     <label>Nome <input name="nome" value="{{ emp.nome or '' }}"></label>
+    <label>Frase do cabeçalho <input name="slogan" value="{{ emp.slogan or '' }}" placeholder="Ex.: Soluções Tecnológicas"></label>
+    <label>Razão social (rodapé) <input name="razao_social" value="{{ emp.razao_social or '' }}"></label>
+  </div>
+  <div class="linha">
+    <label>Responsável (assinatura) <input name="responsavel" value="{{ emp.responsavel or '' }}"></label>
+    <label>Cidade/UF (data da proposta) <input name="cidade" value="{{ emp.cidade or '' }}" placeholder="Ex.: Santa Maria/RS"></label>
     <label>CNPJ <input name="documento" value="{{ emp.documento or '' }}"></label>
     <label>Telefone <input name="telefone" value="{{ emp.telefone or '' }}"></label>
     <label>E-mail <input name="email" value="{{ emp.email or '' }}"></label>
   </div>
   <label>Endereço <input name="endereco" value="{{ emp.endereco or '' }}"></label>
-  <label>Apresentação da empresa <textarea name="apresentacao">{{ emp.apresentacao or '' }}</textarea></label>
+  <input type="hidden" name="apresentacao" value="{{ emp.apresentacao or '' }}">
   <div class="linha">
     <label>Pagamento (padrão) <textarea name="pagamento">{{ emp.pagamento or '' }}</textarea></label>
     <label>Prazo de execução (padrão) <textarea name="prazo">{{ emp.prazo or '' }}</textarea></label>

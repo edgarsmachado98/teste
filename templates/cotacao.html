@@ -15,19 +15,11 @@
   </div>
 </div>
 
-<div class="folha">
-  <div class="cab">
-    <div>{% if tem_logo %}<img src="{{ url_for('logo') }}" alt="Logotipo">{% else %}<h1>{{ emp.nome }}</h1>{% endif %}</div>
-    <div class="suave" style="text-align:right">
-      {% if tem_logo %}<b>{{ emp.nome }}</b><br>{% endif %}
-      {% if emp.documento %}{{ emp.documento }}<br>{% endif %}
-      {% if emp.telefone %}{{ emp.telefone }}<br>{% endif %}
-      {% if emp.email %}{{ emp.email }}{% endif %}
-    </div>
-  </div>
-  <div class="capa">
-    <h1>Pedido de cotação</h1>
-    <div><b>Referência:</b> {{ o.numero }} · <b>Data:</b> {{ hoje }}</div>
+<div class="folha doc">
+  {% include "_cab.html" %}
+  <div class="doc-titulo">Pedido de Cotação</div>
+  <div class="doc-dados">
+    <div class="cinza"><b>Referência:</b> {{ o.numero }} &nbsp;·&nbsp; {{ hoje }}</div>
     <div id="l-forn" hidden><b>Fornecedor:</b> <span></span></div>
     <div id="l-prazo" hidden><b>Responder até:</b> <span></span></div>
   </div>
@@ -36,7 +28,7 @@
   {% for cat, itens in categorias %}
   <div class="categoria">
     <h2><label style="font-size:inherit;color:inherit"><input type="checkbox" class="no-print cat" checked> {{ cat }}</label></h2>
-    <table>
+    <table class="grade">
       <tr><th class="no-print"></th><th>Nº</th><th>Descrição</th><th>Marca / modelo</th><th>Un.</th><th class="n">Qtd.</th><th>Preço un.</th><th>Prazo</th><th>Observações</th></tr>
       {% for i in itens %}
       <tr class="item">
@@ -52,6 +44,7 @@
   {% else %}
   <p>Nenhum material com quantidade preenchida neste orçamento.</p>
   {% endfor %}
+  {% include "_rodape.html" %}
 </div>
 
 <script>

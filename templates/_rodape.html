@@ -1,0 +1,4 @@
+<div class="doc-rodape">
+  {{ emp.razao_social or emp.nome }}{% if emp.documento %} &nbsp;•&nbsp; CNPJ {{ emp.documento }}{% endif %}<br>
+  {{ emp.endereco or '' }}{% if emp.endereco and emp.telefone %} &nbsp;•&nbsp; {% endif %}{{ emp.telefone or '' }}
+</div>
