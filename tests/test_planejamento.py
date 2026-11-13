@@ -664,3 +664,21 @@ def test_fatura_pdf_layout_nubank(novo_app, com_modulo):
         loja += [l for l in c.get(f"/api/plan/lancamentos?mes={m}").get_json()["lancamentos"] if "Loja Exemplo" in l["descricao"]
                  and l["tipo"] == "despesa"]
     assert sorted((l["data"][:7], l["parcela_num"]) for l in loja) == [("2026-10", 3), ("2026-10", 4), ("2026-12", 5)]  # a 4ª saiu de novembro
+
+
+def test_fatura_pdf_bb_com_secoes():
+    from carteira import fatura as fat
+    itens = fat.ler_fatura(ler_fixture("fatura_bb_secoes.pdf"), "fatura_bb.pdf")
+    por = {i["descricao"]: i for i in itens}
+    assert set(por) == {"PGTO DEBITO CONTA 1234 000012345 200", "CANTINA DO BAIRRO LTD SANTA MARIA",
+                        "EMPORIO CENTRAL SANTA MARIA", "LAVANDERIA AZUL SANTA MARIA", "LOJA DE MOVEIS PARC 02/05 SANTA MARIA"}
+    assert por["PGTO DEBITO CONTA 1234 000012345 200"]["tipo"] == "pagamento"
+    assert por["CANTINA DO BAIRRO LTD SANTA MARIA"]["categoria_banco"] == "Restaurante"
+    assert por["LAVANDERIA AZUL SANTA MARIA"]["categoria_banco"] is None  # "Serviços" é genérico demais
+    assert por["CANTINA DO BAIRRO LTD SANTA MARIA"]["data"] == "2026-10-05"
+    assert (por["LOJA DE MOVEIS PARC 02/05 SANTA MARIA"]["parcela_num"], por["LOJA DE MOVEIS PARC 02/05 SANTA MARIA"]["parcela_total"]) == (2, 5)
+    assert {i["portador"] for i in itens} == {"Fulano de Tal"} and {i["final"] for i in itens} == {"1234"}
+    compras = sum(i["valor"] for i in itens if i["tipo"] == "compra")
+    assert round(compras, 2) == 241.40  # confere com o total da fatura
+    cats = {("despesa", "Restaurante"): 7, ("despesa", "Mercado"): 8}
+    assert fat.sugerir_categoria(por["CANTINA DO BAIRRO LTD SANTA MARIA"], [], cats) == (7, "banco")

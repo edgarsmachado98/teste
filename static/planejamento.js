@@ -853,7 +853,7 @@
           <td class="${i.tipo === "estorno" ? "pos" : ""}">${i.tipo === "estorno" ? "+" : ""}${brl.format(i.valor)}</td>
           <td>${i.tipo === "pagamento" ? `<span class="dica">ignorado</span>` : `<select data-fatura-cat="${n}" class="${i.categoria_id ? "" : "sem-categoria"}">
               ${opcoesCategoria(i.tipo === "estorno" ? "receita" : "despesa", i.categoria_id)}</select>
-            ${i.origem_categoria ? `<small class="var-sub">${{ aprendida: "como da última vez", sua: "a que você escolheu", padrao: "sugestão automática" }[i.origem_categoria] || ""}</small>` : ""}`}</td>
+            ${i.origem_categoria ? `<small class="var-sub">${{ aprendida: "como da última vez", sua: "a que você escolheu", padrao: "sugestão automática", banco: "categoria do banco" }[i.origem_categoria] || ""}</small>` : ""}`}</td>
           <td class="situacao-fatura">${situacaoFatura(i, n)}</td></tr>`).join("")}
       </table></div>
       <div class="form-linha fatura-opcoes">

@@ -154,6 +154,18 @@ RE_LINHA_MES = re.compile(
     r"^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]*\.?(?:\s+(\d{4}))?\s+"
     r"(?:[•*·∙.]{2,}\s*(\d{4})\s+)?(.+?)\s+([−–-]\s?)?(?:R\$\s*)?([−–-]\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})\s*$",
     re.IGNORECASE)
+# Seções da fatura em que o banco já agrupa as compras (BB): viram sugestão de categoria
+CATEGORIAS_BANCO = {"RESTAURANTES": "Restaurante", "RESTAURANTE": "Restaurante", "SUPERMERCADOS": "Mercado",
+                    "SUPERMERCADO": "Mercado", "EDUCACAO": "Cursos", "VESTUARIO": "Roupas", "SAUDE": "Farmácia",
+                    "FARMACIAS": "Farmácia", "VIAGENS": "Viagens", "TURISMO": "Viagens", "HOTEIS": "Viagens",
+                    "LAZER": "Passeios", "ENTRETENIMENTO": "Passeios", "COMBUSTIVEL": "Combustível", "POSTOS": "Combustível",
+                    "AUTOMOTIVO": "Manutenção do carro", "TELEFONIA": "Internet / telefone", "VAREJO": "Compras (lojas e internet)",
+                    "LOJAS": "Compras (lojas e internet)", "CASA E DECORACAO": "Manutenção", "PETS": "Pets",
+                    "ASSINATURAS": "Streaming / assinaturas", "TRANSPORTE": "Aplicativo / táxi", "BELEZA": "Beleza / cuidados"}
+SECOES_SEM_CATEGORIA = {"PAGAMENTOS/CREDITOS", "PAGAMENTOS / CREDITOS", "COMPRAS PARCELADAS", "SERVICOS", "OUTROS",
+                        "OUTROS LANCAMENTOS", "DIVERSOS", "ENCARGOS", "TARIFAS"}
+RE_PORTADOR_BB = re.compile(r"^(.+?)\s*\(Cart[ãa]o\s*(?:final\s*)?(\d{4})\)\s*$", re.IGNORECASE)
+
 # Subtotal por portador do cartão (titular e adicionais): "Edgar S Machado R$ 1.234,56"
 RE_PORTADOR = re.compile(r"^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.]*){1,5})\s+R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}$")
 
@@ -245,9 +257,17 @@ def _linhas_por_palavras(conteudo, senha=None):
 
 def _itens_do_texto(texto, ref, flexivel=False):
     import datetime as _dt
-    itens, portador = [], None
+    itens, portador, secao, final_bb = [], None, None, None
     for linha in texto.splitlines():
         linha = linha.strip()
+        chave_secao = normalizar(linha)
+        if chave_secao in CATEGORIAS_BANCO or chave_secao in SECOES_SEM_CATEGORIA:
+            secao = CATEGORIAS_BANCO.get(chave_secao)
+            continue
+        mb = RE_PORTADOR_BB.match(linha)
+        if mb:
+            portador, final_bb, secao = mb.group(1).strip(), mb.group(2), None
+            continue
         if not flexivel:
             mm = RE_LINHA_MES.match(linha)
             if mm:
@@ -266,6 +286,7 @@ def _itens_do_texto(texto, ref, flexivel=False):
         for m in achados:
             item = _item_pdf(m.groups()[:7], ref)
             if item:
+                item.update(portador=portador, final=final_bb, categoria_banco=secao)
                 itens.append(item)
     return itens
 
@@ -295,6 +316,9 @@ def _item_pdf(grupos, ref):
         if menos_antes or (menos_depois and credito or (menos_depois or "").strip() == "-") \
                 or re.search(r"\b(CR|CREDITO)\s*$", desc_n):
             valor = -valor
+        # tira o país e o "R$" que alguns bancos imprimem antes do valor: "LOJA X SANTA MARIA BR R$"
+        desc = re.sub(r"(\s+[A-Z]{2})?\s+R\$\s*$", "", desc.strip())
+        desc = re.sub(r"\s+BR$", "", desc)
         return {"data": data, "descricao": desc.strip(), "valor_assinado": valor, "fitid": None}
 
 
@@ -329,6 +353,7 @@ def ler_fatura(conteudo, nome_arquivo, senha=None):
                       "parcela_num": n, "parcela_total": total, "base": base,
                       "estabelecimento": chave_estabelecimento(re.sub(r"(?i)^antecipad[ao]\s*-?\s*", "", b["descricao"])),
                       "antecipada": antecipada, "portador": b.get("portador"), "final": b.get("final"),
+                      "categoria_banco": b.get("categoria_banco"),
                       "id_arquivo": f"{chave_bruta}#{vistos[chave_bruta]}"})
     return itens
 
@@ -401,6 +426,10 @@ def sugerir_categoria(item, regras_usuario, categorias_por_nome):
             cid = categorias_por_nome.get(("despesa", nome))
             if cid:
                 return cid, "padrao"
+    if item.get("categoria_banco"):  # a categoria que o próprio banco deu na fatura
+        cid = categorias_por_nome.get(("despesa", item["categoria_banco"]))
+        if cid:
+            return cid, "banco"
     return None, None
 
 
