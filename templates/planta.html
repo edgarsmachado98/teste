@@ -218,7 +218,8 @@ function criarElemento(m, idx) {
   el.innerHTML = `<div class="pin" style="background:${cor}">${pinText}</div>
     <div class="rotulo-marca">${labelParts.join(' · ')}</div>`;
   posicionar(el, m.x, m.y);
-  el.addEventListener('pointerdown', iniciarArrasto);
+  el.addEventListener('mousedown', iniciarArrasto);
+  el.addEventListener('touchstart', iniciarArrasto, {passive:false});
   el.addEventListener('click', e => { e.stopPropagation(); if (!moveu) selecionar(idx); });
   el.addEventListener('contextmenu', e => { e.preventDefault(); remover(idx); });
   camada.appendChild(el);
@@ -293,13 +294,11 @@ function removerSelecionado() {
 
 function coordenadas(e) {
   const rect = img.getBoundingClientRect();
-  const clientX = e.clientX !== undefined ? e.clientX : (e.touches ? e.touches[0].clientX : 0);
-  const clientY = e.clientY !== undefined ? e.clientY : (e.touches ? e.touches[0].clientY : 0);
-  const w = rect.width || 1;
-  const h = rect.height || 1;
+  const t = e.touches ? e.touches[0] : e;
+  const cx = t.clientX, cy = t.clientY;
   return {
-    x: Math.max(0, Math.min(100, (clientX - rect.left) / w * 100)),
-    y: Math.max(0, Math.min(100, (clientY - rect.top) / h * 100))
+    x: Math.max(0, Math.min(100, (cx - rect.left) / (rect.width || 1) * 100)),
+    y: Math.max(0, Math.min(100, (cy - rect.top) / (rect.height || 1) * 100))
   };
 }
 
@@ -318,48 +317,46 @@ editor.addEventListener('click', e => {
   document.getElementById('sel-rotulo').focus();
 });
 
-// Arrastar com Pointer Events (muito mais fluido que mouse+touch separados)
-let rafId = null;
+// Arrastar — listeners no document para máxima fluidez
+let elArrastando = null;
 
 function iniciarArrasto(e) {
   e.preventDefault();
   e.stopPropagation();
-  const el = e.currentTarget;
-  const idx = parseInt(el.dataset.idx);
+  const idx = parseInt(e.currentTarget.dataset.idx);
   arrastando = idx;
+  elArrastando = e.currentTarget;
   moveu = false;
-  el.setPointerCapture(e.pointerId);
   const c = coordenadas(e);
   offX = marcacoes[idx].x - c.x;
   offY = marcacoes[idx].y - c.y;
+}
 
-  const moverPtr = ev => {
-    if (arrastando === null) return;
-    ev.preventDefault();
-    moveu = true;
-    const cc = coordenadas(ev);
-    marcacoes[arrastando].x = Math.max(0, Math.min(100, cc.x + offX));
-    marcacoes[arrastando].y = Math.max(0, Math.min(100, cc.y + offY));
-    if (!rafId) {
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        const mel = camada.querySelector(`[data-idx="${arrastando}"]`);
-        if (mel) posicionar(mel, marcacoes[arrastando].x, marcacoes[arrastando].y);
-      });
-    }
-  };
+document.addEventListener('mousemove', moverArrasto);
+document.addEventListener('touchmove', moverArrasto, {passive:false});
+document.addEventListener('mouseup', pararArrasto);
+document.addEventListener('touchend', pararArrasto);
 
-  const pararPtr = ev => {
-    el.removeEventListener('pointermove', moverPtr);
-    el.removeEventListener('pointerup', pararPtr);
-    el.removeEventListener('pointercancel', pararPtr);
-    if (arrastando !== null && moveu) { sujo = true; atualizarBotao(); }
-    setTimeout(() => { arrastando = null; }, 20);
-  };
+function moverArrasto(e) {
+  if (arrastando === null) return;
+  e.preventDefault();
+  moveu = true;
+  const c = coordenadas(e);
+  const nx = Math.max(0, Math.min(100, c.x + offX));
+  const ny = Math.max(0, Math.min(100, c.y + offY));
+  marcacoes[arrastando].x = nx;
+  marcacoes[arrastando].y = ny;
+  if (elArrastando) {
+    elArrastando.style.left = nx + '%';
+    elArrastando.style.top = ny + '%';
+  }
+}
 
-  el.addEventListener('pointermove', moverPtr);
-  el.addEventListener('pointerup', pararPtr);
-  el.addEventListener('pointercancel', pararPtr);
+function pararArrasto() {
+  if (arrastando !== null && moveu) { sujo = true; atualizarBotao(); }
+  if (moveu) setTimeout(() => { moveu = false; }, 50);
+  arrastando = null;
+  elArrastando = null;
 }
 
 function remover(idx) {
