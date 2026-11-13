@@ -581,3 +581,41 @@ def test_lancamento_repetido_e_lista_da_familia(novo_app, com_modulo):
     assert c.delete(f"/api/plan/recorrencias/{rid}?tudo=1").get_json()["removidos"] == 1
     d = c.get("/api/plan/lancamentos?mes=2026-11").get_json()
     assert sum(1 for l in d["lancamentos"] if l["carteira_id"] == filho) == 1
+
+
+def test_contas_da_familia_aparecem_para_todos(novo_app, com_modulo):
+    app = novo_app(fonte)
+    edgar = cliente_logado(app)
+    edgar.post("/api/usuarios", json={"nome": "Eliandra", "email": "eli@x.com", "senha": "senha-eli-123",
+                                      "criar_carteira": True, "nome_carteira": "Carteira Eliandra"})
+    membros = edgar.get("/api/plan/membros").get_json()["membros"]
+    ids = {p["nome"]: p["id"] for p in membros}
+    for p in membros:
+        edgar.put(f"/api/plan/membros/{p['id']}", json={"nome": p["nome"], "parentesco": p["parentesco"], "divide": True})
+    eli = cliente_logado(app, "eli@x.com", "senha-eli-123")
+    mes = dt.date.today().isoformat()[:7]
+    # meio a meio: a conta fixa compartilhada que o Edgar paga aparece no login da Eliandra com a parte dela
+    edgar.put("/api/plan/familia", json={"modo": "meio"})
+    edgar.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-05", "descricao": "Aluguel", "valor": 2000,
+                                              "repetir": "mensal", "compartilhado": True})
+    edgar.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-06", "descricao": "Barbearia", "valor": 50})
+    d = eli.get(f"/api/plan/lancamentos?mes={mes}").get_json()
+    alu = next(l for l in d["lancamentos"] if l["descricao"] == "Aluguel")
+    assert alu["alheio"] and alu["familia"] and {p["valor"] for p in alu["partes"]} == {1000.0}
+    assert not any(l["descricao"] == "Barbearia" for l in d["lancamentos"])  # o que é pessoal continua pessoal
+    assert any(r["descricao"] == "Aluguel" and r["alheio"] for r in d["recorrencias"])
+    assert eli.put(f"/api/plan/lancamentos/{alu['id']}", json={"valor": 1}).status_code == 404  # só leitura
+    f = eli.get(f"/api/plan/familia?mes={mes}").get_json()
+    assert {p["nome"] for p in f["pessoas"]} == {"Edgar Machado", "Eliandra"} and f["total"] == 2000
+    assert [x["valor"] for x in f["itens"][0]["partes"]] == [1000.0, 1000.0]  # como ficou a divisão de cada conta
+    # tudo junto: as compras no cartão do Edgar entram nas despesas do mês da Eliandra, sem precisar marcar
+    edgar.put("/api/plan/familia", json={"modo": "junto"})
+    cartao = edgar.post("/api/plan/cartoes", json={"nome": "Ourocard"}).get_json()["id"]
+    edgar.post("/api/plan/lancamentos", json={"tipo": "despesa", "data": f"{mes}-07", "descricao": "Mercado", "valor": 300,
+                                              "forma": "credito", "cartao_id": cartao})
+    d = eli.get(f"/api/plan/lancamentos?mes={mes}").get_json()
+    merc = next(l for l in d["lancamentos"] if l["descricao"] == "Mercado")
+    assert merc["familia"] and "partes" not in merc and d["modo_familia"] == "junto"
+    r = eli.get(f"/api/plan/resumo?mes={mes}").get_json()
+    assert r["despesas"] >= 2300  # aluguel + fatura do Edgar compõem as despesas do mês dela
+    assert ids["Eliandra"] in {p["id"] for p in eli.get(f"/api/plan/lancamentos?mes={mes}").get_json()["pessoas"] if p["minha"]}

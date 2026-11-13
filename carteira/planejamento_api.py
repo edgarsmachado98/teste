@@ -75,7 +75,23 @@ def registrar(app, ctx):
                         "divide": bool(m["divide"]) if m else True, "cadastrado": m is not None,
                         "nascimento": m["nascimento"] if m else None, "idade": idade(m["nascimento"] if m else None),
                         "tem_login": c.get("dono_id") is not None, "login": c.get("dono_nome"),
-                        "editar": bool(c["permissoes"]["editar"]), "minha": c.get("dono_id") == ctx.usuario_id()})
+                        "editar": bool(c["permissoes"]["editar"]), "minha": c.get("dono_id") == ctx.usuario_id(),
+                        "visivel": True})
+        # quem divide as contas vê os demais membros que também dividem, mesmo sem acesso à carteira deles:
+        # as contas da família e a divisão precisam aparecer no login de cada um (somente leitura)
+        if any(p["minha"] and p["divide"] for p in out):
+            vistos = {p["id"] for p in out}
+            for cid, m in membros.items():
+                if cid in vistos or not m["ativo"] or not m["divide"]:
+                    continue
+                c = conn.execute("""SELECT c.nome, c.dono_id, u.nome AS dono_nome FROM carteiras c
+                                    LEFT JOIN usuarios u ON u.id = c.dono_id WHERE c.id = ?""", (cid,)).fetchone()
+                if c is None:
+                    continue
+                out.append({"id": cid, "nome": m["nome"], "carteira": c["nome"], "parentesco": m["parentesco"],
+                            "divide": True, "cadastrado": True, "nascimento": m["nascimento"], "idade": idade(m["nascimento"]),
+                            "tem_login": c["dono_id"] is not None, "login": c["dono_nome"], "editar": False,
+                            "minha": False, "visivel": False})
         return out
 
     def idade(nascimento):
@@ -92,7 +108,9 @@ def registrar(app, ctx):
         Não depende da carteira escolhida no menu de investimentos: um lançamento feito para outro membro
         precisa aparecer na lista, senão parece que não foi salvo (e acaba lançado duas vezes).
         """
-        ids = [p["id"] for p in pessoas()]
+        junto = config("modo_familia", "proporcional") == "junto"
+        # no "tudo junto" a renda e as despesas de quem divide as contas formam um orçamento só
+        ids = [p["id"] for p in pessoas() if p["visivel"] or (junto and p["divide"])]
         if not ids:
             raise ctx.ErroAcesso("Nenhuma carteira disponível.", 404)
         pessoa = request.args.get("pessoa")
@@ -215,12 +233,58 @@ def registrar(app, ctx):
     def plan_lancamentos():
         cids = cids_plan()
         mes = mes_param()
-        plan.materializar(conn, cids, mes_atual())
+        todos = pessoas()
+        familia = divisao_do_mes(mes, todos)
+        outros = [p["id"] for p in todos if p["divide"] and p["id"] not in cids]
+        plan.materializar(conn, cids + outros, mes_atual())
         marcas = ",".join("?" * len(cids))
         recs = db.rows(conn.execute(
             f"SELECT * FROM fin_recorrencias WHERE carteira_id IN ({marcas}) ORDER BY tipo DESC, descricao", cids))
-        return jsonify({"mes": mes, "mes_atual": mes_atual(), "lancamentos": lancamentos_do_mes(cids, mes),
-                        "recorrencias": recs, "pessoas": pessoas()})
+        lancs = lancamentos_do_mes(cids, mes)
+        if outros and not request.args.get("pessoa"):
+            # contas da família pagas por quem você não acompanha: aparecem com a sua parte (sem poder editar)
+            for l in lancamentos_do_mes(outros, mes):
+                if da_familia(l, familia):
+                    lancs.append({**l, "alheio": True})
+            m2 = ",".join("?" * len(outros))
+            for r in db.rows(conn.execute(f"""SELECT * FROM fin_recorrencias WHERE carteira_id IN ({m2})
+                                              AND tipo = 'despesa' AND compartilhado = 1""", outros)):
+                recs.append({**r, "alheio": True})
+            lancs.sort(key=lambda l: (l["data"], l.get("id") or 0))
+        anotar_familia(lancs, familia)
+        anotar_familia(recs, familia)
+        return jsonify({"mes": mes, "mes_atual": mes_atual(), "lancamentos": lancs, "recorrencias": recs,
+                        "pessoas": todos, "modo_familia": familia["modo"],
+                        "minhas": [p["id"] for p in todos if p["minha"]]})
+
+    # ---------- contas da família: o que entra na divisão e a parte de cada um ----------
+    def divisao_do_mes(mes, todos=None):
+        """Regra da família no mês: modo, peso de cada membro que divide as contas e os nomes."""
+        modo, pesos_manuais = config("modo_familia", "proporcional"), config("pesos_familia", {})
+        quem = [p for p in (todos or pessoas()) if p["divide"]]
+        base = []
+        for p in quem:
+            renda = sum(l["valor"] for l in lancamentos_do_mes([p["id"]], mes)
+                        if l["tipo"] == "receita" and not l.get("compartilhado"))
+            base.append({"id": p["id"], "nome": p["nome"], "renda": renda, "pagou": 0.0})
+        ac = plan.acerto_familia(base, modo, pesos_manuais)
+        return {"modo": modo, "pesos": {p["id"]: p["peso"] / 100 for p in ac["pessoas"]},
+                "nomes": {p["id"]: p["nome"] for p in quem}}
+
+    def da_familia(l, familia):
+        """Despesa da família: marcada como compartilhada ou, no "tudo junto", qualquer compra no cartão."""
+        if l.get("tipo") != "despesa" or l["carteira_id"] not in familia["pesos"]:
+            return False
+        return bool(l.get("compartilhado")) or (familia["modo"] == "junto" and bool(l.get("cartao_id")))
+
+    def anotar_familia(itens, familia):
+        for l in itens:
+            if not da_familia(l, familia):
+                continue
+            l["familia"] = True
+            if familia["modo"] != "junto" and len(familia["pesos"]) > 1:
+                l["partes"] = [{"id": i, "nome": familia["nomes"][i], "valor": round(l["valor"] * w, 2)}
+                               for i, w in familia["pesos"].items()]
 
     def possivel_duplicado(cid, l, repetir):
         """Mesmo titular, tipo e valor, com a mesma categoria ou descrição: no mesmo mês (ou já fixo todo mês)."""
@@ -653,7 +717,9 @@ def registrar(app, ctx):
         cids = [c["id"] for c in carteiras]
         plan.materializar(conn, cids, mes_atual())
         modo, pesos = config("modo_familia", "proporcional"), config("pesos_familia", {})
+        familia = divisao_do_mes(mes, carteiras)
         participantes, totais = [], {"receitas": 0.0, "despesas": 0.0, "compartilhadas": 0.0}
+        itens = []  # cada conta da família do mês, com a parte de cada membro
         prov = plan.proventos_por_mes(ctx.listar_proventos(cids), ctx.hoje()) if cids else {}
         inv = plan.investido_por_mes(ctx.listar_aportes(cids)) if cids else {}
         for c in carteiras:
@@ -662,7 +728,12 @@ def registrar(app, ctx):
             totais["receitas_grupo"] = totais.get("receitas_grupo", 0.0) + sum(
                 l["valor"] for l in lancs if l["tipo"] == "receita" and l.get("compartilhado"))
             desp = sum(l["valor"] for l in lancs if l["tipo"] == "despesa")
-            comum = sum(l["valor"] for l in lancs if l["tipo"] == "despesa" and l.get("compartilhado"))
+            comum = sum(l["valor"] for l in lancs if da_familia(l, familia) or (l["tipo"] == "despesa" and l.get("compartilhado")))
+            for l in lancs:
+                if da_familia(l, familia):
+                    itens.append({**{k: l.get(k) for k in ("id", "tipo", "data", "descricao", "valor", "categoria_id", "cartao_id",
+                                                        "recorrencia_id", "parcela_num", "parcela_total", "carteira_id",
+                                                        "compartilhado")}, "pago_por": c["nome"]})
             participantes.append({"id": c["id"], "nome": c["nome"], "carteira": c["carteira"], "divide": c["divide"],
                                   "renda": renda, "pagou": comum, "despesas_pessoais": desp - comum})
             totais["receitas"] += renda
@@ -675,7 +746,10 @@ def registrar(app, ctx):
         totais.setdefault("receitas_grupo", 0.0)
         totais.update({"investido": investido, "proventos": proventos,
                        "sobra": totais["receitas"] + totais["receitas_grupo"] + proventos - totais["despesas"] - investido})
+        anotar_familia(itens, familia)
+        itens.sort(key=lambda l: (l["data"], l.get("id") or 0))
         return jsonify({"mes": mes, "modo": modo, "modos": plan.MODOS_FAMILIA, "pesos": pesos, "totais": totais,
+                        "itens": itens, "minhas": [c["id"] for c in carteiras if c["minha"]],
                         **acerto, "pode_configurar": bool(ctx.eh_admin())})
 
     @app.put("/api/plan/familia")

@@ -878,3 +878,8 @@ body.plan-sem-edicao .plan-editavel { display: none !important; }
 .tabela-fixas .linha-total td { font-weight: 650; border-top: 1px solid var(--borda-forte); }
 .tabela-fixas td:last-child { text-align: right; white-space: nowrap; }
 .fixas-dica { margin: -6px 2px 18px; }
+.parte-familia { color: var(--primaria) !important; font-weight: 500; }
+.tabela-fam-itens td:nth-child(n+4), .tabela-fam-itens th:nth-child(n+4) { text-align: right; white-space: nowrap; }
+.tabela-fam-itens .col-minha { background: color-mix(in srgb, var(--primaria) 7%, transparent); font-weight: 600; }
+.tabela-fam-itens td:nth-child(-n+3), .tabela-fam-itens th:nth-child(-n+3) { text-align: left; }
+.tabela-fixas td:only-child { text-align: left !important; white-space: normal; }

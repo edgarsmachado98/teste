@@ -202,6 +202,10 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
   por loja; posto com gasolina vira Combustível), avisa se a nota já foi lançada e guarda os itens, que
   aparecem no selo "nota fiscal" da lista. A parte paga no crédito fica "aguardando fatura" e é conferida
   na importação da fatura, sem duplicar. Se o portal não responder, a nota é lançada com o que o QR Code traz.
+- **Contas da família em todos os logins:** quem divide as contas vê, no próprio login, as contas da família
+  pagas pelos outros membros (somente leitura) com a parte de cada um, e a aba Família lista cada conta do mês
+  com a divisão por membro. No modo **Tudo junto**, receitas, faturas de cartão e contas de quem divide formam
+  um orçamento só: as compras no cartão de cada login entram nas despesas do mês de todos, sem precisar marcar.
 - **Conciliação com a fatura:** uma compra lançada na hora no crédito (com o cartão informado) fica
   "aguardando fatura". Ao importar a fatura, o sistema procura a mesma compra (mesmo valor e data até
   3 dias; parcelas pelo número; valores próximos viram "possível correspondência" para o usuário

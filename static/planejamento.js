@@ -351,21 +351,27 @@
   function renderLancamentos() {
     const filtro = $("#plan-filtro").value, todos = dadosLanc.lancamentos;
     const lista = todos.filter(l => !filtro || (filtro === "pendente" ? !l.pago : l.tipo === filtro));
-    const soma = t => todos.filter(l => l.tipo === t).reduce((a, l) => a + l.valor, 0);
+    const nomePessoa = cid => pessoasPlan.find(p => p.id === cid)?.nome || "";
+    const minhas = new Set(dadosLanc.minhas || []), junto = dadosLanc.modo_familia === "junto";
+    const minhaParte = l => (l.partes || []).find(p => minhas.has(p.id))?.valor;
+    // contas da família pagas por outro membro não somam como gasto seu: entram só pela sua parte
+    const soma = t => todos.filter(l => l.tipo === t && !l.alheio).reduce((a, l) => a + l.valor, 0);
     const rec = soma("receita"), desp = soma("despesa");
+    const parte = todos.filter(l => l.partes).reduce((a, l) => a + (minhaParte(l) || 0), 0);
     $("#plan-totais").innerHTML = `<span>Receitas <strong class="pos">${brl.format(rec)}</strong></span>
       <span>Despesas <strong>${brl.format(desp)}</strong></span>
       <span>Saldo <strong class="${rec - desp >= 0 ? "pos" : "neg"}">${brl.format(rec - desp)}</strong></span>
-      <small class="dica">Proventos e aportes da carteira aparecem no Resumo do mês.</small>`;
+      ${parte ? `<span title="Soma da sua parte em todas as contas da família do mês">Sua parte nas contas da família <strong>${brl.format(parte)}</strong></span>` : ""}
+      <small class="dica">${junto ? "Tudo junto: receitas, faturas e contas de quem divide as contas aparecem juntas." : "Proventos e aportes da carteira aparecem no Resumo do mês."}</small>`;
     const varias = pessoasPlan.length > 1 && !$("#plan-pessoa").value;
-    const nomePessoa = cid => pessoasPlan.find(p => p.id === cid)?.nome || "";
     const podeEditar = cid => pessoasPlan.some(p => p.id === cid && p.editar);
     $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th>${varias ? "<th>Titular</th>" : ""}<th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
       lista.map(l => {
         const aguardando = l.tipo === "despesa" && l.cartao_id && !l.chave_import && !l.projetado;
         const selos = [aguardando ? "aguardando fatura" : "", l.conferido_em ? "✓ conferido com a fatura" : "",
           l.recorrencia_id ? "mensal" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
-          l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "compartilhada") : "", l.projetado ? "previsto" : ""]
+          l.familia ? (junto ? "caixa comum" : "conta da família") : l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "compartilhada") : "",
+          l.alheio ? `pago por ${nomePessoa(l.carteira_id).split(" ")[0]}` : "", l.projetado ? "previsto" : ""]
           .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ") +
           (l.nota_id ? ` <button type="button" class="selo selo-nota" data-ver-nota="${l.nota_id}" title="Ver os itens da nota">🧾 nota fiscal</button>` : "");
         const situacao = l.projetado ? `<span class="dica">previsto</span>`
@@ -377,7 +383,9 @@
           <td><strong>${esc(l.descricao)}</strong> ${selos}<small class="var-sub">${esc(nomeCat(l.categoria_id))}${l.valor_bruto ? ` · bruto ${brl.format(l.valor_bruto)}` : ""}</small></td>
           ${varias ? `<td>${l.tipo === "receita" && l.compartilhado ? "Grupo familiar" : esc(nomePessoa(l.carteira_id))}</td>` : ""}
           <td>${l.cartao_id && cartoesPlan.find(c => c.id === l.cartao_id) ? esc(cartoesPlan.find(c => c.id === l.cartao_id).nome) : esc(formasPlan[l.forma] || "—")}</td>
-          <td class="${l.tipo === "receita" ? "pos" : ""}">${l.tipo === "receita" ? "+" : "−"}${brl.format(l.valor)}</td>
+          <td class="${l.tipo === "receita" ? "pos" : ""}">${l.tipo === "receita" ? "+" : "−"}${brl.format(l.valor)}${
+            l.partes ? `<small class="var-sub parte-familia" title="${esc(l.partes.map(p => `${p.nome}: ${brl.format(p.valor)}`).join(" · "))}">${
+              minhaParte(l) != null ? `sua parte ${brl.format(minhaParte(l))}` : l.partes.map(p => `${esc(p.nome.split(" ")[0])} ${brl.format(p.valor)}`).join(" · ")}</small>` : ""}</td>
           <td>${situacao}</td>
           <td>${l.projetado || !podeEditar(l.carteira_id) ? "" : `<span><button class="link editar" data-plan-editar="${l.id}">editar</button><button class="link" data-plan-excluir="${l.id}">excluir</button>${
             l.conferido_em ? `<button class="link acao" data-desfazer-conf="${l.id}" title="Separa esta compra da linha da fatura">desfazer conferência</button>` : ""}</span>`}</td></tr>`;
@@ -389,14 +397,18 @@
     const tabelaFixas = (tipo, vazio) => {
       const lista = recs.filter(r => r.tipo === tipo);
       if (!lista.length) return `<tr><td class="dica">${vazio}</td></tr>`;
-      const total = lista.filter(ativa).reduce((s, r) => s + r.valor, 0);
+      const total = lista.filter(r => ativa(r) && !r.alheio).reduce((s, r) => s + r.valor, 0);
+      const comPartes = lista.filter(r => ativa(r) && r.partes);
+      const suaParte = comPartes.reduce((s, r) => s + (minhaParte(r) || 0), 0);
       return `<tr><th>Descrição</th>${nomesP ? `<th>${tipo === "receita" ? "Para quem" : "Quem paga"}</th>` : ""}<th>Dia</th><th>Valor</th><th>Período</th><th></th></tr>` +
-        lista.map(r => `<tr class="${ativa(r) ? "" : "desativado"}"><td><strong>${esc(r.descricao)}</strong><small class="var-sub">${esc(nomeCat(r.categoria_id))}${r.compartilhado ? (tipo === "receita" ? " · grupo familiar" : " · compartilhada") : ""}</small></td>
+        lista.map(r => `<tr class="${ativa(r) ? "" : "desativado"}"><td><strong>${esc(r.descricao)}</strong><small class="var-sub">${esc(nomeCat(r.categoria_id))}${r.compartilhado ? (tipo === "receita" ? " · grupo familiar" : " · conta da família") : ""}</small></td>
           ${nomesP ? `<td>${tipo === "receita" && r.compartilhado ? "Grupo familiar" : esc(nomePessoa(r.carteira_id))}</td>` : ""}
-          <td>${r.dia}</td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(r.valor)}</td>
+          <td>${r.dia}</td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(r.valor)}${r.partes ? `<small class="var-sub parte-familia" title="${esc(r.partes.map(p => `${p.nome}: ${brl.format(p.valor)}`).join(" · "))}">${
+            minhaParte(r) != null ? `sua parte ${brl.format(minhaParte(r))}` : r.partes.map(p => `${esc(p.nome.split(" ")[0])} ${brl.format(p.valor)}`).join(" · ")}</small>` : ""}</td>
           <td>desde ${fmtData(r.inicio + "-01").slice(3)}${r.fim ? ` até ${fmtData(r.fim + "-01").slice(3)}` : ""}</td>
           <td>${!podeEditar(r.carteira_id) ? "" : `<span>${ativa(r) ? `<button class="link editar" data-editar-rec="${r.id}">editar</button><button class="link acao" data-plan-encerrar="${r.id}">encerrar</button>` : `<span class="dica">encerrada</span> `}<button class="link" data-excluir-rec="${r.id}" title="Lançada por engano: apaga todos os meses">excluir</button></span>`}</td></tr>`).join("") +
-        `<tr class="linha-total"><td>Total por mês</td>${nomesP ? "<td></td>" : ""}<td></td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(total)}</td><td></td><td></td></tr>`;
+        `<tr class="linha-total"><td>Total por mês${lista.some(r => r.alheio) ? ` <small class="dica">(pagas por você)</small>` : ""}</td>${nomesP ? "<td></td>" : ""}<td></td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(total)}</td><td></td><td></td></tr>` +
+        (suaParte ? `<tr class="linha-total"><td>Sua parte nas contas da família</td>${nomesP ? "<td></td>" : ""}<td></td><td>${brl.format(suaParte)}</td><td></td><td></td></tr>` : "");
     };
     $("#tabela-fixas-receitas").innerHTML = tabelaFixas("receita", "Nenhuma receita fixa. Ao lançar um salário, escolha a recorrência “Mensal”.");
     $("#tabela-fixas-despesas").innerHTML = tabelaFixas("despesa", "Nenhuma conta fixa. Ao lançar aluguel, escola, internet…, escolha “Mensal”.");
@@ -1244,7 +1256,7 @@
   async function carregarFamilia() {
     atualizarSeletoresMes();
     carregarMembros().catch(e => toast(e.message, true));
-    try { dadosFam = await api(`/api/plan/familia?mes=${mesPlan}`); } catch (e) { return toast(e.message, true); }
+    try { await garantirCategorias(); dadosFam = await api(`/api/plan/familia?mes=${mesPlan}`); } catch (e) { return toast(e.message, true); }
     const f = dadosFam, t = f.totais;
     $("#fam-cards").innerHTML = [
       ["Renda da família", brl.format(t.receitas + (t.receitas_grupo || 0) + t.proventos),
@@ -1255,6 +1267,10 @@
       ["Sobra da família", `<span class="${t.sobra >= 0 ? "pos" : "neg"}">${brl.format(t.sobra)}</span>`, "renda − despesas − investido"],
     ].map(([r, v, sub]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div><small class="var-sub">${sub}</small></div>`).join("");
     const junto = f.modo === "junto";
+    $("#fam-regra").innerHTML = junto
+      ? `No modo <strong>tudo junto</strong>, as faturas de cartão de todos os logins e as contas compartilhadas entram nas despesas da família e aparecem para todos.`
+      : `Contas fixas e compras marcadas como <strong>compartilhadas</strong> entram na divisão e aparecem no login de cada membro com a parte dele.`;
+    renderItensFamilia(f);
     $("#fam-acerto").innerHTML = f.pessoas.length < 2 ? `<p class="dica">A divisão aparece quando há duas ou mais pessoas com carteira e acesso a elas.</p>` :
       `<div class="rolagem"><table class="tabela-familia"><tr><th>Pessoa</th><th>Renda</th><th>Pagou</th>${junto ? "" : "<th>Parte</th><th>Saldo</th>"}</tr>
         ${f.pessoas.map(p => `<tr><td><strong>${esc(p.nome)}</strong>${junto ? "" : `<small class="var-sub">${pct(p.peso, 0)} das contas</small>`}</td>
@@ -1276,6 +1292,28 @@
     $("#btn-fam-salvar").classList.toggle("oculto", !f.pode_configurar);
     $("#fam-dica-config").textContent = f.pode_configurar ? "" : "Só o administrador muda a forma de dividir.";
   }
+  // cada conta da família do mês e quanto fica para cada membro
+  function renderItensFamilia(f) {
+    const junto = f.modo === "junto", pessoasDiv = f.pessoas, minhas = new Set(f.minhas || []);
+    const origem = l => l.cartao_id ? "fatura do cartão" : l.recorrencia_id ? "conta fixa" : l.parcela_total ? `parcela ${l.parcela_num}/${l.parcela_total}` : "compartilhada";
+    $("#fam-itens-dica").textContent = junto
+      ? "Tudo junto: as contas saem do caixa comum, sem divisão entre vocês."
+      : `Divisão ${f.modos[f.modo]?.split(":")[0].toLowerCase() || ""}: ${pessoasDiv.map(p => `${p.nome} ${pct(p.peso, 0)}`).join(" · ")}.`;
+    if (!f.itens?.length) {
+      $("#fam-itens").innerHTML = `<tr><td class="dica">Nenhuma conta da família neste mês. Marque a despesa como “Compartilhada” ao lançar${junto ? " ou lance no cartão" : ""}.</td></tr>`;
+      return;
+    }
+    const cols = junto || pessoasDiv.length < 2 ? [] : pessoasDiv;
+    const soma = id => f.itens.reduce((s, l) => s + ((l.partes || []).find(x => x.id === id)?.valor || 0), 0);
+    $("#fam-itens").innerHTML = `<tr><th>Data</th><th>Conta</th><th>Pago por</th><th>Valor</th>${cols.map(p =>
+        `<th class="${minhas.has(p.id) ? "col-minha" : ""}">${esc(p.nome.split(" ")[0])}${minhas.has(p.id) ? " (você)" : ""}</th>`).join("")}</tr>` +
+      f.itens.map(l => `<tr><td>${fmtData(l.data)}</td><td><strong>${esc(l.descricao)}</strong><small class="var-sub">${origem(l)} · ${esc(nomeCat(l.categoria_id))}</small></td>
+        <td>${esc(l.pago_por)}</td><td>${brl.format(l.valor)}</td>
+        ${cols.map(p => `<td class="${minhas.has(p.id) ? "col-minha" : ""}">${brl.format((l.partes || []).find(x => x.id === p.id)?.valor || 0)}</td>`).join("")}</tr>`).join("") +
+      `<tr class="linha-total"><td></td><td>Total</td><td></td><td>${brl.format(f.itens.reduce((s, l) => s + l.valor, 0))}</td>${cols.map(p =>
+        `<td class="${minhas.has(p.id) ? "col-minha" : ""}">${brl.format(soma(p.id))}</td>`).join("")}</tr>`;
+  }
+
   $("#form-familia").addEventListener("change", ev => {
     if (ev.target.name === "modo") $("#fam-pesos").classList.toggle("oculto", ev.target.value !== "personalizado");
   });
