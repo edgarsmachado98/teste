@@ -29,14 +29,15 @@
   <div class="categoria">
     <h2><label style="font-size:inherit;color:inherit"><input type="checkbox" class="no-print cat" checked> {{ cat }}</label></h2>
     <table class="grade">
-      <tr><th class="no-print"></th><th>Nº</th><th>Descrição</th><th>Marca / modelo</th><th>Un.</th><th class="n">Qtd.</th><th>Preço un.</th><th>Prazo</th><th>Observações</th></tr>
+      <tr><th class="no-print"></th><th>Nº</th><th>Descrição</th><th>Marca / modelo</th><th>Un.</th><th class="n">Qtd.</th><th>Posição na planta</th><th>Preço un.</th><th>Prazo</th></tr>
       {% for i in itens %}
       <tr class="item">
         <td class="no-print"><input type="checkbox" class="sel" checked></td>
         <td class="nro"></td>
         <td>{{ i.descricao }}</td><td>{{ i.marca }}</td><td>{{ i.unidade }}</td>
         <td class="n">{{ i.quantidade | qtd }}</td>
-        <td class="branco"></td><td class="branco"></td><td class="branco"></td>
+        <td class="pos">{% if i.posicoes %}{{ i.posicoes | join(', ') }}{% endif %}</td>
+        <td class="branco"></td><td class="branco"></td>
       </tr>
       {% endfor %}
     </table>

@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS marcacoes (
 
 # Colunas acrescentadas depois da primeira versão (bancos já criados são atualizados).
 NOVAS_COLUNAS = [("empresa", "slogan"), ("empresa", "razao_social"), ("empresa", "responsavel"),
-                 ("empresa", "cidade"), ("orcamentos", "obra"), ("orcamentos", "objeto")]
+                 ("empresa", "cidade"), ("orcamentos", "obra"), ("orcamentos", "objeto"),
+                 ("marcacoes", "item_id")]
 MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
          "setembro", "outubro", "novembro", "dezembro"]
 
@@ -377,6 +378,21 @@ def create_app(data_dir=None):
     @app.route("/orcamentos/<int:oid>/cotacao")
     def cotacao(oid):
         o, secoes, _tot, _varios = carregar(oid)
+        con = db()
+        # Mapa item_id → lista de posições na planta
+        posicoes_item = {}
+        plantas_do_orc = con.execute(
+            "SELECT * FROM plantas WHERE orcamento_id = ? ORDER BY id", (oid,)).fetchall()
+        for pl in plantas_do_orc:
+            ms = con.execute(
+                "SELECT * FROM marcacoes WHERE planta_id = ? ORDER BY id",
+                (pl["id"],)).fetchall()
+            for idx, m in enumerate(ms, 1):
+                raw = m["item_id"] if "item_id" in m.keys() else None
+                iid = int(raw) if raw else None
+                if iid:
+                    posicoes_item.setdefault(iid, []).append(
+                        f"{m['rotulo'] or idx} ({pl['nome'] or 'Planta'})")
         grupos = {}
         for s in secoes:
             for i in s["itens"]:
@@ -386,8 +402,9 @@ def create_app(data_dir=None):
                 chave = (i["descricao"], i["unidade"])
                 linha = grupos.setdefault(cat, {}).setdefault(
                     chave, {"descricao": i["descricao"], "marca": i["marca"] or "",
-                            "unidade": i["unidade"], "quantidade": 0})
+                            "unidade": i["unidade"], "quantidade": 0, "posicoes": []})
                 linha["quantidade"] += i["quantidade"]
+                linha["posicoes"] += posicoes_item.get(i["id"], [])
         categorias = [(c, list(v.values())) for c, v in sorted(grupos.items())]
         return render_template("cotacao.html", o=o, categorias=categorias, emp=empresa(),
                                hoje=datetime.date.today().strftime("%d/%m/%Y"))
@@ -409,23 +426,31 @@ def create_app(data_dir=None):
 
     @app.route("/orcamentos/<int:oid>/planta")
     def planta(oid):
-        o = db().execute("SELECT * FROM orcamentos WHERE id = ?", (oid,)).fetchone()
+        con = db()
+        o = con.execute("SELECT * FROM orcamentos WHERE id = ?", (oid,)).fetchone()
         if o is None:
             abort(404)
-        plantas = db().execute(
+        plantas = con.execute(
             "SELECT * FROM plantas WHERE orcamento_id = ? ORDER BY id", (oid,)).fetchall()
         pid = request.args.get("p", type=int)
         planta_atual = None
         marcacoes = []
         if plantas:
             planta_atual = next((p for p in plantas if p["id"] == pid), plantas[0])
-            marcacoes = db().execute(
+            marcacoes = con.execute(
                 "SELECT * FROM marcacoes WHERE planta_id = ? ORDER BY id",
                 (planta_atual["id"],)).fetchall()
+        # Itens do orçamento (com qtd > 0) para vincular às marcações
+        itens_orc = con.execute(
+            "SELECT i.id, i.descricao, i.marca, s.grupo, s.nome AS secao"
+            " FROM itens i JOIN secoes s ON s.id = i.secao_id"
+            " WHERE i.orcamento_id = ? AND i.quantidade > 0"
+            " ORDER BY s.ordem, s.id, i.id", (oid,)).fetchall()
         return render_template(
             "planta.html", o=o, plantas=plantas, planta=planta_atual,
             marcacoes=[dict(m) for m in marcacoes],
-            tipos_marcacao=TIPOS_MARCACAO)
+            tipos_marcacao=TIPOS_MARCACAO,
+            itens_orc=[dict(i) for i in itens_orc])
 
     @app.route("/orcamentos/<int:oid>/planta/upload", methods=["POST"])
     def upload_planta(oid):
@@ -482,9 +507,10 @@ def create_app(data_dir=None):
             con.execute("DELETE FROM marcacoes WHERE planta_id = ?", (pid,))
             for m in dados:
                 con.execute(
-                    "INSERT INTO marcacoes (planta_id, x, y, tipo, rotulo)"
-                    " VALUES (?, ?, ?, ?, ?)",
-                    (pid, m["x"], m["y"], m["tipo"], m.get("rotulo", "")))
+                    "INSERT INTO marcacoes (planta_id, x, y, tipo, rotulo, item_id)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (pid, m["x"], m["y"], m["tipo"], m.get("rotulo", ""),
+                     int(m["item_id"]) if m.get("item_id") else None))
             con.commit()
             return jsonify({"ok": True})
         marcacoes = con.execute(

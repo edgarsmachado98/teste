@@ -65,10 +65,40 @@
   </div>
 </div>
 
+<!-- Painel de edição do marcador selecionado -->
+<div class="cartao" id="painel-sel" hidden>
+  <div class="barra" style="margin-bottom:8px">
+    <b>Marcador selecionado</b>
+    <button class="mini perigo" onclick="removerSelecionado()">Remover</button>
+  </div>
+  <div class="linha">
+    <label>Rótulo (ex.: CAM-01) <input id="sel-rotulo" maxlength="12" style="width:140px"
+           oninput="atualizarMarcador()"></label>
+    <label>Vincular a item do orçamento
+      <select id="sel-item" onchange="atualizarMarcador()">
+        <option value="">— sem vínculo —</option>
+        {% for i in itens_orc %}
+        <option value="{{ i.id }}">{{ i.grupo }} · {{ i.secao }} — {{ i.descricao }}{% if i.marca %} ({{ i.marca }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="suave">O rótulo aparece no pin e na legenda. Vincular a um item faz a posição aparecer no pedido de cotação do fornecedor.</p>
+</div>
+
+<!-- Lista de marcações -->
+<div class="cartao" id="lista-marcacoes">
+  <b>Marcações</b>
+  <table id="tabela-marcacoes" style="margin-top:8px">
+    <thead><tr><th style="width:40px">Nº</th><th>Tipo</th><th>Rótulo</th><th>Item vinculado</th><th style="width:50px"></th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
 <div class="cartao suave">
-  <b>Como usar:</b> Escolha o tipo de equipamento na barra acima e clique na planta para marcar a posição.
-  Arraste um marcador para mover. Clique com botão direito para remover.
-  Clique em <b>Salvar</b> ao terminar.
+  <b>Como usar:</b> Escolha o tipo na barra e clique na planta. Arraste para mover.
+  <b>Clique num marcador</b> para editar rótulo e vincular a um item do orçamento.
+  Botão direito remove. Clique em <b>Salvar</b> ao terminar.
 </div>
 
 <style>
@@ -88,11 +118,14 @@
 .marcador:active { cursor:grabbing; }
 .marcador .pin { width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
   justify-content:center; color:#fff; font-weight:bold; font-size:11px; border:2px solid #fff;
-  box-shadow:0 1px 4px rgba(0,0,0,.35); }
+  box-shadow:0 1px 4px rgba(0,0,0,.35); transition:box-shadow .15s; }
+.marcador.selecionado .pin { box-shadow:0 0 0 3px #1f5fa8, 0 1px 4px rgba(0,0,0,.35); }
 .marcador .rotulo-marca { position:absolute; top:30px; left:50%; transform:translateX(-50%);
   white-space:nowrap; font-size:10px; background:rgba(255,255,255,.9); padding:1px 4px;
   border-radius:3px; box-shadow:0 1px 2px rgba(0,0,0,.2); pointer-events:none; }
 .salvo { color:#16a34a; font-weight:bold; }
+#tabela-marcacoes tr.sel-row { background:#eef3fb; }
+#tabela-marcacoes tr { cursor:pointer; }
 </style>
 
 <script>
@@ -101,11 +134,16 @@ const pid = {{ planta.id }};
 const tiposCores = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ c }}"{% if not loop.last %},{% endif %}{% endfor %} };
 const tiposLetras = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ l[0] }}"{% if not loop.last %},{% endif %}{% endfor %} };
 const tiposNomes = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ l }}"{% if not loop.last %},{% endif %}{% endfor %} };
+const itensOrc = {{ itens_orc | tojson }};
+const itensMap = {};
+itensOrc.forEach(i => itensMap[i.id] = i);
 
 let marcacoes = {{ marcacoes | tojson }};
 let ferramentaAtual = "{{ tipos_marcacao[0][0] }}";
 let arrastando = null, offX = 0, offY = 0;
+let selecionado = null;
 let sujo = false;
+let moveu = false;
 
 const editor = document.getElementById('editor');
 const camada = document.getElementById('camada-marcacoes');
@@ -119,14 +157,19 @@ function selecionarFerramenta(btn) {
 
 function criarElemento(m, idx) {
   const el = document.createElement('div');
-  el.className = 'marcador';
+  el.className = 'marcador' + (idx === selecionado ? ' selecionado' : '');
   el.dataset.idx = idx;
   const cor = tiposCores[m.tipo] || '#525252';
-  el.innerHTML = `<div class="pin" style="background:${cor}">${m.rotulo || tiposLetras[m.tipo] || '?'}</div>
-    <div class="rotulo-marca">${m.rotulo || ''} ${tiposNomes[m.tipo] || m.tipo}</div>`;
+  const pinText = m.rotulo || tiposLetras[m.tipo] || '?';
+  const labelParts = [];
+  if (m.rotulo) labelParts.push(m.rotulo);
+  labelParts.push(tiposNomes[m.tipo] || m.tipo);
+  el.innerHTML = `<div class="pin" style="background:${cor}">${pinText}</div>
+    <div class="rotulo-marca">${labelParts.join(' · ')}</div>`;
   posicionar(el, m.x, m.y);
   el.addEventListener('mousedown', iniciarArrasto);
   el.addEventListener('touchstart', iniciarArrasto, {passive:false});
+  el.addEventListener('click', e => { e.stopPropagation(); if (!moveu) selecionar(idx); });
   el.addEventListener('contextmenu', e => { e.preventDefault(); remover(idx); });
   camada.appendChild(el);
 }
@@ -140,6 +183,62 @@ function renderizar() {
   camada.innerHTML = '';
   marcacoes.forEach((m, i) => criarElemento(m, i));
   document.getElementById('contagem').textContent = `— ${marcacoes.length} marcações`;
+  renderizarTabela();
+  mostrarPainel();
+}
+
+function renderizarTabela() {
+  const tbody = document.querySelector('#tabela-marcacoes tbody');
+  tbody.innerHTML = '';
+  marcacoes.forEach((m, i) => {
+    const tr = document.createElement('tr');
+    if (i === selecionado) tr.className = 'sel-row';
+    const item = m.item_id ? itensMap[m.item_id] : null;
+    const itemTxt = item ? `${item.descricao}` : '—';
+    tr.innerHTML = `<td style="text-align:center">${i+1}</td>
+      <td>${tiposNomes[m.tipo] || m.tipo}</td>
+      <td>${m.rotulo || ''}</td>
+      <td class="suave">${itemTxt}</td>
+      <td><button class="mini perigo" title="Remover">×</button></td>`;
+    tr.addEventListener('click', e => {
+      if (e.target.tagName === 'BUTTON') { remover(i); return; }
+      selecionar(i);
+    });
+    tbody.appendChild(tr);
+  });
+  document.getElementById('lista-marcacoes').hidden = marcacoes.length === 0;
+}
+
+function selecionar(idx) {
+  selecionado = (selecionado === idx) ? null : idx;
+  renderizar();
+}
+
+function mostrarPainel() {
+  const painel = document.getElementById('painel-sel');
+  if (selecionado === null || selecionado >= marcacoes.length) {
+    painel.hidden = true;
+    selecionado = null;
+    return;
+  }
+  painel.hidden = false;
+  const m = marcacoes[selecionado];
+  document.getElementById('sel-rotulo').value = m.rotulo || '';
+  document.getElementById('sel-item').value = m.item_id || '';
+}
+
+function atualizarMarcador() {
+  if (selecionado === null) return;
+  const m = marcacoes[selecionado];
+  m.rotulo = document.getElementById('sel-rotulo').value.trim();
+  m.item_id = parseInt(document.getElementById('sel-item').value) || null;
+  sujo = true;
+  renderizar();
+  atualizarBotao();
+}
+
+function removerSelecionado() {
+  if (selecionado !== null) remover(selecionado);
 }
 
 function coordenadas(e) {
@@ -154,19 +253,22 @@ function coordenadas(e) {
 
 editor.addEventListener('click', e => {
   if (arrastando !== null) return;
-  if (e.target.closest('.marcador')) return;
+  if (moveu) { moveu = false; return; }
+  if (e.target.closest('.marcador')) return; // handled by marker's own click
   const c = coordenadas(e);
-  const rotulo = '';
-  marcacoes.push({x: c.x, y: c.y, tipo: ferramentaAtual, rotulo: rotulo});
+  marcacoes.push({x: c.x, y: c.y, tipo: ferramentaAtual, rotulo: '', item_id: null});
+  selecionado = marcacoes.length - 1;
   sujo = true;
   renderizar();
   atualizarBotao();
+  document.getElementById('sel-rotulo').focus();
 });
 
 function iniciarArrasto(e) {
   e.preventDefault();
   const idx = parseInt(e.currentTarget.dataset.idx);
   arrastando = idx;
+  moveu = false;
   const c = coordenadas(e);
   offX = marcacoes[idx].x - c.x;
   offY = marcacoes[idx].y - c.y;
@@ -175,6 +277,7 @@ function iniciarArrasto(e) {
 function mover(e) {
   if (arrastando === null) return;
   e.preventDefault();
+  moveu = true;
   const c = coordenadas(e);
   marcacoes[arrastando].x = Math.max(0, Math.min(100, c.x + offX));
   marcacoes[arrastando].y = Math.max(0, Math.min(100, c.y + offY));
@@ -183,7 +286,7 @@ function mover(e) {
 }
 
 function parar(e) {
-  if (arrastando !== null) { sujo = true; atualizarBotao(); }
+  if (arrastando !== null && moveu) { sujo = true; atualizarBotao(); }
   setTimeout(() => { arrastando = null; }, 50);
 }
 
@@ -194,6 +297,8 @@ document.addEventListener('touchend', parar);
 
 function remover(idx) {
   marcacoes.splice(idx, 1);
+  if (selecionado === idx) selecionado = null;
+  else if (selecionado !== null && selecionado > idx) selecionado--;
   sujo = true;
   renderizar();
   atualizarBotao();
@@ -201,6 +306,7 @@ function remover(idx) {
 
 function desfazer() {
   if (marcacoes.length) {
+    if (selecionado === marcacoes.length - 1) selecionado = null;
     marcacoes.pop();
     sujo = true;
     renderizar();
@@ -215,7 +321,10 @@ function atualizarBotao() {
 }
 
 async function salvar() {
-  const dados = marcacoes.map(m => ({x: m.x, y: m.y, tipo: m.tipo, rotulo: m.rotulo || ''}));
+  const dados = marcacoes.map(m => ({
+    x: m.x, y: m.y, tipo: m.tipo, rotulo: m.rotulo || '',
+    item_id: m.item_id || null
+  }));
   const res = await fetch(`/orcamentos/${oid}/planta/marcacoes?p=${pid}`, {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados)
   });
