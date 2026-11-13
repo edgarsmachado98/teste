@@ -537,7 +537,10 @@ def create_app(data_dir=None):
         p = db().execute("SELECT arquivo FROM plantas WHERE id = ?", (pid,)).fetchone()
         if p is None:
             abort(404)
-        return send_file(os.path.join(plantas_dir, p["arquivo"]), max_age=0)
+        caminho = os.path.join(plantas_dir, p["arquivo"])
+        if not os.path.exists(caminho):
+            abort(404)
+        return send_file(os.path.abspath(caminho), max_age=0)
 
     @app.route("/orcamentos/<int:oid>/planta/marcacoes", methods=["GET", "POST"])
     def api_marcacoes(oid):
