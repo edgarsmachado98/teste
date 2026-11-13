@@ -6,7 +6,7 @@
         <strong class="rotulo-mes"></strong>
         <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       </div>
-      <button type="button" class="btn btn-pequeno plan-editavel" data-ir-aba="plan-lancamentos">Novo lançamento</button>
+      <button type="button" class="btn btn-pequeno plan-editavel" data-ir-aba="plan-lancamentos" data-novo-lanc="despesa">Novo lançamento</button>
     </div>
     <div id="plan-boas-vindas" class="painel plan-boas-vindas oculto">
       <h3>Comece pelo básico</h3>
@@ -16,7 +16,7 @@
         <li>No dia a dia, registre os <strong>gastos</strong>. Compras parceladas entram de uma vez, com todas as parcelas.</li>
       </ol>
       <p class="dica">Proventos e aportes da carteira já entram aqui automaticamente.</p>
-      <button type="button" class="btn plan-editavel" data-ir-aba="plan-lancamentos">Fazer o primeiro lançamento</button>
+      <button type="button" class="btn plan-editavel" data-ir-aba="plan-lancamentos" data-novo-lanc="despesa">Fazer o primeiro lançamento</button>
     </div>
     <div class="cards" id="plan-cards"></div>
     <div class="grade2">
@@ -47,6 +47,45 @@
   </section>
 
   <section id="tab-plan-lancamentos" class="tab">
+    <div class="lanc-topo">
+      <div class="seletor-mes" data-mes-nav>
+        <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <strong class="rotulo-mes"></strong>
+        <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <select id="plan-pessoa" aria-label="Membro da família" class="oculto"></select>
+      <div class="lanc-acoes plan-editavel">
+        <button type="button" class="secundario" data-abrir-gaveta="painel-nfce">Nota fiscal</button>
+        <button type="button" class="secundario" data-abrir-gaveta="painel-fatura">Importar fatura</button>
+        <button type="button" class="btn btn-receita" data-novo-lanc="receita">+ Receita</button>
+        <button type="button" class="btn btn-despesa" data-novo-lanc="despesa">− Despesa</button>
+      </div>
+    </div>
+    <div class="cards" id="plan-kpis"></div>
+    <div class="lanc-grade">
+      <div class="painel lanc-lista">
+        <div class="lanc-filtros">
+          <div class="chips" id="plan-chips">
+            <button type="button" class="ativo" data-filtro="">Todos</button><button type="button" data-filtro="receita">Receitas</button>
+            <button type="button" data-filtro="despesa">Despesas</button><button type="button" data-filtro="pendente">A pagar</button>
+            <button type="button" data-filtro="cartao">Cartão</button>
+          </div>
+          <input type="search" id="plan-busca" placeholder="Buscar lançamento…" aria-label="Buscar lançamento" autocomplete="off">
+        </div>
+        <div id="lista-plan" class="lista-plan"></div>
+        <p class="dica" id="plan-nota-modo"></p>
+      </div>
+      <div class="lanc-lado">
+        <div class="painel lado-fixas"><div class="lado-cab"><h3>Contas fixas</h3><button type="button" class="link acao" data-abrir-gaveta="plan-fixas">ver todas</button></div>
+          <div id="lado-despesas"></div></div>
+        <div class="painel lado-fixas"><div class="lado-cab"><h3>Receitas fixas</h3><button type="button" class="link acao" data-abrir-gaveta="plan-fixas">ver todas</button></div>
+          <div id="lado-receitas"></div></div>
+      </div>
+    </div>
+    <div class="menu-lanc oculto" id="menu-lanc" role="menu"></div>
+
+    <!-- abertos na janela lateral -->
+    <div id="plan-guardados" hidden>
     <div class="painel plan-editavel lanc-form" id="painel-plan-form">
       <div class="lanc-cab">
         <h3 id="plan-form-titulo">Novo lançamento</h3>
@@ -193,23 +232,7 @@
       <div id="previa-fatura"></div>
     </div>
 
-    <div class="painel">
-      <div class="cabecalho-painel">
-        <div class="seletor-mes" data-mes-nav>
-          <button type="button" class="btn-icone" data-mes-delta="-1" aria-label="Mês anterior"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
-          <strong class="rotulo-mes"></strong>
-          <button type="button" class="btn-icone" data-mes-delta="1" aria-label="Próximo mês"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
-        </div>
-        <div class="filtros-plan"><select id="plan-pessoa" aria-label="Membro da família" class="oculto"></select>
-        <select id="plan-filtro" aria-label="Filtrar lançamentos">
-          <option value="">Receitas e despesas</option><option value="receita">Só receitas</option>
-          <option value="despesa">Só despesas</option><option value="pendente">Pendentes</option>
-        </select></div>
-      </div>
-      <div class="plan-totais" id="plan-totais"></div>
-      <div class="rolagem"><table id="tabela-plan" class="tabela-plan"></table></div>
-    </div>
-
+      <div id="plan-fixas">
     <div class="fixas">
       <div class="painel">
         <h3>Receitas fixas</h3>
@@ -224,6 +247,8 @@
     </div>
     <p class="dica fixas-dica"><strong>Encerrar</strong> para de lançar a partir do próximo mês e mantém os meses já lançados.
       <strong>Excluir</strong> apaga tudo, para quando foi lançada por engano.</p>
+      </div>
+    </div>
 
     <dialog id="dialogo-plan-excluir" class="dialogo">
       <form method="dialog">

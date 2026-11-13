@@ -275,7 +275,7 @@
     renderTitulares();
     ajustarForm();
   }
-  $("#btn-plan-cancelar").addEventListener("click", limparForm);
+  $("#btn-plan-cancelar").addEventListener("click", () => { limparForm(); fecharGaveta(); });
 
   $("#form-plan").addEventListener("submit", async ev => {
     ev.preventDefault();
@@ -307,6 +307,7 @@
       const manterData = f.data.value;
       limparForm();
       if (!id) { f.data.value = manterData; atualizarResumoForm(); }
+      fecharGaveta();
       carregarLancamentos();
     } catch (e) { toast(e.message, true); }
   });
@@ -325,7 +326,7 @@
 
   async function carregarLancamentos() {
     atualizarSeletoresMes();
-    if ($("#painel-fatura").parentNode !== lugarFatura.pai) lugarFatura.pai.insertBefore($("#painel-fatura"), lugarFatura.depois);
+    if ($("#painel-fatura").closest("#cartao-importar")) $("#plan-guardados").appendChild($("#painel-fatura"));
     try {
       await garantirCategorias();
       const pessoa = $("#plan-pessoa").value;
@@ -349,49 +350,81 @@
     renderLancamentos();
   }
 
+  let filtroPlan = "";
+  const DIAS_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  const CORES_CAT = ["#e7f3ec", "#fdf0dd", "#e8eefb", "#f1e8fb", "#fbe9ec", "#e6f4f7", "#f3f1e2"];
+  function rotuloDia(iso) {
+    const d = new Date(iso + "T12:00:00"), hoje = hojeLocal();
+    const txt = `${DIAS_SEMANA[d.getDay()]}, ${d.getDate()} de ${d.toLocaleDateString("pt-BR", { month: "long" })}`;
+    return iso === hoje ? `Hoje · ${txt}` : txt;
+  }
+  const iniciaisNome = n => (n || "?").trim().split(/\s+/).filter(p => p.length > 2).slice(0, 2).map(p => p[0]).join("").toUpperCase() || (n || "?")[0].toUpperCase();
+
   function renderLancamentos() {
-    const filtro = $("#plan-filtro").value, todos = dadosLanc.lancamentos;
-    const lista = todos.filter(l => !filtro || (filtro === "pendente" ? !l.pago : l.tipo === filtro));
+    const todos = dadosLanc.lancamentos, busca = ($("#plan-busca").value || "").trim().toLowerCase();
     const nomePessoa = cid => pessoasPlan.find(p => p.id === cid)?.nome || "";
     const minhas = new Set(dadosLanc.minhas || []), junto = dadosLanc.modo_familia === "junto";
     const minhaParte = l => (l.partes || []).find(p => minhas.has(p.id))?.valor;
-    // contas da família pagas por outro membro não somam como gasto seu: entram só pela sua parte
-    const soma = t => todos.filter(l => l.tipo === t && !l.alheio).reduce((a, l) => a + l.valor, 0);
-    const rec = soma("receita"), desp = soma("despesa");
-    const parte = todos.filter(l => l.partes).reduce((a, l) => a + (minhaParte(l) || 0), 0);
-    $("#plan-totais").innerHTML = `<span>Receitas <strong class="pos">${brl.format(rec)}</strong></span>
-      <span>Despesas <strong>${brl.format(desp)}</strong></span>
-      <span>Saldo <strong class="${rec - desp >= 0 ? "pos" : "neg"}">${brl.format(rec - desp)}</strong></span>
-      ${parte ? `<span title="Soma da sua parte em todas as contas da família do mês">Sua parte nas contas da família <strong>${brl.format(parte)}</strong></span>` : ""}
-      <small class="dica">${junto ? "Tudo junto: receitas, faturas e contas de quem divide as contas aparecem juntas." : "Proventos e aportes da carteira aparecem no Resumo do mês."}</small>`;
-    const varias = pessoasPlan.length > 1 && !$("#plan-pessoa").value;
     const podeEditar = cid => pessoasPlan.some(p => p.id === cid && p.editar);
-    $("#tabela-plan").innerHTML = lista.length ? `<tr><th>Data</th><th>Descrição</th>${varias ? "<th>Titular</th>" : ""}<th>Pagamento</th><th>Valor</th><th>Situação</th><th></th></tr>` +
-      lista.map(l => {
-        const aguardando = l.tipo === "despesa" && l.cartao_id && !l.chave_import && !l.projetado;
-        const selos = [aguardando ? "aguardando fatura" : "", l.conferido_em ? "✓ conferido com a fatura" : "",
-          l.recorrencia_id ? "mensal" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
-          l.familia ? (junto ? "caixa comum" : "conta da família") : l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "compartilhada") : "",
-          l.alheio ? `pago por ${nomePessoa(l.carteira_id).split(" ")[0]}` : "", l.projetado ? "previsto" : ""]
-          .filter(Boolean).map(s => `<span class="selo">${s}</span>`).join(" ") +
-          (l.nota_id ? ` <button type="button" class="selo selo-nota" data-ver-nota="${l.nota_id}" title="Ver os itens da nota">🧾 nota fiscal</button>` : "");
-        const situacao = l.projetado ? `<span class="dica">previsto</span>`
-          : l.pago ? `<span class="pos">${l.tipo === "receita" ? "recebido" : "pago"}</span>`
-          : podeEditar(l.carteira_id) ? `<button type="button" class="link acao" data-pagar="${l.id}">marcar ${l.tipo === "receita" ? "recebido" : "pago"}</button>`
-          : `<span class="dica">${l.tipo === "receita" ? "a receber" : "a pagar"}</span>`;
-        return `<tr class="${l.projetado ? "desativado" : ""}">
-          <td>${fmtData(l.data)}</td>
-          <td><strong>${esc(l.descricao)}</strong> ${selos}<small class="var-sub">${esc(nomeCat(l.categoria_id))}${l.valor_bruto ? ` · bruto ${brl.format(l.valor_bruto)}` : ""}</small></td>
-          ${varias ? `<td>${l.tipo === "receita" && l.compartilhado ? "Grupo familiar" : esc(nomePessoa(l.carteira_id))}</td>` : ""}
-          <td>${l.cartao_id && cartoesPlan.find(c => c.id === l.cartao_id) ? esc(cartoesPlan.find(c => c.id === l.cartao_id).nome) : esc(formasPlan[l.forma] || "—")}</td>
-          <td class="${l.tipo === "receita" ? "pos" : ""}">${l.tipo === "receita" ? "+" : "−"}${brl.format(l.valor)}${
-            l.partes ? `<small class="var-sub parte-familia" title="${esc(l.partes.map(p => `${p.nome}: ${brl.format(p.valor)}`).join(" · "))}">${
-              minhaParte(l) != null ? `sua parte ${brl.format(minhaParte(l))}` : l.partes.map(p => `${esc(p.nome.split(" ")[0])} ${brl.format(p.valor)}`).join(" · ")}</small>` : ""}</td>
-          <td>${situacao}</td>
-          <td>${l.projetado || !podeEditar(l.carteira_id) ? "" : `<span><button class="link editar" data-plan-editar="${l.id}">editar</button><button class="link" data-plan-excluir="${l.id}">excluir</button>${
-            l.conferido_em ? `<button class="link acao" data-desfazer-conf="${l.id}" title="Separa esta compra da linha da fatura">desfazer conferência</button>` : ""}</span>`}</td></tr>`;
-      }).join("")
-      : `<tr><td>${todos.length ? "Nenhum lançamento com este filtro." : "Nenhum lançamento neste mês."}</td></tr>`;
+    const nomeCartao = id => cartoesPlan.find(c => c.id === id)?.nome;
+    // números do mês (contas da família pagas por outro membro entram só pela sua parte)
+    const meus = todos.filter(l => !l.alheio);
+    const recs_ = meus.filter(l => l.tipo === "receita"), desps = meus.filter(l => l.tipo === "despesa");
+    const rec = recs_.reduce((a, l) => a + l.valor, 0), desp = desps.reduce((a, l) => a + l.valor, 0);
+    const recebido = recs_.filter(l => l.pago).reduce((a, l) => a + l.valor, 0);
+    const aPagar = desps.filter(l => !l.pago).reduce((a, l) => a + l.valor, 0);
+    const parte = todos.filter(l => l.partes).reduce((a, l) => a + (minhaParte(l) || 0), 0);
+    const noCartao = desps.filter(l => l.cartao_id), qtdCartoes = new Set(noCartao.map(l => l.cartao_id)).size;
+    const saldo = rec - desp;
+    $("#plan-kpis").innerHTML = [
+      ["Receitas", `<span class="pos">${brl.format(rec)}</span>`, `${recs_.length} entrada(s)${rec ? ` · ${Math.round(recebido / rec * 100)}% recebido` : ""}`],
+      ["Despesas", brl.format(desp), `${desps.length} lançamento(s)${aPagar ? ` · ${brl.format(aPagar)} a pagar` : ""}`],
+      ["Saldo do mês", `<span class="${saldo >= 0 ? "pos" : "neg"}">${brl.format(saldo)}</span>`, rec ? `${Math.round(saldo / rec * 100)}% da renda livre${parte ? ` · sua parte na família ${brl.format(parte)}` : ""}` : "sem receitas lançadas"],
+      ["No cartão", brl.format(noCartao.reduce((a, l) => a + l.valor, 0)), qtdCartoes ? `${qtdCartoes} cartão(ões) no mês` : "nenhuma compra no crédito"],
+    ].map(([r, v, sub]) => `<div class="card"><div class="rotulo">${r}</div><div class="valor">${v}</div><small class="var-sub">${sub}</small></div>`).join("");
+    $("#plan-nota-modo").textContent = junto ? "Tudo junto: receitas, faturas e contas de quem divide as contas aparecem juntas." : "";
+
+    const lista = todos.filter(l => {
+      if (filtroPlan === "pendente" ? l.pago || l.projetado : filtroPlan === "cartao" ? !l.cartao_id : filtroPlan && l.tipo !== filtroPlan) return false;
+      if (!busca) return true;
+      return [l.descricao, nomeCat(l.categoria_id), nomePessoa(l.carteira_id), nomeCartao(l.cartao_id) || ""].join(" ").toLowerCase().includes(busca);
+    });
+    // agrupado por dia, do mais recente para o mais antigo
+    const dias = {};
+    lista.forEach(l => (dias[l.data] ||= []).push(l));
+    const coresCat = {};
+    let ci = 0;
+    $("#lista-plan").innerHTML = lista.length ? Object.keys(dias).sort().reverse().map(dia => {
+      const itens = dias[dia];
+      const totalDia = itens.filter(l => !l.alheio).reduce((a, l) => a + (l.tipo === "receita" ? l.valor : -l.valor), 0);
+      return `<div class="dia-cab"><span>${rotuloDia(dia)}</span><span class="${totalDia > 0 ? "pos" : ""}">${totalDia > 0 ? "+" : totalDia < 0 ? "−" : ""}${brl.format(Math.abs(totalDia))}</span></div>` +
+        itens.map(l => {
+          const cat = catPorId(l.categoria_id), nomeC = cat ? cat.nome : "Sem categoria";
+          const cor = coresCat[nomeC] ||= CORES_CAT[ci++ % CORES_CAT.length];
+          const aguardando = l.tipo === "despesa" && l.cartao_id && !l.chave_import && !l.projetado;
+          const selos = [l.recorrencia_id ? "mensal" : "", l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "",
+            l.familia ? (junto ? "caixa comum" : "conta da família") : l.compartilhado ? (l.tipo === "receita" ? "grupo familiar" : "compartilhada") : "",
+            aguardando ? "aguardando fatura" : "", l.conferido_em ? "✓ conferida" : "", l.projetado ? "previsto" : ""]
+            .filter(Boolean).map(x => `<span class="selo">${x}</span>`).join("");
+          const quem = l.tipo === "receita" && l.compartilhado ? "Grupo familiar" : nomePessoa(l.carteira_id);
+          const pagamento = nomeCartao(l.cartao_id) || formasPlan[l.forma] || "";
+          const situacao = l.projetado ? `<small>previsto</small>`
+            : l.pago ? (l.tipo === "receita" ? `<small>recebido</small>` : "")
+            : podeEditar(l.carteira_id) ? `<small class="neg">${l.tipo === "receita" ? "a receber" : "a pagar"} · <button type="button" class="link acao" data-pagar="${l.id}">marcar ${l.tipo === "receita" ? "recebido" : "pago"}</button></small>`
+            : `<small class="neg">${l.tipo === "receita" ? "a receber" : "a pagar"}</small>`;
+          const parteTxt = l.partes ? `<small class="parte-familia" title="${esc(l.partes.map(p => `${p.nome}: ${brl.format(p.valor)}`).join(" · "))}">${
+            minhaParte(l) != null ? `sua parte ${brl.format(minhaParte(l))}` : l.partes.map(p => `${esc(p.nome.split(" ")[0])} ${brl.format(p.valor)}`).join(" · ")}</small>` : "";
+          const menu = !l.projetado && podeEditar(l.carteira_id);
+          return `<div class="lanc-item ${l.projetado ? "desativado" : ""}">
+            <span class="lanc-ic" style="background:${cor}">${esc(nomeC[0] || "?")}</span>
+            <div class="lanc-desc-item"><strong>${esc(l.descricao)}</strong>${selos}${l.nota_id ? `<button type="button" class="selo selo-nota" data-ver-nota="${l.nota_id}" title="Ver os itens da nota">🧾 nota</button>` : ""}
+              <small>${esc(nomeC)}${pagamento ? ` · ${esc(pagamento)}` : ""}${l.valor_bruto ? ` · bruto ${brl.format(l.valor_bruto)}` : ""}</small></div>
+            <span class="lanc-quem">${pessoasPlan.length > 1 ? `<span class="av-mini">${esc(iniciaisNome(quem))}</span>${esc((quem || "").split(" ")[0])}` : ""}</span>
+            <span class="lanc-valor-item ${l.tipo === "receita" ? "pos" : ""}">${l.tipo === "receita" ? "+" : "−"}${brl.format(l.valor)}${situacao}${parteTxt}</span>
+            ${menu ? `<button type="button" class="btn-mais" data-menu-lanc="${l.id}" aria-label="Ações">⋯</button>` : `<span></span>`}
+          </div>`;
+        }).join("");
+    }).join("") : `<p class="dica lista-vazia">${todos.length ? "Nenhum lançamento com este filtro." : "Nenhum lançamento neste mês. Use + Receita ou − Despesa para começar."}</p>`;
 
     const recs = dadosLanc.recorrencias, nomesP = pessoasPlan.length > 1;
     const ativa = r => !(r.fim && r.fim < dadosLanc.mes_atual);
@@ -401,20 +434,107 @@
       const total = lista.filter(r => ativa(r) && !r.alheio).reduce((s, r) => s + r.valor, 0);
       const comPartes = lista.filter(r => ativa(r) && r.partes);
       const suaParte = comPartes.reduce((s, r) => s + (minhaParte(r) || 0), 0);
-      return `<tr><th>Descrição</th>${nomesP ? `<th>${tipo === "receita" ? "Para quem" : "Quem paga"}</th>` : ""}<th>Dia</th><th>Valor</th><th>Período</th><th></th></tr>` +
+      return `<tr><th>Descrição</th>${nomesP ? `<th class="col-quem">${tipo === "receita" ? "Para quem" : "Quem paga"}</th>` : ""}<th class="col-dia">Dia</th><th class="col-valor">Valor</th><th class="col-periodo">Período</th><th class="col-acoes"></th></tr>` +
         lista.map(r => `<tr class="${ativa(r) ? "" : "desativado"}"><td><strong>${esc(r.descricao)}</strong><small class="var-sub">${esc(nomeCat(r.categoria_id))}${r.compartilhado ? (tipo === "receita" ? " · grupo familiar" : " · conta da família") : ""}</small></td>
           ${nomesP ? `<td>${tipo === "receita" && r.compartilhado ? "Grupo familiar" : esc(nomePessoa(r.carteira_id))}</td>` : ""}
           <td>${r.dia}</td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(r.valor)}${r.partes ? `<small class="var-sub parte-familia" title="${esc(r.partes.map(p => `${p.nome}: ${brl.format(p.valor)}`).join(" · "))}">${
             minhaParte(r) != null ? `sua parte ${brl.format(minhaParte(r))}` : r.partes.map(p => `${esc(p.nome.split(" ")[0])} ${brl.format(p.valor)}`).join(" · ")}</small>` : ""}</td>
-          <td>desde ${fmtData(r.inicio + "-01").slice(3)}${r.fim ? ` até ${fmtData(r.fim + "-01").slice(3)}` : ""}</td>
+          <td class="col-periodo">desde ${fmtData(r.inicio + "-01").slice(3)}${r.fim ? ` até ${fmtData(r.fim + "-01").slice(3)}` : ""}</td>
           <td>${!podeEditar(r.carteira_id) ? "" : `<span>${ativa(r) ? `<button class="link editar" data-editar-rec="${r.id}">editar</button><button class="link acao" data-plan-encerrar="${r.id}">encerrar</button>` : `<span class="dica">encerrada</span> `}<button class="link" data-excluir-rec="${r.id}" title="Lançada por engano: apaga todos os meses">excluir</button></span>`}</td></tr>`).join("") +
-        `<tr class="linha-total"><td>Total por mês${lista.some(r => r.alheio) ? ` <small class="dica">(pagas por você)</small>` : ""}</td>${nomesP ? "<td></td>" : ""}<td></td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(total)}</td><td></td><td></td></tr>` +
-        (suaParte ? `<tr class="linha-total"><td>Sua parte nas contas da família</td>${nomesP ? "<td></td>" : ""}<td></td><td>${brl.format(suaParte)}</td><td></td><td></td></tr>` : "");
+        `<tr class="linha-total"><td>Total por mês${lista.some(r => r.alheio) ? ` <small class="dica">(pagas por você)</small>` : ""}</td>${nomesP ? "<td></td>" : ""}<td></td><td class="${tipo === "receita" ? "pos" : ""}">${brl.format(total)}</td><td class="col-periodo"></td><td></td></tr>` +
+        (suaParte ? `<tr class="linha-total"><td>Sua parte nas contas da família</td>${nomesP ? "<td></td>" : ""}<td></td><td>${brl.format(suaParte)}</td><td class="col-periodo"></td><td></td></tr>` : "");
     };
     $("#tabela-fixas-receitas").innerHTML = tabelaFixas("receita", "Nenhuma receita fixa. Ao lançar um salário, escolha a recorrência “Mensal”.");
     $("#tabela-fixas-despesas").innerHTML = tabelaFixas("despesa", "Nenhuma conta fixa. Ao lançar aluguel, escola, internet…, escolha “Mensal”.");
+    // resumo das fixas na coluna da direita
+    const lado = tipo => {
+      const ativas = recs.filter(r => r.tipo === tipo && ativa(r));
+      if (!ativas.length) return `<p class="dica">${tipo === "receita" ? "Nenhuma receita fixa. Lance o salário como “Mensal”." : "Nenhuma conta fixa. Lance aluguel, escola, internet… como “Mensal”."}</p>`;
+      const mostrar = [...ativas].sort((a, b) => b.valor - a.valor).slice(0, 6);
+      const total = ativas.filter(r => !r.alheio).reduce((a, r) => a + r.valor, 0);
+      const parteFam = ativas.filter(r => r.partes).reduce((a, r) => a + (minhaParte(r) || 0), 0);
+      return mostrar.map(r => {
+        const ocorr = dadosLanc.lancamentos.find(l => l.recorrencia_id === r.id && !l.projetado);
+        const pendente = ocorr && !ocorr.pago;
+        const quem = tipo === "receita" && r.compartilhado ? "grupo familiar" : (nomesP ? nomePessoa(r.carteira_id).split(" ")[0] : "");
+        return `<div class="fixa-linha"><span><b>${esc(r.descricao)}</b><small>dia ${r.dia}${quem ? ` · ${esc(quem)}` : ""}${pendente ? ` · <em class="neg">${tipo === "receita" ? "a receber" : "a pagar"}</em>` : ""}</small></span>
+          <span class="${tipo === "receita" ? "pos" : pendente ? "neg" : ""}">${brl.format(r.valor)}</span></div>`;
+      }).join("") + (ativas.length > mostrar.length ? `<button type="button" class="link acao mais-fixas" data-abrir-gaveta="plan-fixas">+ ${ativas.length - mostrar.length} outra(s)</button>` : "") +
+        `<div class="fixa-total"><span>Total por mês</span><span class="${tipo === "receita" ? "pos" : ""}">${brl.format(total)}</span></div>` +
+        (parteFam ? `<div class="fixa-total sub"><span>Sua parte na família</span><span>${brl.format(parteFam)}</span></div>` : "");
+    };
+    $("#lado-despesas").innerHTML = lado("despesa");
+    $("#lado-receitas").innerHTML = lado("receita");
   }
-  $("#plan-filtro").addEventListener("change", renderLancamentos);
+
+  // ---------- janela lateral (formulário, nota fiscal, fatura e fixas) ----------
+  document.body.insertAdjacentHTML("beforeend", `<div class="gaveta-veu" id="gaveta-veu" hidden></div>
+    <aside class="gaveta" id="gaveta" aria-hidden="true" role="dialog"><div class="gaveta-cab"><span id="gaveta-titulo"></span>
+      <button type="button" class="btn-icone" id="gaveta-fechar" aria-label="Fechar"><svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div class="gaveta-corpo" id="gaveta-corpo"></div></aside>`);
+  const TITULOS_GAVETA = { "painel-nfce": "", "painel-fatura": "", "plan-fixas": "Receitas e contas fixas", "painel-plan-form": "" };
+  function abrirGaveta(id) {
+    fecharGaveta(true);
+    const el = document.getElementById(id);
+    if (!el) return;
+    $("#gaveta-corpo").appendChild(el);
+    $("#gaveta-titulo").textContent = TITULOS_GAVETA[id] || "";
+    $("#gaveta").classList.add("aberta"); $("#gaveta").setAttribute("aria-hidden", "false");
+    $("#gaveta-veu").hidden = false;
+    document.body.classList.add("gaveta-aberta");
+    if (id === "painel-fatura" && cartoesPlan.length && !$("#sel-cartao-fatura").value) $("#sel-cartao-fatura").value = cartoesPlan[0].id;
+  }
+  function fecharGaveta(trocando) {
+    const el = $("#gaveta-corpo").firstElementChild;
+    if (el) $("#plan-guardados").appendChild(el);
+    if (trocando === true) return;
+    $("#gaveta").classList.remove("aberta"); $("#gaveta").setAttribute("aria-hidden", "true");
+    $("#gaveta-veu").hidden = true;
+    document.body.classList.remove("gaveta-aberta");
+  }
+  $("#gaveta-fechar").addEventListener("click", () => fecharGaveta());
+  $("#gaveta-veu").addEventListener("click", () => fecharGaveta());
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Escape" && $("#gaveta").classList.contains("aberta") && !document.querySelector("dialog[open]")) fecharGaveta();
+  });
+  document.addEventListener("click", ev => {
+    const a = ev.target.closest("[data-abrir-gaveta]");
+    if (a) { fecharMenuLanc(); abrirGaveta(a.dataset.abrirGaveta); return; }
+    const n = ev.target.closest("[data-novo-lanc]");
+    if (n) {
+      limparForm();
+      document.querySelector(`[data-plan-tipo="${n.dataset.novoLanc}"]`)?.click();
+      abrirGaveta("painel-plan-form");
+      setTimeout(() => $("#form-plan").valor.focus(), 50);
+    }
+  });
+
+  // ---------- menu "⋯" de cada lançamento ----------
+  function fecharMenuLanc() { $("#menu-lanc").classList.add("oculto"); }
+  $("#menu-lanc").addEventListener("click", ev => { if (ev.target.closest("button")) setTimeout(fecharMenuLanc, 0); });
+  document.body.appendChild($("#menu-lanc"));
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-menu-lanc]");
+    if (!b) { if (!ev.target.closest("#menu-lanc")) fecharMenuLanc(); return; }
+    const l = dadosLanc.lancamentos.find(x => x.id === +b.dataset.menuLanc), m = $("#menu-lanc");
+    m.innerHTML = `<button type="button" data-plan-editar="${l.id}">Editar</button>
+      ${!l.pago ? `<button type="button" data-pagar="${l.id}">Marcar ${l.tipo === "receita" ? "recebido" : "pago"}</button>` : ""}
+      ${l.nota_id ? `<button type="button" data-ver-nota="${l.nota_id}">Ver itens da nota</button>` : ""}
+      ${l.conferido_em ? `<button type="button" data-desfazer-conf="${l.id}">Desfazer conferência</button>` : ""}
+      <button type="button" class="perigo" data-plan-excluir="${l.id}">Excluir</button>`;
+    const r = b.getBoundingClientRect();
+    m.style.top = `${window.scrollY + r.bottom + 4}px`;
+    m.style.left = `${Math.max(8, window.scrollX + r.right - 190)}px`;
+    m.classList.remove("oculto");
+  });
+  $("#plan-chips").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-filtro]");
+    if (!b) return;
+    filtroPlan = b.dataset.filtro;
+    $("#plan-chips").querySelectorAll("[data-filtro]").forEach(x => x.classList.toggle("ativo", x === b));
+    renderLancamentos();
+  });
+  $("#plan-busca").addEventListener("input", () => renderLancamentos());
   $("#plan-pessoa").addEventListener("change", carregarLancamentos);
 
   document.addEventListener("click", async ev => {
@@ -423,7 +543,7 @@
       const rid = +er.dataset.editarRec;
       const l = dadosLanc.lancamentos.find(x => x.recorrencia_id === rid && !x.projetado);
       if (!l) return toast("Vá até um mês em que este lançamento aparece para editá-lo.", true);
-      document.querySelector(`[data-plan-editar="${l.id}"]`)?.click();
+      editarLancamento(l.id);
       $("#form-plan").atualizar_proximos.checked = true;
       return;
     }
@@ -436,8 +556,9 @@
     }
     const ed = ev.target.closest("[data-plan-editar]"), ex = ev.target.closest("[data-plan-excluir]"),
       enc = ev.target.closest("[data-plan-encerrar]");
-    if (ed) {
-      const l = dadosLanc.lancamentos.find(x => x.id === +ed.dataset.planEditar), f = $("#form-plan");
+    if (ed) editarLancamento(+ed.dataset.planEditar);
+    function editarLancamento(id) {
+      const l = dadosLanc.lancamentos.find(x => x.id === id), f = $("#form-plan");
       tipoForm = l.tipo;
       preencherCategorias(l.categoria_id);
       f.id.value = l.id; f.data.value = l.data; f.descricao.value = l.descricao; f.valor.value = fmtMoeda(l.valor);
@@ -452,7 +573,7 @@
       $("#plan-form-titulo").textContent = "Editar lançamento";
       $("#btn-plan-cancelar").classList.remove("oculto");
       ajustarForm();
-      $("#painel-plan-form").scrollIntoView({ behavior: "smooth", block: "start" });
+      abrirGaveta("painel-plan-form");
     }
     if (ex) {
       const l = dadosLanc.lancamentos.find(x => x.id === +ex.dataset.planExcluir);
@@ -716,6 +837,7 @@
           compartilhado: n.compartilhado, pagamentos: n.pagamentos, forcar: !!n.ja_lancada } });
         notasNfce.splice(k, 1);
         renderNotas();
+        if (!notasNfce.length && $("#painel-nfce").closest("#gaveta")) fecharGaveta();
         toast(`Despesa lançada: ${n.descricao}` + (r.aguardando_fatura ? " (a parte no crédito aguarda a fatura)" : "") + ".");
         carregarLancamentos();
       } catch (e) { lancar.disabled = false; toast(e.message, true); }
@@ -925,6 +1047,7 @@
       previaFatura = null;
       $("#previa-fatura").innerHTML = "";
       escolherArquivoFatura(null);
+      if ($("#painel-fatura").closest("#gaveta")) fecharGaveta();
       recarregar();
     } catch (e) { toast(e.message, true); }
   });
@@ -1351,7 +1474,6 @@
   // ================= Cartões: um item no menu por cartão, com as faturas mês a mês =================
   let cartaoAtualId = null, dadosCartao = null;
   const ICONE_CARTAO = `<svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/></svg>`;
-  const lugarFatura = { pai: $("#painel-fatura").parentNode, depois: $("#painel-fatura").nextSibling };
   document.body.appendChild($("#dialogo-cartao"));
 
   let pontosCartao = {};  // cartão -> "vermelho" (fatura vencendo) | "amarelo" (limite alto)
