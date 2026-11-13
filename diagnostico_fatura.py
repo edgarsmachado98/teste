@@ -4,14 +4,24 @@ Uso:
     python diagnostico_fatura.py "C:\\caminho\\fatura.pdf"
     python diagnostico_fatura.py "C:\\caminho\\fatura.pdf" --senha 12345
 
-Os números são mascarados (cada dígito vira 9). Antes de enviar, apague a linha com o seu nome,
-para você poder enviar o resultado sem expor valores. Copie tudo o que aparecer e envie.
+Os números são mascarados (cada dígito vira 9), para você poder enviar o resultado sem expor valores.
+O resultado também é salvo em diagnostico_fatura.txt (na pasta do sistema): apague a linha com o seu nome
+e envie esse arquivo.
 """
 import re
 import sys
 
 from carteira import fatura
 from carteira.importacao import ErroImportacao
+
+
+SAIDA = []
+_print = print
+
+
+def print(*args, **kw):  # noqa: A001 - mostra na tela e guarda para o arquivo
+    _print(*args, **kw)
+    SAIDA.append(" ".join(str(a) for a in args))
 
 
 def mascarar(texto):
@@ -60,4 +70,9 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    codigo = main()
+    if SAIDA:
+        with open("diagnostico_fatura.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(SAIDA) + "\n")
+        _print("\nResultado salvo em diagnostico_fatura.txt")
+    sys.exit(codigo)

@@ -849,7 +849,7 @@
           <td><strong>${esc(i.descricao)}</strong>
             ${i.parcela_total ? `<span class="selo">parcela ${i.parcela_num}/${i.parcela_total}</span>` : ""}
             ${SELO_TIPO[i.tipo] ? `<span class="selo">${SELO_TIPO[i.tipo]}</span>` : ""}
-            ${i.ja_importado ? `<span class="selo">já importado</span>` : ""}</td>
+            ${i.ja_importado ? `<span class="selo">já importado</span>` : ""}${i.antecipada ? `<span class="selo">antecipada</span>` : ""}${i.portador && new Set(previaFatura.itens.map(x => x.portador).filter(Boolean)).size > 1 ? `<small class="var-sub">${esc(i.portador)}${i.final ? ` · final ${esc(i.final)}` : ""}</small>` : ""}</td>
           <td class="${i.tipo === "estorno" ? "pos" : ""}">${i.tipo === "estorno" ? "+" : ""}${brl.format(i.valor)}</td>
           <td>${i.tipo === "pagamento" ? `<span class="dica">ignorado</span>` : `<select data-fatura-cat="${n}" class="${i.categoria_id ? "" : "sem-categoria"}">
               ${opcoesCategoria(i.tipo === "estorno" ? "receita" : "despesa", i.categoria_id)}</select>
@@ -868,6 +868,8 @@
 
   function situacaoFatura(i, n) {
     if (i.ja_importado) return `<span class="dica">já importada</span>`;
+    if (i.antecipar) return `<span class="sit-ok">Parcela antecipada</span><small class="var-sub">sai de ${fmtData(i.antecipar).slice(3)} e entra nesta fatura</small>`;
+    if (i.antecipada) return `<span class="dica">parcela antecipada</span>`;
     if (i.tipo === "pagamento") return "";
     const c = i.conciliacao;
     if (!c) return `<span class="dica">nova</span>`;
@@ -915,7 +917,7 @@
       const r = await api("/api/plan/fatura/confirmar", { method: "POST", body: {
         cartao_id: previaFatura.cartao_id, itens, data_modo: $("#fatura-data-modo").value,
         vencimento: $("#fatura-vencimento").value, parcelas_futuras: $("#fatura-futuras").checked } });
-      toast(`Fatura importada: ${r.lancamentos} lançamento(s) novo(s)` + (r.conferidos ? `, ${r.conferidos} conferido(s) com o que você já tinha lançado` : "") +
+      toast(`Fatura importada: ${r.lancamentos} lançamento(s) novo(s)` + (r.conferidos ? `, ${r.conferidos} conferido(s) com o que você já tinha lançado` : "") + (r.antecipadas ? `, ${r.antecipadas} parcela(s) antecipada(s) trazida(s) para este mês` : "") +
         (r.parcelas_futuras ? `, ${r.parcelas_futuras} parcela(s) futura(s)` : "") +
         (r.regras_aprendidas ? `. ${r.regras_aprendidas} categoria(s) aprendida(s) para as próximas faturas.` : "."));
       previaFatura = null;

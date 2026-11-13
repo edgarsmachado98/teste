@@ -517,9 +517,14 @@ def registrar(app, ctx):
         regras, por_nome = regras_usuario(cid), categorias_por_nome()
         chaves = {r["chave_import"] for r in conn.execute(
             "SELECT chave_import FROM fin_lancamentos WHERE carteira_id = ? AND chave_import IS NOT NULL", (cid,))}
+        datas_import = {r["chave_import"]: r["data"] for r in conn.execute(
+            "SELECT chave_import, data FROM fin_lancamentos WHERE carteira_id = ? AND chave_import IS NOT NULL", (cid,))}
         for it in itens:
             it["chave"] = fat.chave_importacao(cartao_id, it)
             it["ja_importado"] = it["chave"] in chaves
+            if it.get("antecipada") and it["ja_importado"] and datas_import.get(it["chave"], "")[:7] > it["data"][:7]:
+                # a parcela já estava lançada num mês futuro: a importação a traz para esta fatura
+                it["ja_importado"], it["antecipar"] = False, datas_import[it["chave"]]
             it["categoria_id"], it["origem_categoria"] = sugerir_categoria_item(it, regras, por_nome)
             it["categoria_sugerida"] = it["categoria_id"]
             it["marcado"] = it["tipo"] != "pagamento" and not it["ja_importado"]
@@ -572,7 +577,7 @@ def registrar(app, ctx):
         cats = categorias()
         chaves = {r["chave_import"] for r in conn.execute(
             "SELECT chave_import FROM fin_lancamentos WHERE carteira_id = ? AND chave_import IS NOT NULL", (cid,))}
-        criados, futuras_criadas, aprendidas, conferidos = 0, 0, 0, 0
+        criados, futuras_criadas, aprendidas, conferidos, antecipadas = 0, 0, 0, 0, 0
 
         def inserir(tipo, data, desc, cat, valor, chave, pago, grupo=None, num=None, total=None):
             conn.execute(
@@ -582,7 +587,8 @@ def registrar(app, ctx):
                 (cid, tipo, data, desc, cat, valor, "credito", pago, grupo, num, total, cartao_id, chave))
             chaves.add(chave)
 
-        for it in d.get("itens") or []:
+        # parcelas antecipadas por último: elas puxam para este mês a parcela futura já lançada
+        for it in sorted(d.get("itens") or [], key=lambda x: bool(isinstance(x, dict) and x.get("antecipada"))):
             try:
                 valor = round(float(it["valor"]), 2)
                 data = dt.date.fromisoformat(str(it["data"])[:10]).isoformat()
@@ -597,6 +603,15 @@ def registrar(app, ctx):
             if cat and cats[cat]["tipo"] != tipo:
                 cat = None
             chave = str(it.get("chave") or "")[:60]
+            if it.get("antecipada") and chave in chaves:
+                futura = conn.execute("SELECT id, data FROM fin_lancamentos WHERE carteira_id = ? AND chave_import = ?",
+                                      (cid, chave)).fetchone()
+                data_nova = vencimento if vencimento else data
+                if futura and futura["data"][:7] > data_nova[:7]:
+                    conn.execute("UPDATE fin_lancamentos SET data = ?, valor = ?, descricao = ? WHERE id = ?",
+                                 (data_nova, valor, str(it.get("descricao") or "")[:120] or "Parcela antecipada", futura["id"]))
+                    antecipadas += 1
+                continue
             if not chave or chave in chaves:
                 continue
             unir = it.get("acao") == "unir" and str(it.get("lancamento_id") or "").isdigit()
@@ -625,7 +640,7 @@ def registrar(app, ctx):
             inserir(tipo, data_lanc, str(it.get("descricao") or "")[:120] or "Compra no cartão", cat, valor, chave, 1,
                     grupo, num, total)
             criados += 1
-            if grupo and futuras and num and total and num < total:
+            if grupo and futuras and num and total and num < total and not it.get("antecipada"):
                 for k in range(num + 1, total + 1):
                     ch = f"p:{grupo}#{k}"
                     if ch in chaves:
@@ -649,7 +664,8 @@ def registrar(app, ctx):
                                 usos = usos + 1""", (cid, est, cat))
         conn.commit()
         return jsonify({"ok": True, "lancamentos": criados, "parcelas_futuras": futuras_criadas,
-                        "regras_aprendidas": aprendidas, "conferidos": conferidos}), 201
+                        "regras_aprendidas": aprendidas, "conferidos": conferidos,
+                        "antecipadas": antecipadas}), 201
 
     @app.post("/api/plan/lancamentos/<int:lid>/desfazer-conferencia")
     def plan_desfazer_conferencia(lid):

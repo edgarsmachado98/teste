@@ -638,3 +638,29 @@ def test_trocar_membros_de_lugar(novo_app, com_modulo):
     dono = {l["descricao"]: l["carteira_id"] for l in d["lancamentos"]}
     assert dono == {"Salario Edgar": eu["id"], "Salario Moinho": edgar}
     assert {r["descricao"]: r["carteira_id"] for r in d["recorrencias"]} == {"Salario Edgar": eu["id"]}
+
+
+def test_fatura_pdf_layout_nubank(novo_app, com_modulo):
+    from carteira import fatura as fat
+    itens = fat.ler_fatura(ler_fixture("fatura_nubank_exemplo.pdf"), "Nubank_2026-11-10.pdf")
+    por = {i["descricao"]: i for i in itens}
+    assert len(itens) == 6 and por["Supermercados"]["data"] == "2026-10-05" and por["Supermercados"]["valor"] == 512.3
+    assert por["Pagamento em 08 OUT"]["tipo"] == "pagamento"
+    assert por["Desconto Antecipação Loja Exemplo"]["tipo"] == "estorno"
+    ant = por["Antecipada - Loja Exemplo - Parcela 4/10"]
+    assert ant["antecipada"] and (ant["parcela_num"], ant["parcela_total"]) == (4, 10)
+    assert ant["base"] == por["Loja Exemplo - Parcela 3/10"]["base"]  # mesma compra parcelada
+    assert por["Farmacia Bem Estar"]["portador"] == "Beltrana de Tal" and por["Farmacia Bem Estar"]["final"] == "9876"
+    # importando: a parcela 3/10 gera as futuras e a 4/10 antecipada fica neste mês, sem duplicar
+    c = cliente_logado(novo_app(fonte))
+    cartao = c.post("/api/plan/cartoes", json={"nome": "Nubank"}).get_json()["id"]
+    r = c.post("/api/plan/fatura/previa", data={"cartao_id": cartao, "arquivo": (io.BytesIO(
+        ler_fixture("fatura_nubank_exemplo.pdf")), "Nubank.pdf")}, content_type="multipart/form-data").get_json()
+    sel = [i for i in r["itens"] if i["marcado"]]
+    ok = c.post("/api/plan/fatura/confirmar", json={"cartao_id": cartao, "itens": sel, "parcelas_futuras": True}).get_json()
+    assert ok["antecipadas"] == 1
+    loja = []
+    for m in ("2026-10", "2026-11", "2026-12"):
+        loja += [l for l in c.get(f"/api/plan/lancamentos?mes={m}").get_json()["lancamentos"] if "Loja Exemplo" in l["descricao"]
+                 and l["tipo"] == "despesa"]
+    assert sorted((l["data"][:7], l["parcela_num"]) for l in loja) == [("2026-10", 3), ("2026-10", 4), ("2026-12", 5)]  # a 4ª saiu de novembro

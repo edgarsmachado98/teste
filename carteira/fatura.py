@@ -38,7 +38,7 @@ def parcela_de(descricao):
     return None, None, d
 
 
-PAGAMENTO = ("PAGAMENTO RECEBIDO", "PAGAMENTO EFETUADO", "PAGAMENTO DE FATURA", "PAGTO", "PGTO", "PAGAMENTO FATURA",
+PAGAMENTO = ("PAGAMENTO RECEBIDO", "PAGAMENTO EM ", "PAGAMENTO EFETUADO", "PAGAMENTO DE FATURA", "PAGTO", "PGTO", "PAGAMENTO FATURA",
              "PAGAMENTO ON LINE", "PAGAMENTO ONLINE", "PAGAMENTO - OBRIGADO", "PAGAMENTO OBRIGADO", "PGTO FATURA")
 TARIFA = ("IOF", "ANUIDADE", "TARIFA", "JUROS", "ENCARGOS", "MULTA")
 
@@ -147,6 +147,23 @@ IGNORAR_PDF = ("SALDO", "TOTAL", "SUBTOTAL", "LIMITE", "PAGAMENTO MINIMO", "VALO
                "DATA DE FECHAMENTO", "PERIODO", "COTACAO DO DOLAR", "DOLAR DE CONVERSAO")
 
 
+# Layout com o mês por extenso (Nubank e outros): "05 OUT •••• 1234 Supermercados R$ 123,45" / "−R$ 9,90"
+MESES = {"JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6, "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10,
+         "NOV": 11, "DEZ": 12}
+RE_LINHA_MES = re.compile(
+    r"^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]*\.?(?:\s+(\d{4}))?\s+"
+    r"(?:[•*·∙.]{2,}\s*(\d{4})\s+)?(.+?)\s+([−–-]\s?)?(?:R\$\s*)?([−–-]\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})\s*$",
+    re.IGNORECASE)
+# Subtotal por portador do cartão (titular e adicionais): "Edgar S Machado R$ 1.234,56"
+RE_PORTADOR = re.compile(r"^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.]*){1,5})\s+R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}$")
+
+# Leitura flexível (segunda tentativa): o lançamento pode estar no meio da linha (fatura em duas colunas),
+# ter algo depois do valor (país, "BR", valor em US$ com texto) ou a data com ponto ("05.10").
+RE_ITEM_FLEX = re.compile(
+    r"(?<![\d/.])(\d{2})[/.](\d{2})(?:[/.](\d{2,4}))?\s+((?:(?!\b\d{2}[/.]\d{2}\b).)+?)\s+(-\s?)?(?:R\$\s*)?"
+    r"(\d{1,3}(?:\.\d{3})*,\d{2})(\s?-|\s?D\b|\s?C\b)?(?=\s|$)")
+
+
 def _texto_pdf(conteudo, senha=None):
     try:
         import pdfplumber
@@ -174,6 +191,9 @@ def _ano_referencia(texto):
     m = re.search(r"VENCIMENTO[^0-9]{0,40}(\d{2})/(\d{2})/(\d{4})", t)
     if m:
         return _dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    m = re.search(r"VENCIMENTO[^0-9]{0,40}(\d{1,2}) (JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]* (\d{4})", t)
+    if m:
+        return _dt.date(int(m.group(3)), MESES[m.group(2)], int(m.group(1)))
     datas = []
     for d, mth, a in re.findall(r"\b(\d{2})/(\d{2})/(\d{4})\b", t):
         try:
@@ -190,37 +210,92 @@ def ler_pdf_fatura(conteudo, senha=None):
     if not texto.strip():
         raise ErroImportacao("O PDF não tem texto (parece escaneado). Baixe a fatura em PDF pelo app ou site do banco.")
     ref = _ano_referencia(texto)
-    itens = []
+    itens = _itens_do_texto(texto, ref)
+    if not itens:  # layout diferente: tenta achar os lançamentos em qualquer ponto da linha
+        itens = _itens_do_texto(texto, ref, flexivel=True)
+    if not itens:
+        try:  # texto montado pelas palavras (alguns PDFs saem com as colunas embaralhadas)
+            itens = _itens_do_texto("\n".join(_linhas_por_palavras(conteudo, senha)), ref, flexivel=True)
+        except Exception:
+            itens = []
+    if itens and sum(1 for x in itens if x["valor_assinado"] > 0) < len(itens) / 2:
+        for x in itens:  # banco que mostra as compras com sinal negativo
+            x["valor_assinado"] = -x["valor_assinado"]
+    if not itens:
+        raise ErroImportacao("Não encontrei lançamentos neste PDF. Rode o diagnóstico da fatura "
+                             "(python diagnostico_fatura.py \"arquivo.pdf\" --senha SUA_SENHA) e envie o arquivo "
+                             "diagnostico_fatura.txt que ele cria (os números saem mascarados).")
+    return itens
+
+
+def _linhas_por_palavras(conteudo, senha=None):
+    """Remonta as linhas do PDF pela posição das palavras (topo), da esquerda para a direita."""
+    import io as _io
+    import pdfplumber
+    linhas = []
+    with pdfplumber.open(_io.BytesIO(conteudo), password=senha or "") as pdf:
+        for p in pdf.pages:
+            grupos = {}
+            for w in p.extract_words(x_tolerance=1.5, y_tolerance=2, keep_blank_chars=False):
+                grupos.setdefault(round(w["top"] / 3), []).append(w)
+            for _, ws in sorted(grupos.items()):
+                linhas.append(" ".join(w["text"] for w in sorted(ws, key=lambda w: w["x0"])))
+    return linhas
+
+
+def _itens_do_texto(texto, ref, flexivel=False):
+    import datetime as _dt
+    itens, portador = [], None
     for linha in texto.splitlines():
-        m = RE_LINHA_PDF.match(linha.strip())
-        if not m:
-            continue
-        dia, mes, ano_txt, desc, menos_antes, valor_txt, menos_depois = m.groups()[:7]
+        linha = linha.strip()
+        if not flexivel:
+            mm = RE_LINHA_MES.match(linha)
+            if mm:
+                dia, mes_txt, ano, final, desc, menos1, menos2, valor = mm.groups()
+                item = _item_pdf((dia.zfill(2), f"{MESES[mes_txt.upper()[:3]]:02d}", ano, desc, menos1 or menos2, valor, None), ref)
+                if item:
+                    item.update(final=final, portador=portador)
+                    itens.append(item)
+                continue
+            mp = RE_PORTADOR.match(linha)
+            if mp and not any(p in normalizar(mp.group(1)) for p in IGNORAR_PDF + ("FATURA", "PAGAR", "PAGAMENTO", "COMPRAS",
+                                                                                     "LANCAMENTOS", "ANTERIOR", "JUROS")):
+                portador = mp.group(1).strip()
+                continue
+        achados = list(RE_ITEM_FLEX.finditer(linha)) if flexivel else [m for m in [RE_LINHA_PDF.match(linha)] if m]
+        for m in achados:
+            item = _item_pdf(m.groups()[:7], ref)
+            if item:
+                itens.append(item)
+    return itens
+
+
+def _item_pdf(grupos, ref):
+    import datetime as _dt
+    if True:
+        dia, mes, ano_txt, desc, menos_antes, valor_txt, menos_depois = grupos
+        menos_antes = (menos_antes or "").replace("−", "-").replace("–", "-") or None
         desc_n = normalizar(desc)
         if any(desc_n.startswith(p) or f" {p} " in f" {desc_n} " for p in IGNORAR_PDF) and not \
                 any(p in desc_n for p in PAGAMENTO):
-            continue
+            return None
+        if not re.search(r"[A-Z]{2}", desc_n):  # só números/símbolos: não é uma compra
+            return None
         try:
             dia_i, mes_i = int(dia), int(mes)
             if ano_txt:
                 ano = int(ano_txt) + (2000 if len(ano_txt) == 2 else 0)
             else:  # sem ano: o do vencimento; compras de meses depois dele são do ano anterior
                 ano = ref.year if mes_i <= ref.month else ref.year - 1
-            import datetime as _dt
             data = _dt.date(ano, mes_i, dia_i).isoformat()
         except ValueError:
-            continue
+            return None
         valor = _numero(valor_txt)
-        if menos_antes or menos_depois or re.search(r"\b(CR|CREDITO)\s*$", desc_n):
+        credito = (menos_depois or "").strip() == "C"
+        if menos_antes or (menos_depois and credito or (menos_depois or "").strip() == "-") \
+                or re.search(r"\b(CR|CREDITO)\s*$", desc_n):
             valor = -valor
-        itens.append({"data": data, "descricao": desc.strip(), "valor_assinado": valor, "fitid": None})
-    if itens and sum(1 for x in itens if x["valor_assinado"] > 0) < len(itens) / 2:
-        for x in itens:  # banco que mostra as compras com sinal negativo
-            x["valor_assinado"] = -x["valor_assinado"]
-    if not itens:
-        raise ErroImportacao("Não encontrei lançamentos neste PDF. Rode o diagnóstico da fatura "
-                             "(python diagnostico_fatura.py \"arquivo.pdf\") e envie o resultado para o leitor ser ajustado.")
-    return itens
+        return {"data": data, "descricao": desc.strip(), "valor_assinado": valor, "fitid": None}
 
 
 def ler_fatura(conteudo, nome_arquivo, senha=None):
@@ -243,12 +318,17 @@ def ler_fatura(conteudo, nome_arquivo, senha=None):
     for b in brutos:
         tipo = classificar(b["descricao"], True, b["valor_assinado"])
         n, total, base = parcela_de(b["descricao"])
+        # parcela antecipada ("Antecipada - Loja - Parcela 10/12"): é a mesma parcela da compra, cobrada antes
+        antecipada = bool(re.match(r"ANTECIPAD[AO]\b", base))
+        if antecipada:
+            base = re.sub(r"^ANTECIPAD[AO]\s*-?\s*", "", base)
         chave_bruta = b["fitid"] or f"{b['data']}|{normalizar(b['descricao'])}|{abs(b['valor_assinado']):.2f}"
         vistos[chave_bruta] = vistos.get(chave_bruta, 0) + 1  # compras idênticas no mesmo dia
         itens.append({"data": b["data"], "descricao": re.sub(r"\s+", " ", b["descricao"]).strip()[:120],
                       "valor": round(abs(b["valor_assinado"]), 2), "tipo": tipo,
                       "parcela_num": n, "parcela_total": total, "base": base,
-                      "estabelecimento": chave_estabelecimento(b["descricao"]),
+                      "estabelecimento": chave_estabelecimento(re.sub(r"(?i)^antecipad[ao]\s*-?\s*", "", b["descricao"])),
+                      "antecipada": antecipada, "portador": b.get("portador"), "final": b.get("final"),
                       "id_arquivo": f"{chave_bruta}#{vistos[chave_bruta]}"})
     return itens
 
