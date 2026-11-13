@@ -168,6 +168,27 @@ GRUPO_PROVENTOS = "Investimentos"
 NOME_PROVENTOS = "Proventos dos investimentos"
 
 
+def corrigir_descricoes_bb(conn):
+    """Uma vez: limpa as compras de fatura do BB importadas por versões antigas do leitor
+    ("DIARIO CONVENIENCIAS LTSANTA MARIA BR" -> "DIARIO CONVENIENCIAS LT")."""
+    import re
+    from . import fatura
+    if conn.execute("SELECT 1 FROM fin_config WHERE chave = 'descricoes_bb_v1'").fetchone():
+        return
+    rows = conn.execute("""SELECT id, cartao_id, descricao FROM fin_lancamentos WHERE chave_import IS NOT NULL
+                           AND conferido_em IS NULL AND cartao_id IS NOT NULL
+                           AND (descricao LIKE '% BR' OR descricao LIKE '% BR R$')""").fetchall()
+    por_cartao = {}
+    for r in rows:
+        por_cartao.setdefault(r["cartao_id"], []).append(r)
+    for lista in por_cartao.values():
+        limpas = [re.sub(r"\s+BR(\s+R\$)?$", "", r["descricao"]).strip() for r in lista]
+        for r, nova in zip(lista, fatura.sem_cidade(limpas)):
+            if nova and nova != r["descricao"]:
+                conn.execute("UPDATE fin_lancamentos SET descricao = ? WHERE id = ?", (nova, r["id"]))
+    conn.execute("INSERT OR IGNORE INTO fin_config (chave, valor) VALUES ('descricoes_bb_v1', 'true')")
+
+
 def preparar(conn):
     """Cria as tabelas do módulo e as categorias padrão (idempotente)."""
     conn.executescript(ESQUEMA)
@@ -185,6 +206,7 @@ def preparar(conn):
     if "compartilhado" not in {r["name"] for r in conn.execute("PRAGMA table_info(fin_recorrencias)")}:
         conn.execute("ALTER TABLE fin_recorrencias ADD COLUMN compartilhado INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS fin_lanc_chave ON fin_lancamentos (carteira_id, chave_import)")
+    corrigir_descricoes_bb(conn)
     # categorias padrão (as que faltarem; novas versões podem trazer categorias novas)
     for tipo, grupos in CATEGORIAS_PADRAO.items():
         for g_i, (grupo, nomes) in enumerate(grupos.items()):

@@ -239,11 +239,64 @@ def ler_pdf_fatura(conteudo, senha=None):
     if itens and sum(1 for x in itens if x["valor_assinado"] > 0) < len(itens) / 2:
         for x in itens:  # banco que mostra as compras com sinal negativo
             x["valor_assinado"] = -x["valor_assinado"]
+    com_cidade = [x for x in itens if x.pop("com_cidade", False)]
+    if com_cidade:  # BB: "LOJA X SANTA MARIA" / "LOJA XSANTA MARIA" -> "LOJA X"
+        for x, nova in zip(com_cidade, sem_cidade([x["descricao"] for x in com_cidade])):
+            x["descricao"] = nova
     if not itens:
         raise ErroImportacao("Não encontrei lançamentos neste PDF. Rode o diagnóstico da fatura "
                              "(python diagnostico_fatura.py \"arquivo.pdf\" --senha SUA_SENHA) e envie o arquivo "
                              "diagnostico_fatura.txt que ele cria (os números saem mascarados).")
     return itens
+
+
+def sem_cidade(descricoes):
+    """Tira a cidade do fim das descrições (o BB imprime "LOJA <cidade> BR", às vezes colada no nome quando
+    o nome ocupa a coluna toda). A cidade é o final que se repete em várias compras: "SANTA MARIA" aparece
+    em muitas; "LANCHES SANTA MARIA" em poucas (é a loja, não a cidade)."""
+    textos = [normalizar(d) for d in descricoes]
+    candidatos = set()
+    for t in textos:
+        ws = t.split()
+        for k in (1, 2, 3):
+            if len(ws) > k:
+                candidatos.add(" ".join(ws[-k:]))
+    # quantas descrições terminam com o candidato (inclusive coladas: "LTSANTA MARIA" termina com "SANTA MARIA")
+    cont = {c: sum(1 for t in textos if t.endswith(c)) for c in candidatos}
+    cidades = []
+    for c, n in cont.items():
+        ws = c.split()
+        if n < 2 or len(c) < 5 or not re.fullmatch(r"[A-Z ]+", c) or re.search(r"\bPARC\b", c):
+            continue
+        # um final mais curto que aparece em mais compras mostra que este inclui parte do nome da loja
+        if any(cont.get(" ".join(ws[i:]), 0) > n for i in range(1, len(ws))):
+            continue
+        if len({t[:-len(c)].strip() for t in textos if t.endswith(c)}) < 2:  # uma loja só repetida: não é cidade
+            continue
+        cidades.append(c)
+    cidades.sort(key=len, reverse=True)
+    saida = []
+    for d in descricoes:
+        nova = d
+        for c in cidades:
+            if normalizar(d).endswith(c):
+                if len(d) - len(c) >= 3:
+                    nova = d[:len(d) - len(c)].rstrip(" -")
+                break
+        saida.append(nova)
+    return saida
+
+
+def chave_texto(descricao):
+    """Descrição só com letras e números, sem país no fim: para reconhecer o mesmo lançamento importado
+    com versões diferentes do leitor ("LOJA XSANTA MARIA BR" e "LOJA X")."""
+    t = re.sub(r"[^A-Z0-9]", "", normalizar(parcela_de(descricao)[2]))
+    return re.sub(r"(BR|BRR)$", "", t)
+
+
+def mesmo_texto(a, b):
+    a, b = chave_texto(a), chave_texto(b)
+    return bool(a and b) and (a.startswith(b) or b.startswith(a)) and min(len(a), len(b)) >= 5
 
 
 def _linhas_por_palavras(conteudo, senha=None):
@@ -334,9 +387,10 @@ def _item_pdf(grupos, ref):
                 or re.search(r"\b(CR|CREDITO)\s*$", desc_n):
             valor = -valor
         # tira o país e o "R$" que alguns bancos imprimem antes do valor: "LOJA X SANTA MARIA BR R$"
+        com_pais = bool(re.search(r"\s[A-Z]{2}(\s+R\$)?\s*$", desc.strip()))
         desc = re.sub(r"(\s+[A-Z]{2})?\s+R\$\s*$", "", desc.strip())
         desc = re.sub(r"\s+BR$", "", desc)
-        return {"data": data, "descricao": desc.strip(), "valor_assinado": valor, "fitid": None}
+        return {"data": data, "descricao": desc.strip(), "valor_assinado": valor, "fitid": None, "com_cidade": com_pais}
 
 
 def ler_fatura(conteudo, nome_arquivo, senha=None):

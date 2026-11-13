@@ -528,6 +528,22 @@ def registrar(app, ctx):
             it["categoria_id"], it["origem_categoria"] = sugerir_categoria_item(it, regras, por_nome)
             it["categoria_sugerida"] = it["categoria_id"]
             it["marcado"] = it["tipo"] != "pagamento" and not it["ja_importado"]
+        # já importado por uma versão anterior do leitor (descrição diferente, mesma compra): não duplica
+        existentes = db.rows(conn.execute(
+            """SELECT id, data, valor, descricao, parcela_num, parcela_total FROM fin_lancamentos
+               WHERE cartao_id = ? AND chave_import IS NOT NULL""", (cartao_id,)))
+        usados = set()
+        for it in itens:
+            if it["ja_importado"] or it.get("antecipar") or it["tipo"] == "pagamento":
+                continue
+            for e in existentes:
+                if e["id"] in usados or abs(e["valor"] - it["valor"]) > 0.005 or not fat.mesmo_texto(e["descricao"], it["descricao"]):
+                    continue
+                if (it["parcela_total"] and (e["parcela_num"], e["parcela_total"]) == (it["parcela_num"], it["parcela_total"])) \
+                        or (not it["parcela_total"] and e["data"] == it["data"]):
+                    usados.add(e["id"])
+                    it["ja_importado"], it["marcado"] = True, False
+                    break
         # conciliação: compras deste cartão lançadas à mão que ainda aguardam a fatura
         fat.conciliar(itens, compras_aguardando(cartao_id))
         for it in itens:

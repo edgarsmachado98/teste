@@ -670,18 +670,24 @@ def test_fatura_pdf_bb_com_secoes():
     from carteira import fatura as fat
     itens = fat.ler_fatura(ler_fixture("fatura_bb_secoes.pdf"), "fatura_bb.pdf")
     por = {i["descricao"]: i for i in itens}
-    assert set(por) == {"PGTO DEBITO CONTA 1234 000012345 200", "CANTINA DO BAIRRO LTD SANTA MARIA",
-                        "EMPORIO CENTRAL SANTA MARIA", "LAVANDERIA AZUL SANTA MARIA", "LOJA DE MOVEIS PARC 02/05 SANTA MARIA"}
+    assert set(por) == {"PGTO DEBITO CONTA 1234 000012345 200", "CANTINA DO BAIRRO LTD",
+                        "EMPORIO CENTRAL", "LAVANDERIA AZUL", "LOJA DE MOVEIS PARC 02/05"}
     assert por["PGTO DEBITO CONTA 1234 000012345 200"]["tipo"] == "pagamento"
-    assert por["CANTINA DO BAIRRO LTD SANTA MARIA"]["categoria_banco"] == "Restaurante"
-    assert por["LAVANDERIA AZUL SANTA MARIA"]["categoria_banco"] is None  # "Serviços" é genérico demais
-    assert por["CANTINA DO BAIRRO LTD SANTA MARIA"]["data"] == "2026-10-05"
-    assert (por["LOJA DE MOVEIS PARC 02/05 SANTA MARIA"]["parcela_num"], por["LOJA DE MOVEIS PARC 02/05 SANTA MARIA"]["parcela_total"]) == (2, 5)
+    assert por["CANTINA DO BAIRRO LTD"]["categoria_banco"] == "Restaurante"
+    assert por["LAVANDERIA AZUL"]["categoria_banco"] is None  # "Serviços" é genérico demais
+    assert por["CANTINA DO BAIRRO LTD"]["data"] == "2026-10-05"
+    assert (por["LOJA DE MOVEIS PARC 02/05"]["parcela_num"], por["LOJA DE MOVEIS PARC 02/05"]["parcela_total"]) == (2, 5)
     assert {i["portador"] for i in itens} == {"Fulano de Tal"} and {i["final"] for i in itens} == {"1234"}
     compras = sum(i["valor"] for i in itens if i["tipo"] == "compra")
     assert round(compras, 2) == 241.40  # confere com o total da fatura
     cats = {("despesa", "Restaurante"): 7, ("despesa", "Mercado"): 8}
-    assert fat.sugerir_categoria(por["CANTINA DO BAIRRO LTD SANTA MARIA"], [], cats) == (7, "banco")
+    assert fat.sugerir_categoria(por["CANTINA DO BAIRRO LTD"], [], cats) == (7, "banco")
+    # a cidade sai mesmo colada no nome (o BB corta o nome na largura da coluna)
+    assert fat.sem_cidade(["DIARIO CONVENIENCIAS LTSANTA MARIA", "LEONES MINIMERCADO LTD SANTA MARIA", "ART LANCHES SANTA MARIA",
+                           "NONO LUDOVICO PORTO ALEGRE"]) == ["DIARIO CONVENIENCIAS LT", "LEONES MINIMERCADO LTD", "ART LANCHES",
+                                                              "NONO LUDOVICO PORTO ALEGRE"]
+    assert fat.sem_cidade(["ART LANCHES SANTA MARIA", "ART LANCHES SANTA MARIA"]) == ["ART LANCHES SANTA MARIA"] * 2
+    assert fat.mesmo_texto("DIARIO CONVENIENCIAS LTSANTA MARIA BR", "DIARIO CONVENIENCIAS LT")
 
 
 def test_fatura_pdf_layout_sicredi():
@@ -693,3 +699,27 @@ def test_fatura_pdf_layout_sicredi():
     assert (por["Loja Virtual Exemplo 02/05"]["parcela_num"], por["Loja Virtual Exemplo 02/05"]["parcela_total"]) == (2, 5)
     assert {i["portador"] for i in itens} == {"Fulano Tal"} and {i["final"] for i in itens} == {"4321"}
     assert round(sum(i["valor"] for i in itens), 2) == 365.40
+
+
+def test_corrige_descricoes_antigas_do_bb_e_nao_duplica(novo_app, com_modulo):
+    app = novo_app(fonte)
+    c = cliente_logado(app)
+    cartao = c.post("/api/plan/cartoes", json={"nome": "Ourocard"}).get_json()["id"]
+    conn = app.config["conn"]
+    cid = conn.execute("SELECT carteira_id FROM fin_cartoes WHERE id = ?", (cartao,)).fetchone()[0]
+    antigas = [("2026-10-05", "CANTINA DO BAIRRO LTDSANTA MARIA BR", 45.90), ("2026-10-07", "EMPORIO CENTRAL SANTA MARIA BR", 120.50),
+               ("2026-10-08", "LAVANDERIA AZUL SANTA MARIA BR", 35.00)]
+    for i, (d, desc, v) in enumerate(antigas):  # como a versão anterior do leitor gravava
+        conn.execute("""INSERT INTO fin_lancamentos (carteira_id, tipo, data, descricao, valor, forma, pago, cartao_id, chave_import)
+                        VALUES (?, 'despesa', ?, ?, ?, 'credito', 1, ?, ?)""", (cid, d, desc, v, cartao, f"f:antiga{i}"))
+    conn.execute("DELETE FROM fin_config WHERE chave = 'descricoes_bb_v1'")
+    conn.commit()
+    plan.preparar(conn)
+    descs = {r[0] for r in conn.execute("SELECT descricao FROM fin_lancamentos WHERE cartao_id = ?", (cartao,))}
+    assert descs == {"CANTINA DO BAIRRO LTD", "EMPORIO CENTRAL", "LAVANDERIA AZUL"}
+    # importar a mesma fatura de novo não duplica o que já entrou com o nome antigo
+    r = c.post("/api/plan/fatura/previa", data={"cartao_id": cartao, "arquivo": (io.BytesIO(
+        ler_fixture("fatura_bb_secoes.pdf")), "fatura_bb.pdf")}, content_type="multipart/form-data").get_json()
+    por = {i["descricao"]: i for i in r["itens"]}
+    assert all(por[d]["ja_importado"] for d in ("CANTINA DO BAIRRO LTD", "EMPORIO CENTRAL", "LAVANDERIA AZUL"))
+    assert not por["LOJA DE MOVEIS PARC 02/05"]["ja_importado"]
