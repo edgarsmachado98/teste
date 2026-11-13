@@ -581,23 +581,47 @@ def registrar(app, ctx):
             return erro("Cartão não encontrado.", 404)
         hoje = ctx.hoje()
         faturas = faturas_do_cartao(cartao, hoje)
-        dono = next((p for p in pessoas() if p["id"] == cartao["carteira_id"]), None)
+        return jsonify({**resumo_do_cartao(cartao, faturas, hoje), "faturas": faturas,
+                        "pessoas": [{"id": p["id"], "nome": p["nome"]} for p in pessoas() if p["editar"]], "hoje": hoje})
+
+    def resumo_do_cartao(cartao, faturas, hoje, todos=None):
+        dono = next((p for p in (todos or pessoas()) if p["id"] == cartao["carteira_id"]), None)
         aberta = next((x for x in faturas if x["situacao"] == "aberta"), None)
-        proxima = sorted((x for x in faturas if x["situacao"] in ("fechada", "aberta")), key=lambda x: x["mes"])
+        a_vencer = sorted((x for x in faturas if x["situacao"] in ("fechada", "aberta")), key=lambda x: x["mes"])
         futuras = sum(x["total"] for x in faturas if x["situacao"] == "futura")
         usado = sum(x["total"] for x in faturas if x["situacao"] in ("aberta", "fechada", "futura"))
         aguardando = conn.execute("""SELECT COUNT(*) FROM fin_lancamentos WHERE cartao_id = ? AND tipo = 'despesa'
-                                     AND chave_import IS NULL AND parcela_total IS NULL""", (cartao_id,)).fetchone()[0]
-        return jsonify({"cartao": {**cartao, "dono": dono["nome"] if dono else None,
-                                   "pode_editar": bool(dono and dono["editar"]),
-                                   "dias_estimados": not cartao["dia_fechamento"] and bool(cartao["dia_vencimento"])},
-                        "faturas": faturas, "alertas": alertas_do_cartao(cartao, faturas, hoje),
-                        "resumo": {"aberta": aberta["total"] if aberta else 0.0,
-                                   "proxima": proxima[0] if proxima else None, "futuras": round(futuras, 2),
-                                   "usado": round(usado, 2),
-                                   "disponivel": round(cartao["limite"] - usado, 2) if cartao.get("limite") else None,
-                                   "aguardando": aguardando},
-                        "pessoas": [{"id": p["id"], "nome": p["nome"]} for p in pessoas() if p["editar"]], "hoje": hoje})
+                                     AND chave_import IS NULL AND parcela_total IS NULL""", (cartao["id"],)).fetchone()[0]
+        sem_itens = lambda f: {k: v for k, v in f.items() if k != "itens"} if f else None  # noqa: E731
+        return {"cartao": {**cartao, "dono": dono["nome"] if dono else None, "pode_editar": bool(dono and dono["editar"]),
+                           "dias_estimados": not cartao["dia_fechamento"] and bool(cartao["dia_vencimento"])},
+                "alertas": alertas_do_cartao(cartao, faturas, hoje),
+                "resumo": {"aberta": aberta["total"] if aberta else 0.0, "aberta_fecha": aberta["fechamento"] if aberta else None,
+                           "proxima": sem_itens(a_vencer[0]) if a_vencer else None, "futuras": round(futuras, 2),
+                           "usado": round(usado, 2),
+                           "disponivel": round(cartao["limite"] - usado, 2) if cartao.get("limite") else None,
+                           "aguardando": aguardando,
+                           "ultimas": [{"mes": x["mes"], "total": x["total"]} for x in faturas
+                                       if x["situacao"] in ("encerrada", "fechada", "aberta")][:6]}}
+
+    @app.get("/api/plan/cartoes/resumo")
+    def plan_resumo_cartoes():
+        """Visão de todos os cartões: valores de cada um, totais e avisos."""
+        hoje, todos = ctx.hoje(), pessoas()
+        cartoes = [resumo_do_cartao(c, faturas_do_cartao(c, hoje, 6), hoje, todos) for c in listar_cartoes(cids_plan())]
+        r = [c["resumo"] for c in cartoes]
+        limites = sum(c["cartao"]["limite"] or 0 for c in cartoes)
+        usado_com_limite = sum(c["resumo"]["usado"] for c in cartoes if c["cartao"]["limite"])
+        proximas = sorted((dict(c["resumo"]["proxima"], cartao=c["cartao"]["nome"], cartao_id=c["cartao"]["id"])
+                           for c in cartoes if c["resumo"]["proxima"] and c["resumo"]["proxima"]["vencimento"]
+                           and c["resumo"]["proxima"]["vencimento"] >= hoje), key=lambda x: x["vencimento"])
+        return jsonify({"cartoes": cartoes, "hoje": hoje,
+                        "totais": {"aberta": round(sum(x["aberta"] for x in r), 2),
+                                   "a_vencer": round(sum(x["proxima"]["total"] for x in r if x["proxima"]), 2),
+                                   "futuras": round(sum(x["futuras"] for x in r), 2), "limite": round(limites, 2),
+                                   "usado": round(usado_com_limite, 2), "aguardando": sum(x["aguardando"] for x in r)},
+                        "proximo_vencimento": proximas[0] if proximas else None,
+                        "pessoas": [{"id": p["id"], "nome": p["nome"]} for p in todos if p["editar"]]})
 
     @app.delete("/api/plan/cartoes/<int:cartao_id>")
     def plan_excluir_cartao(cartao_id):
