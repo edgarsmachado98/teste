@@ -133,14 +133,21 @@
         'as partes o distrato do Contrato de Representação Comercial, para que seus efeitos se operem a partir ' +
         'desta data.'],
       ['clausula', 'SEGUNDA'],
-      ['pc', 'Paga neste ato a **REPRESENTADA** ao **REPRESENTANTE**, a quantia líquida de:'],
-      ['p', `__**R$ ${c('total')} (${c('totalExtenso')}).**__`],
-      ...itens.map((t) => ['p', t]),
+      // sem valores a pagar (representante sem comissões no período): declara a inexistência em vez de "R$ 0,00"
+      ...(r.total ? [
+        ['pc', 'Paga neste ato a **REPRESENTADA** ao **REPRESENTANTE**, a quantia líquida de:'],
+        ['p', `__**R$ ${c('total')} (${c('totalExtenso')}).**__`],
+        ...itens.map((t) => ['p', t]),
+      ] : [
+        ['p', 'Declaram as partes que, por não ter havido comissões no período da representação, nada é devido pela ' +
+          '**REPRESENTADA** ao **REPRESENTANTE** a título de comissões, aviso prévio ou indenização de 1/12 (um doze avos) ' +
+          'de que trata o art. 27, "j", da Lei 4.886/65.'],
+      ]),
       ['clausula', 'TERCEIRA'],
       ['pc', 'Declarando-se plenamente satisfeitas, as partes dão-se mutuamente ampla e geral quitação no tocante a ' +
         'qualquer parcela que eventualmente pudesse ser reclamada da extinta contratualidade, para mais nada ' +
         'reclamarem, no presente ou no futuro, seja a que título for.'],
-      ['p', 'Declaram ainda, que pelo pagamento supra discriminado, ficam quitados todos os direitos da representante ' +
+      ['p', `Declaram ainda, que ${r.total ? 'pelo pagamento supra discriminado' : 'diante do disposto na cláusula segunda'}, ficam quitados todos os direitos da representante ` +
         'comercial, seus sócios ou empregados referentes a honorários, comissões de qualquer espécie e despesas de ' +
         'qualquer natureza, dando por plenamente rescindida a relação comercial entre as partes, para todos os fins ' +
         'legais e de direito, especialmente quanto à indenização de 1/12 (um doze avos) de que trata art. 27, "j", ' +

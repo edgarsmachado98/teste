@@ -123,6 +123,8 @@
     $('#dt-pagar-indenizacao').checked = d.pagarIndenizacao !== false;
     $('#dt-pagar-aviso').checked = d.pagarAviso !== false;
     $('#dt-deflacao').checked = d.desconsiderarDeflacao !== false;
+    $('#dt-sem-comissoes').checked = d.semComissoes === true;
+    mostrarTabelaMeses();
     $('#dt-profissao').value = d.profissao == null ? 'empresário' : d.profissao;
     $('#dt-estado-civil').value = d.estadoCivil || '';
     $('#dt-naturalidade').value = d.naturalidade || '';
@@ -310,6 +312,14 @@
     return lista.sort();
   }
 
+  /** Com "sem comissões no período" marcado, a tabela de meses e os botões dela ficam ocultos. */
+  function mostrarTabelaMeses() {
+    const sem = $('#dt-sem-comissoes').checked;
+    $('#dt-meses-tabela').hidden = sem;
+    $('#dt-meses-botoes').hidden = sem;
+  }
+  $('#dt-sem-comissoes').addEventListener('change', () => { mostrarTabelaMeses(); atualizar(); });
+
   function renderMeses() {
     const meses = mesesDoPeriodo();
     $('#dt-meses').innerHTML = meses.map((m) => `<tr data-mes="${m}">
@@ -391,7 +401,10 @@
       dataInicio: $('#dt-inicio').value,
       dataDistrato: $('#dt-data').value,
       dataAviso: $('#dt-data-aviso').value || $('#dt-data').value,
-      comissoes: mesesDoPeriodo().map((m) => ({ mes: m, valor: valoresMes[m] || '' })).filter((c) => String(c.valor).trim()),
+      semComissoes: $('#dt-sem-comissoes').checked,
+      // sem comissões no período: a tabela é ignorada
+      comissoes: $('#dt-sem-comissoes').checked ? []
+        : mesesDoPeriodo().map((m) => ({ mes: m, valor: valoresMes[m] || '' })).filter((c) => String(c.valor).trim()),
       pendentes: per('pend'),
       aReceber: per('rec'),
       pagarIndenizacao: $('#dt-pagar-indenizacao').checked,
@@ -517,7 +530,9 @@
     if (!d.representada) out.push({ campo: 'dt-representada', mensagem: 'Escolha a empresa representada.' });
     if (!d.dataInicio) out.push({ campo: 'dt-inicio', mensagem: 'Informe o início do contrato.' });
     if (!d.dataDistrato) out.push({ campo: 'dt-data', mensagem: 'Informe a data do distrato.' });
-    if (!r.linhas.length) out.push({ campo: 'dt-meses', mensagem: 'Informe as comissões recebidas em pelo menos um mês.' });
+    if (!r.linhas.length && !d.semComissoes) {
+      out.push({ campo: 'dt-meses', mensagem: 'Informe as comissões recebidas em pelo menos um mês ou marque “Representante sem comissões no período”.' });
+    }
     if (r.indicesFaltando.length) out.push({ campo: 'dt-faltando', mensagem: `Faltam índices do IGP-M (${r.indicesFaltando.map(K.rotuloMes).join(', ')}).` });
     if (r.foraDoPeriodo.length) {
       out.push({ campo: 'dt-meses', mensagem: `Há comissões depois da data do distrato (${r.foraDoPeriodo.map(K.rotuloMes).join(', ')}); elas não entram no cálculo. Corrija ou apague esses valores.` });
@@ -601,7 +616,7 @@
     if (!contrato) falta.push('busque o representante pelo CNPJ');
     if (!d.representada) falta.push('escolha a empresa representada');
     if (!d.dataDistrato) falta.push('informe a data do distrato');
-    if (!r.linhas.length) falta.push('informe as comissões mensais');
+    if (!r.linhas.length && !d.semComissoes) falta.push('informe as comissões mensais (ou marque “Representante sem comissões no período”)');
     if (falta.length) { App.avisar(`Para gerar a memória de cálculo, ${falta.join(', ')}.`); return null; }
     if (r.indicesFaltando.length && !(await App.confirmar(`Faltam ${r.indicesFaltando.length} mês(es) do IGP-M; a correção ficará incompleta. ` +
       'Gerar a memória mesmo assim?'))) return null;

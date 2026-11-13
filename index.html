@@ -367,11 +367,15 @@
 
           <fieldset><legend>4. Comissões recebidas por mês</legend>
             <p class="dica">Informe o valor total recebido em cada mês de vigência. Meses em branco não entram no cálculo.</p>
-            <div class="linha-botoes">
+            <label class="check dt-sem-comissoes"><input type="checkbox" id="dt-sem-comissoes">
+              <span><b>Representante sem comissões no período</b><br><small class="suave">Marque quando não houve comissões a
+                informar: o distrato é gerado sem a tabela, e o termo declara que não há valores de comissão, indenização ou
+                aviso prévio a pagar (os títulos pendentes e a receber, se houver, continuam valendo).</small></span></label>
+            <div class="linha-botoes" id="dt-meses-botoes">
               <button type="button" id="dt-colar" class="sec mini dt-so-edicao">Colar da planilha</button>
               <button type="button" id="dt-limpar-meses" class="sec mini dt-so-edicao">Limpar valores</button>
             </div>
-            <div class="dt-meses-rolagem"><table class="tabela dt-meses">
+            <div class="dt-meses-rolagem" id="dt-meses-tabela"><table class="tabela dt-meses">
               <thead><tr><th>Mês</th><th class="num">Comissão (R$)</th><th class="num">IGP-M acum.</th><th class="num">Atualizada (R$)</th></tr></thead>
               <tbody id="dt-meses"></tbody>
               <tfoot><tr><th>Total</th><th class="num" id="dt-soma-nominal"></th><th></th><th class="num" id="dt-soma-atualizada"></th></tr></tfoot>

@@ -57,6 +57,7 @@
 
   function notas(m) {
     return [
+      ...(m.linhas.length ? [] : ['Representante sem comissões no período: não há comissões a corrigir nem aviso prévio sobre comissões.']),
       `Correção pelo IGP-M (FGV) acumulado do mês de cada comissão (inclusive) até ${K.rotuloMes(m.ultimoIndice)}, ` +
         'mês anterior ao do distrato.' + (m.desconsiderarDeflacao ? ' Quando o acumulado é negativo, mantém-se o valor original (fator 1).' : ''),
       'Indenização: 1/12 do total das comissões atualizadas, das comissões a receber e das comissões sobre títulos pendentes ' +

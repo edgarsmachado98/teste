@@ -347,3 +347,18 @@ test('contrato: observações ficam só no cadastro', () => {
   assert.ok(!texto.includes('Prefere contato'));
   assert.throws(() => s.salvarContrato(A, { ...CONTRATO, id: c.id, estados: 'SP', observacoes: 'x'.repeat(4001) }), /4000/);
 });
+
+test('distrato sem comissões no período: salva, calcula zero e o termo declara que nada é devido', () => {
+  const db = abrirBanco(':memory:');
+  const s = criarServico(db, { paramsHash: { N: 1024, r: 8, p: 1 } });
+  const A = { id: 'a', login: 'adm', perfil: 'admin' };
+  const c = s.salvarContrato(A, { ...CONTRATO, estados: 'SP' });
+  const d = s.salvarDistrato(A, { contratoId: c.id, representada: 'cia', dataInicio: '2023-03-08', dataDistrato: '2026-02-11',
+    semComissoes: true, comissoes: [{ mes: '2025-10', valor: 999 }] });
+  assert.strictEqual(d.semComissoes, true);
+  assert.deepStrictEqual(d.comissoes, []); // a tabela é ignorada
+  assert.strictEqual(d.resultado.total, 0);
+  const termo = JSON.stringify(M.montar(c, d, d.resultado)[0].blocos);
+  assert.match(termo, /nada é devido pela \*\*REPRESENTADA\*\*/);
+  assert.doesNotMatch(termo, /quantia líquida/);
+});

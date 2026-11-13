@@ -1132,7 +1132,8 @@ function criarServico(db, opcoes = {}) {
     if (dataInicio > dataDistrato) falhar(400, 'A data do distrato deve ser posterior ao início do contrato.');
     if (!Array.isArray(d.comissoes) || d.comissoes.length > 600) falhar(400, 'Lista de comissões inválida.');
     const comissoes = [];
-    for (const c of d.comissoes) {
+    // sem comissões no período: a lista enviada é ignorada
+    for (const c of d.semComissoes === true ? [] : d.comissoes) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(c && c.mes))) falhar(400, 'Mês de comissão inválido.');
       const v = K.lerValor(c.valor);
       if (v == null) continue;
@@ -1153,6 +1154,7 @@ function criarServico(db, opcoes = {}) {
         pendentes: periodoValido(d.pendentes, 'Comissões sobre títulos pendentes'),
         pagarAviso: d.pagarAviso !== false, pagarIndenizacao: d.pagarIndenizacao !== false,
         desconsiderarDeflacao: d.desconsiderarDeflacao !== false,
+        semComissoes: d.semComissoes === true,
         profissao: t(d.profissao, 60), estadoCivil: t(d.estadoCivil, 120), naturalidade: t(d.naturalidade, 80),
         documentos: docs.length ? docs : ['distrato', 'aviso'],
         simples: normalizarSimples(d.simples),
