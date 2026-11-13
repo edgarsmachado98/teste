@@ -513,8 +513,30 @@ def create_app(data_dir=None):
         pid = con.execute(
             "INSERT INTO plantas (orcamento_id, nome, arquivo) VALUES (?, ?, '')",
             (oid, nome)).lastrowid
-        arquivo = f"{pid}{ext}"
-        arq.save(os.path.join(plantas_dir, arquivo))
+        if ext == ".pdf":
+            try:
+                import fitz
+                tmp = os.path.join(plantas_dir, f"{pid}_tmp.pdf")
+                arq.save(tmp)
+                doc = fitz.open(tmp)
+                page = doc[0]
+                pix = page.get_pixmap(dpi=200)
+                arquivo = f"{pid}.png"
+                pix.save(os.path.join(plantas_dir, arquivo))
+                doc.close()
+                os.remove(tmp)
+            except ImportError:
+                from PIL import Image
+                tmp = os.path.join(plantas_dir, f"{pid}_tmp.pdf")
+                arq.save(tmp)
+                img = Image.open(tmp)
+                arquivo = f"{pid}.png"
+                img.save(os.path.join(plantas_dir, arquivo), "PNG")
+                img.close()
+                os.remove(tmp)
+        else:
+            arquivo = f"{pid}{ext}"
+            arq.save(os.path.join(plantas_dir, arquivo))
         con.execute("UPDATE plantas SET arquivo = ? WHERE id = ?", (arquivo, pid))
         con.commit()
         return redirect(url_for("planta", oid=oid, p=pid))

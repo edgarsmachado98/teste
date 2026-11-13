@@ -16,7 +16,7 @@
 <div class="cartao">
   <form method="post" action="{{ url_for('upload_planta', oid=o.id) }}" enctype="multipart/form-data" class="linha">
     <label>Nome da planta <input name="nome" placeholder="Ex.: Térreo — Pavilhão A"></label>
-    <label>Arquivo (imagem) <input type="file" name="arquivo" accept="image/*" required></label>
+    <label>Arquivo (imagem ou PDF) <input type="file" name="arquivo" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" required></label>
     <button>Enviar planta</button>
   </form>
 </div>
