@@ -164,7 +164,13 @@ CATEGORIAS_BANCO = {"RESTAURANTES": "Restaurante", "RESTAURANTE": "Restaurante",
                     "ASSINATURAS": "Streaming / assinaturas", "TRANSPORTE": "Aplicativo / táxi", "BELEZA": "Beleza / cuidados"}
 SECOES_SEM_CATEGORIA = {"PAGAMENTOS/CREDITOS", "PAGAMENTOS / CREDITOS", "COMPRAS PARCELADAS", "SERVICOS", "OUTROS",
                         "OUTROS LANCAMENTOS", "DIVERSOS", "ENCARGOS", "TARIFAS"}
-RE_PORTADOR_BB = re.compile(r"^(.+?)\s*\(Cart[ãa]o\s*(?:final\s*)?(\d{4})\)\s*$", re.IGNORECASE)
+RE_PORTADOR_BB = re.compile(r"^(?:Cart[ãa]o\s+)?(.+?)\s*\((?:Cart[ãa]o\s*)?(?:final\s*)?(\d{4})\)\s*$", re.IGNORECASE)
+# Sicredi: "05/out 14:32 Santa Maria Presencial Loja X R$ 99,90" (cidade e tipo de compra antes da loja;
+# compras no exterior trazem o valor em dólar e a cotação antes do valor em reais)
+RE_LINHA_DIA_MES = re.compile(
+    r"^(\d{1,2})/(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?(?:/(\d{2,4}))?\s+(?:\d{1,2}:\d{2}\s+)?(.+?)\s+"
+    r"([−–-]\s?)?R\$\s*([−–-]\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})\s*$", re.IGNORECASE)
+TIPOS_COMPRA = r"(?:Presencial|Online|On-line|Internet|Digital|Contactless|Aproxima[çc][ãa]o|Carteira digital|Recorrente|Assinatura|Telefone)"
 
 # Subtotal por portador do cartão (titular e adicionais): "Edgar S Machado R$ 1.234,56"
 RE_PORTADOR = re.compile(r"^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.]*){1,5})\s+R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}$")
@@ -269,6 +275,17 @@ def _itens_do_texto(texto, ref, flexivel=False):
             portador, final_bb, secao = mb.group(1).strip(), mb.group(2), None
             continue
         if not flexivel:
+            md = RE_LINHA_DIA_MES.match(linha)
+            if md:
+                dia, mes_txt, ano, desc, menos1, menos2, valor = md.groups()
+                # tira cidade + tipo de compra do começo e o valor em dólar/cotação do fim
+                desc = re.sub(rf"^.*?\b{TIPOS_COMPRA}\s+", "", desc, count=1, flags=re.IGNORECASE)
+                desc = re.sub(r"(\s+-?\d{1,3}(?:\.\d{3})*,\d{2,4}){1,2}$", "", desc)
+                item = _item_pdf((dia.zfill(2), f"{MESES[mes_txt.upper()[:3]]:02d}", ano, desc, menos1 or menos2, valor, None), ref)
+                if item:
+                    item.update(portador=portador, final=final_bb, categoria_banco=secao)
+                    itens.append(item)
+                continue
             mm = RE_LINHA_MES.match(linha)
             if mm:
                 dia, mes_txt, ano, final, desc, menos1, menos2, valor = mm.groups()

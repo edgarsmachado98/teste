@@ -197,6 +197,7 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
   Lê também o layout com o mês por extenso (ex.: Nubank, "05 OUT •••• 1234 Loja R$ 99,90"), com portador e
   final do cartão, pagamentos e créditos ("−R$"), e parcelas antecipadas: a parcela que já estava lançada num
   mês futuro é trazida para a fatura em que foi cobrada, sem duplicar.
+  Layouts testados com faturas reais: Ourocard (BB), Nubank e Sicredi ("05/out 14:32 Cidade Presencial Loja R$ 99,90").
 - **Nota fiscal pela foto (NFC-e):** fotografe o QR Code do cupom (ou cole o link / a chave de acesso).
   O QR Code é lido no próprio celular (BarcodeDetector ou jsQR) e, se não der, no servidor (zxing-cpp).
   O sistema consulta a página pública da nota no portal da Sefaz do estado (somente endereços *.gov.br) e

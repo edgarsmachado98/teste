@@ -682,3 +682,14 @@ def test_fatura_pdf_bb_com_secoes():
     assert round(compras, 2) == 241.40  # confere com o total da fatura
     cats = {("despesa", "Restaurante"): 7, ("despesa", "Mercado"): 8}
     assert fat.sugerir_categoria(por["CANTINA DO BAIRRO LTD SANTA MARIA"], [], cats) == (7, "banco")
+
+
+def test_fatura_pdf_layout_sicredi():
+    from carteira import fatura as fat
+    itens = fat.ler_fatura(ler_fixture("fatura_sicredi_exemplo.pdf"), "Fatura_2026-11_Sicredi.pdf")
+    por = {i["descricao"]: i for i in itens}
+    assert set(por) == {"Padaria Pao Quente", "Loja Virtual Exemplo 02/05", "Servico Nuvem", "Mercado Bom Dia"}
+    assert por["Padaria Pao Quente"]["data"] == "2026-10-03" and por["Servico Nuvem"]["valor"] == 56.0  # valor em reais
+    assert (por["Loja Virtual Exemplo 02/05"]["parcela_num"], por["Loja Virtual Exemplo 02/05"]["parcela_total"]) == (2, 5)
+    assert {i["portador"] for i in itens} == {"Fulano Tal"} and {i["final"] for i in itens} == {"4321"}
+    assert round(sum(i["valor"] for i in itens), 2) == 365.40
