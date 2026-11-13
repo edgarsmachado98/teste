@@ -37,9 +37,15 @@
       <b>{{ planta.nome or 'Planta' }}</b>
       <span class="suave" id="contagem"></span>
     </div>
-    <div>
+    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
       <button class="sec mini" id="btn-salvar" onclick="salvar()">Salvar marcações</button>
       <button class="sec mini" onclick="desfazer()">Desfazer última</button>
+      <span style="border-left:1px solid var(--borda);height:20px;margin:0 4px"></span>
+      <button class="sec mini" onclick="zoomIn()" title="Zoom +">🔍+</button>
+      <button class="sec mini" onclick="zoomOut()" title="Zoom −">🔍−</button>
+      <button class="sec mini" onclick="zoomFit()" title="Ajustar à tela">Ajustar</button>
+      <span id="zoom-label" class="suave" style="font-size:12px;min-width:40px"></span>
+      <span style="border-left:1px solid var(--borda);height:20px;margin:0 4px"></span>
       <form method="post" action="{{ url_for('excluir_planta', oid=o.id, pid=planta.id) }}"
             style="display:inline" onsubmit="return confirm('Excluir esta planta e todas as marcações?')">
         <button class="mini perigo">Excluir planta</button>
@@ -58,10 +64,12 @@
     {% endfor %}
   </div>
 
-  <div class="editor-container" id="editor">
-    <img src="{{ url_for('imagem_planta', pid=planta.id) }}" id="img-planta" draggable="false"
-         alt="{{ planta.nome }}">
-    <div id="camada-marcacoes"></div>
+  <div class="editor-viewport" id="viewport">
+    <div class="editor-container" id="editor">
+      <img src="{{ url_for('imagem_planta', pid=planta.id) }}" id="img-planta" draggable="false"
+           alt="{{ planta.nome }}">
+      <div id="camada-marcacoes"></div>
+    </div>
   </div>
 </div>
 
@@ -72,7 +80,7 @@
     <button class="mini perigo" onclick="removerSelecionado()">Remover</button>
   </div>
   <div class="linha">
-    <label>Rótulo (ex.: CAM-01) <input id="sel-rotulo" maxlength="12" style="width:140px"
+    <label>Rótulo <input id="sel-rotulo" maxlength="12" style="width:140px"
            oninput="atualizarMarcador()"></label>
     <label>Vincular a item do orçamento
       <select id="sel-item" onchange="atualizarMarcador()">
@@ -98,7 +106,7 @@
 <div class="cartao suave">
   <b>Como usar:</b> Escolha o tipo na barra e clique na planta. Arraste para mover.
   <b>Clique num marcador</b> para editar rótulo e vincular a um item do orçamento.
-  Botão direito remove. Clique em <b>Salvar</b> ao terminar.
+  Botão direito remove. Use <b>Ctrl+scroll</b> ou os botões de zoom para ampliar. Clique em <b>Salvar</b> ao terminar.
 </div>
 
 <style>
@@ -109,12 +117,14 @@
 .ferramenta small { color:var(--suave); }
 .icone-marca { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
   border-radius:50%; background:var(--cor); color:#fff; font-weight:bold; font-size:11px; flex-shrink:0; }
-.editor-container { position:relative; overflow:auto; background:#f0f0f0; border:1px solid var(--borda);
-  cursor:crosshair; max-height:80vh; }
-.editor-container img { display:block; max-width:100%; user-select:none; -webkit-user-drag:none; }
+.editor-viewport { overflow:auto; background:#e8e8e8; border:1px solid var(--borda);
+  max-height:80vh; position:relative; }
+.editor-container { position:relative; cursor:crosshair; transform-origin:0 0;
+  display:inline-block; min-width:100%; }
+.editor-container img { display:block; width:100%; user-select:none; -webkit-user-drag:none; }
 #camada-marcacoes { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
 .marcador { position:absolute; transform:translate(-50%,-50%); pointer-events:all; cursor:grab;
-  user-select:none; z-index:2; }
+  user-select:none; z-index:2; touch-action:none; }
 .marcador:active { cursor:grabbing; }
 .marcador .pin { width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
   justify-content:center; color:#fff; font-weight:bold; font-size:11px; border:2px solid #fff;
@@ -134,6 +144,11 @@ const pid = {{ planta.id }};
 const tiposCores = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ c }}"{% if not loop.last %},{% endif %}{% endfor %} };
 const tiposLetras = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ l[0] }}"{% if not loop.last %},{% endif %}{% endfor %} };
 const tiposNomes = { {% for t, l, c in tipos_marcacao %}"{{ t }}":"{{ l }}"{% if not loop.last %},{% endif %}{% endfor %} };
+const tiposPrefixo = {
+  {% for t, l, c in tipos_marcacao %}
+  "{{ t }}":"{{ l[:3].upper() }}"{% if not loop.last %},{% endif %}
+  {% endfor %}
+};
 const itensOrc = {{ itens_orc | tojson }};
 const itensMap = {};
 itensOrc.forEach(i => itensMap[i.id] = i);
@@ -145,9 +160,46 @@ let selecionado = null;
 let sujo = false;
 let moveu = false;
 
+// Zoom
+let escala = 1;
+const ZOOM_MIN = 0.5, ZOOM_MAX = 5, ZOOM_STEP = 0.25;
+
+const viewport = document.getElementById('viewport');
 const editor = document.getElementById('editor');
 const camada = document.getElementById('camada-marcacoes');
 const img = document.getElementById('img-planta');
+
+function aplicarZoom() {
+  editor.style.transform = `scale(${escala})`;
+  editor.style.width = (100 / escala) + '%';
+  document.getElementById('zoom-label').textContent = Math.round(escala * 100) + '%';
+}
+
+function zoomIn() { escala = Math.min(ZOOM_MAX, escala + ZOOM_STEP); aplicarZoom(); }
+function zoomOut() { escala = Math.max(ZOOM_MIN, escala - ZOOM_STEP); aplicarZoom(); }
+function zoomFit() { escala = 1; aplicarZoom(); }
+
+viewport.addEventListener('wheel', e => {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    if (e.deltaY < 0) zoomIn(); else zoomOut();
+  }
+}, {passive: false});
+
+aplicarZoom();
+
+// Auto-increment: conta quantos marcadores existem com dado prefixo e gera o próximo
+function proximoRotulo(tipo) {
+  const prefixo = tiposPrefixo[tipo] || tipo.slice(0, 3).toUpperCase();
+  let max = 0;
+  const re = new RegExp('^' + prefixo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s-]*(\\d+)$', 'i');
+  marcacoes.forEach(m => {
+    const match = m.rotulo.match(re);
+    if (match) max = Math.max(max, parseInt(match[1]));
+  });
+  const num = String(max + 1).padStart(2, '0');
+  return prefixo + num;
+}
 
 function selecionarFerramenta(btn) {
   document.querySelectorAll('.ferramenta').forEach(b => b.classList.remove('ativa'));
@@ -167,8 +219,7 @@ function criarElemento(m, idx) {
   el.innerHTML = `<div class="pin" style="background:${cor}">${pinText}</div>
     <div class="rotulo-marca">${labelParts.join(' · ')}</div>`;
   posicionar(el, m.x, m.y);
-  el.addEventListener('mousedown', iniciarArrasto);
-  el.addEventListener('touchstart', iniciarArrasto, {passive:false});
+  el.addEventListener('pointerdown', iniciarArrasto);
   el.addEventListener('click', e => { e.stopPropagation(); if (!moveu) selecionar(idx); });
   el.addEventListener('contextmenu', e => { e.preventDefault(); remover(idx); });
   camada.appendChild(el);
@@ -243,20 +294,22 @@ function removerSelecionado() {
 
 function coordenadas(e) {
   const rect = img.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const clientX = e.clientX !== undefined ? e.clientX : (e.touches ? e.touches[0].clientX : 0);
+  const clientY = e.clientY !== undefined ? e.clientY : (e.touches ? e.touches[0].clientY : 0);
   return {
     x: Math.max(0, Math.min(100, (clientX - rect.left) / rect.width * 100)),
     y: Math.max(0, Math.min(100, (clientY - rect.top) / rect.height * 100))
   };
 }
 
+// Adicionar marcador ao clicar no editor
 editor.addEventListener('click', e => {
   if (arrastando !== null) return;
   if (moveu) { moveu = false; return; }
-  if (e.target.closest('.marcador')) return; // handled by marker's own click
+  if (e.target.closest('.marcador')) return;
   const c = coordenadas(e);
-  marcacoes.push({x: c.x, y: c.y, tipo: ferramentaAtual, rotulo: '', item_id: null});
+  const rotulo = proximoRotulo(ferramentaAtual);
+  marcacoes.push({x: c.x, y: c.y, tipo: ferramentaAtual, rotulo: rotulo, item_id: null});
   selecionado = marcacoes.length - 1;
   sujo = true;
   renderizar();
@@ -264,36 +317,49 @@ editor.addEventListener('click', e => {
   document.getElementById('sel-rotulo').focus();
 });
 
+// Arrastar com Pointer Events (muito mais fluido que mouse+touch separados)
+let rafId = null;
+
 function iniciarArrasto(e) {
   e.preventDefault();
-  const idx = parseInt(e.currentTarget.dataset.idx);
+  e.stopPropagation();
+  const el = e.currentTarget;
+  const idx = parseInt(el.dataset.idx);
   arrastando = idx;
   moveu = false;
+  el.setPointerCapture(e.pointerId);
   const c = coordenadas(e);
   offX = marcacoes[idx].x - c.x;
   offY = marcacoes[idx].y - c.y;
-}
 
-function mover(e) {
-  if (arrastando === null) return;
-  e.preventDefault();
-  moveu = true;
-  const c = coordenadas(e);
-  marcacoes[arrastando].x = Math.max(0, Math.min(100, c.x + offX));
-  marcacoes[arrastando].y = Math.max(0, Math.min(100, c.y + offY));
-  const el = camada.querySelector(`[data-idx="${arrastando}"]`);
-  if (el) posicionar(el, marcacoes[arrastando].x, marcacoes[arrastando].y);
-}
+  const moverPtr = ev => {
+    if (arrastando === null) return;
+    ev.preventDefault();
+    moveu = true;
+    const cc = coordenadas(ev);
+    marcacoes[arrastando].x = Math.max(0, Math.min(100, cc.x + offX));
+    marcacoes[arrastando].y = Math.max(0, Math.min(100, cc.y + offY));
+    if (!rafId) {
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const mel = camada.querySelector(`[data-idx="${arrastando}"]`);
+        if (mel) posicionar(mel, marcacoes[arrastando].x, marcacoes[arrastando].y);
+      });
+    }
+  };
 
-function parar(e) {
-  if (arrastando !== null && moveu) { sujo = true; atualizarBotao(); }
-  setTimeout(() => { arrastando = null; }, 50);
-}
+  const pararPtr = ev => {
+    el.removeEventListener('pointermove', moverPtr);
+    el.removeEventListener('pointerup', pararPtr);
+    el.removeEventListener('pointercancel', pararPtr);
+    if (arrastando !== null && moveu) { sujo = true; atualizarBotao(); }
+    setTimeout(() => { arrastando = null; }, 20);
+  };
 
-document.addEventListener('mousemove', mover);
-document.addEventListener('mouseup', parar);
-document.addEventListener('touchmove', mover, {passive:false});
-document.addEventListener('touchend', parar);
+  el.addEventListener('pointermove', moverPtr);
+  el.addEventListener('pointerup', pararPtr);
+  el.addEventListener('pointercancel', pararPtr);
+}
 
 function remover(idx) {
   marcacoes.splice(idx, 1);
