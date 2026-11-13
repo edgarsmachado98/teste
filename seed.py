@@ -4,11 +4,15 @@ Os itens entram no catálogo com custo zero; os preços são preenchidos pelo us
 """
 
 EMPRESA = {
-    "nome": "Minha Empresa",
-    "apresentacao": (
-        "Somos especializados em infraestrutura de rede, segurança eletrônica "
-        "e equipamentos de TI. Edite este texto em Empresa."
-    ),
+    "nome": "Deltacompy",
+    "slogan": "Soluções Tecnológicas",
+    "razao_social": "",
+    "responsavel": "",
+    "cidade": "Santa Maria/RS",
+    "telefone": "(55) 3214-1188",
+    "email": "deltacompy@deltacompy.com.br",
+    "endereco": "Rua Pinto Bandeira, 195 – Sala 02 – Bairro Dores – Santa Maria/RS",
+    "apresentacao": "",
     "pagamento": "A combinar.",
     "prazo": "A combinar após aprovação.",
     "garantia": "Equipamentos: garantia do fabricante. Serviços: 90 dias.",
