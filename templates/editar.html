@@ -3,15 +3,25 @@
 {% block conteudo %}
 <form id="fm" method="post"></form>
 <div class="barra">
-  <h1>Orçamento {{ o.numero }} <span class="status {{ o.status }}">{{ o.status }}</span></h1>
   <div>
-    <button form="fm">Salvar</button>
-    <a class="botao sec" href="{{ url_for('planta', oid=o.id) }}">Plantas e marcação</a>
-    <a class="botao sec" href="{{ url_for('proposta', oid=o.id) }}">Proposta ao cliente (PDF)</a>
-    <a class="botao sec" href="{{ url_for('cotacao', oid=o.id) }}">Lista para cotação (PDF)</a>
+    <h1 style="display:inline">{{ o.numero }}</h1>
+    <span class="status {{ o.status }}">{{ o.status }}</span>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button form="fm">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Salvar</button>
+    <a class="botao sec" href="{{ url_for('planta', oid=o.id) }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      Plantas</a>
+    <a class="botao sec" href="{{ url_for('proposta', oid=o.id) }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Proposta</a>
+    <a class="botao sec" href="{{ url_for('cotacao', oid=o.id) }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Cotação</a>
   </div>
 </div>
-<p class="suave">Salve antes de abrir a proposta ou a lista: os botões de PDF mostram o que já foi salvo.</p>
 
 <div class="cartao">
   <div class="linha">
@@ -28,23 +38,26 @@
       </select>
     </label>
   </div>
-  <p class="suave">Tipo: {{ o.tipos }}</p>
+  <p class="suave" style="margin-top:8px">Tipo: {{ o.tipos }}</p>
 </div>
 
 <div class="cartao totais">
   <div><span>Subtotal</span><b>{{ tot.subtotal | brl }}</b></div>
   <div><span>Desconto</span><b>{{ o.desconto | brl }}</b></div>
-  <div><span>Total ao cliente</span><b>{{ tot.total | brl }}</b></div>
+  <div><span>Total ao cliente</span><b style="color:var(--cor)">{{ tot.total | brl }}</b></div>
   <div><span>Custo</span><b>{{ tot.custo | brl }}</b></div>
-  <div><span>Margem sobre o total</span><b>{{ '%.1f' | format(tot.margem) | replace('.', ',') }}%</b></div>
-  {% if tot.opcionais %}<div><span>Opcionais (fora do total)</span><b>{{ tot.opcionais | brl }}</b></div>{% endif %}
+  <div><span>Margem</span><b>{{ '%.1f' | format(tot.margem) | replace('.', ',') }}%</b></div>
+  {% if tot.opcionais %}<div><span>Opcionais</span><b>{{ tot.opcionais | brl }}</b></div>{% endif %}
 </div>
 
 {% for s in secoes %}
-<h2 id="s{{ s.secao.id }}">{% if varios %}{{ s.secao.grupo }} · {% endif %}{{ s.secao.nome }}</h2>
+<div class="secao-header">
+  <h2 id="s{{ s.secao.id }}">{% if varios %}{{ s.secao.grupo }} · {% endif %}{{ s.secao.nome }}</h2>
+  <span class="secao-subtotal">{{ s.subtotal | brl }}</span>
+</div>
 <div class="tabela-rolagem">
 <table>
-  <tr><th>Descrição</th><th>Un.</th><th class="n">Qtd.</th><th class="n">Custo un.</th><th class="n">Preço un.</th><th class="n">Total</th><th>Opcional</th><th></th></tr>
+  <tr><th>Descrição</th><th>Un.</th><th class="n">Qtd.</th><th class="n">Custo un.</th><th class="n">Preço un.</th><th class="n">Total</th><th>Opc.</th><th></th></tr>
   {% for i in s.itens %}
   <tr>
     <td><input form="fm" name="i{{ i.id }}_desc" value="{{ i.descricao }}"></td>
@@ -52,7 +65,7 @@
     <td class="n"><input form="fm" class="w-qtd" name="i{{ i.id }}_qtd" value="{{ i.quantidade | qtd }}" inputmode="decimal"></td>
     <td class="n"><input form="fm" class="w-val" name="i{{ i.id }}_custo" value="{{ '%.2f' | format(i.custo) | replace('.', ',') }}" inputmode="decimal"></td>
     <td class="n"><input form="fm" class="w-val" name="i{{ i.id }}_preco" value="{{ '%.2f' | format(i.preco) | replace('.', ',') }}" inputmode="decimal"></td>
-    <td class="n">{{ (i.quantidade * i.preco) | brl }}</td>
+    <td class="n"><b>{{ (i.quantidade * i.preco) | brl }}</b></td>
     <td><input form="fm" type="checkbox" name="i{{ i.id }}_opc" {% if i.opcional %}checked{% endif %}></td>
     <td>
       <form method="post" action="{{ url_for('excluir_item', oid=o.id, iid=i.id) }}">
@@ -61,10 +74,9 @@
     </td>
   </tr>
   {% endfor %}
-  <tr><td colspan="5" class="n suave">Subtotal da seção</td><td class="n"><b>{{ s.subtotal | brl }}</b></td><td colspan="2"></td></tr>
 </table>
 </div>
-<details class="cartao">
+<details class="cartao" style="margin-top:-8px">
   <summary>Adicionar item em {{ s.secao.nome }}</summary>
   <form method="post" action="{{ url_for('adicionar_item', oid=o.id) }}" class="linha" style="margin-top:12px">
     <input type="hidden" name="secao_id" value="{{ s.secao.id }}">
@@ -84,7 +96,6 @@
     </label>
     <button class="sec">Adicionar</button>
   </form>
-  <p class="suave">Item do catálogo usa o custo e a margem cadastrados; custo e preço digitados aqui valem só para item avulso.</p>
 </details>
 {% endfor %}
 
@@ -111,7 +122,9 @@
 </div>
 
 <div class="barra">
-  <button form="fm">Salvar</button>
+  <button form="fm">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    Salvar</button>
   <form method="post" action="{{ url_for('excluir_orcamento', oid=o.id) }}" onsubmit="return confirm('Excluir este orçamento? Não é possível desfazer.')">
     <button class="perigo">Excluir orçamento</button>
   </form>

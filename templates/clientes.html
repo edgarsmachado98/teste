@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block conteudo %}
-<h1>Clientes</h1>
+<div class="barra">
+  <h1>Clientes</h1>
+</div>
 <details class="cartao" open>
   <summary>Novo cliente</summary>
   <form method="post" class="linha" style="margin-top:12px">
@@ -10,7 +12,9 @@
     <label>Telefone <input name="telefone"></label>
     <label>E-mail <input name="email"></label>
     <label>Endereço <input name="endereco"></label>
-    <button>Adicionar</button>
+    <button>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Adicionar</button>
   </form>
 </details>
 <div class="tabela-rolagem">
@@ -31,7 +35,10 @@
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="7">Nenhum cliente cadastrado.</td></tr>
+  <tr><td colspan="7" class="vazio" style="padding:32px">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--borda)" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+    <p>Nenhum cliente cadastrado. Adicione acima.</p>
+  </td></tr>
   {% endfor %}
 </table>
 </div>

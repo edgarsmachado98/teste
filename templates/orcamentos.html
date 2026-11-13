@@ -2,28 +2,32 @@
 {% block conteudo %}
 <div class="barra">
   <h1>Orçamentos</h1>
-  <a class="botao" href="{{ url_for('novo') }}">Novo orçamento</a>
+  <a class="botao" href="{{ url_for('novo') }}">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Novo orçamento</a>
 </div>
-<p class="no-print">
-  <a href="{{ url_for('orcamentos') }}">Todos</a>
-  {% for s in STATUS %} · <a href="{{ url_for('orcamentos', status=s) }}">{% if s == status %}<b>{{ s }}</b>{% else %}{{ s }}{% endif %}</a>{% endfor %}
-</p>
-<div class="tabela-rolagem">
-<table>
-  <tr><th>Número</th><th>Cliente</th><th>Título</th><th>Tipo</th><th>Data</th><th>Status</th><th class="n">Total</th></tr>
-  {% for o in lista %}
-  <tr>
-    <td><a href="{{ url_for('editar', oid=o.id) }}">{{ o.numero }}</a></td>
-    <td>{{ o.cliente_nome or '—' }}</td>
-    <td>{{ o.titulo }}</td>
-    <td>{{ o.tipos }}</td>
-    <td>{{ o.data[8:10] }}/{{ o.data[5:7] }}/{{ o.data[0:4] }}</td>
-    <td><span class="status {{ o.status }}">{{ o.status }}</span></td>
-    <td class="n">{{ [o.total, 0] | max | brl }}</td>
-  </tr>
-  {% else %}
-  <tr><td colspan="7">Nenhum orçamento ainda. Clique em <b>Novo orçamento</b> para começar.</td></tr>
-  {% endfor %}
-</table>
+<div class="filtros no-print">
+  <a href="{{ url_for('orcamentos') }}" class="{{ 'ativo' if not status }}">Todos</a>
+  {% for s in STATUS %}<a href="{{ url_for('orcamentos', status=s) }}" class="{{ 'ativo' if s == status }}">{{ s }}</a>{% endfor %}
 </div>
+{% for o in lista %}
+<a class="orc-card" href="{{ url_for('editar', oid=o.id) }}">
+  <div class="orc-topo">
+    <span class="orc-num">{{ o.numero }}</span>
+    <span class="orc-cliente">{{ o.cliente_nome or '—' }}</span>
+    <span class="status {{ o.status }}">{{ o.status }}</span>
+    <span class="orc-total">{{ [o.total, 0] | max | brl }}</span>
+  </div>
+  <div class="orc-meta">
+    <span>{{ o.titulo }}</span>
+    <span>{{ o.data[8:10] }}/{{ o.data[5:7] }}/{{ o.data[0:4] }}</span>
+  </div>
+</a>
+{% else %}
+<div class="vazio">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--borda)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  <p>Nenhum orçamento ainda.</p>
+  <a class="botao" href="{{ url_for('novo') }}">Criar o primeiro orçamento</a>
+</div>
+{% endfor %}
 {% endblock %}

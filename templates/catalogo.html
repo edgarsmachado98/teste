@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block conteudo %}
-<h1>Catálogo de produtos e serviços</h1>
-<p class="suave">Preço de venda = custo + margem. Mudanças aqui valem para itens adicionados depois; orçamentos já montados mantêm seus valores.</p>
+<div class="barra">
+  <h1>Catálogo de produtos e serviços</h1>
+</div>
+<p class="suave" style="margin-top:-8px;margin-bottom:16px">Preço de venda = custo + margem. Mudanças aqui valem para itens adicionados depois; orçamentos já montados mantêm seus valores.</p>
 <details class="cartao" open>
   <summary>Novo item</summary>
   <form method="post" class="linha" style="margin-top:12px">
@@ -12,7 +14,9 @@
     <label style="flex:0 0 110px">Custo <input name="custo" inputmode="decimal"></label>
     <label style="flex:0 0 100px">Margem % <input name="margem" value="30" inputmode="decimal"></label>
     <label style="flex:0 0 120px">Tipo <select name="tipo"><option value="produto">Produto</option><option value="servico">Serviço</option></select></label>
-    <button>Adicionar</button>
+    <button>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Adicionar</button>
   </form>
 </details>
 <datalist id="cats">{% for c in produtos | map(attribute='categoria') | unique %}<option value="{{ c }}">{% endfor %}</datalist>
@@ -28,7 +32,7 @@
     <td><input form="p{{ p.id }}" class="w-qtd" name="unidade" value="{{ p.unidade }}"></td>
     <td><input form="p{{ p.id }}" class="w-val" name="custo" value="{{ '%.2f' | format(p.custo) | replace('.', ',') }}" inputmode="decimal"></td>
     <td><input form="p{{ p.id }}" class="w-qtd" name="margem" value="{{ p.margem | qtd }}" inputmode="decimal"></td>
-    <td class="n">{{ (p.custo * (1 + p.margem / 100)) | brl }}</td>
+    <td class="n"><b>{{ (p.custo * (1 + p.margem / 100)) | brl }}</b></td>
     <td><select form="p{{ p.id }}" name="tipo"><option value="produto" {% if p.tipo == 'produto' %}selected{% endif %}>Produto</option><option value="servico" {% if p.tipo == 'servico' %}selected{% endif %}>Serviço</option></select></td>
     <td style="white-space:nowrap">
       <button form="p{{ p.id }}" class="mini">Salvar</button>

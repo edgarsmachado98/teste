@@ -1,34 +1,56 @@
 {% extends "base.html" %}
 {% block conteudo %}
 <h1>Empresa</h1>
-<p class="suave">Estes dados aparecem no cabeçalho da proposta e do pedido de cotação. As condições são o padrão de cada novo orçamento.</p>
-<form method="post" enctype="multipart/form-data" class="cartao">
-  <div class="linha">
-    <label>Nome <input name="nome" value="{{ emp.nome or '' }}"></label>
-    <label>Frase do cabeçalho <input name="slogan" value="{{ emp.slogan or '' }}" placeholder="Ex.: Soluções Tecnológicas"></label>
-    <label>Razão social (rodapé) <input name="razao_social" value="{{ emp.razao_social or '' }}"></label>
+<p class="suave" style="margin-bottom:16px">Estes dados aparecem no cabeçalho da proposta e do pedido de cotação. As condições são o padrão de cada novo orçamento.</p>
+<form method="post" enctype="multipart/form-data">
+  <div class="cartao">
+    <h2 style="margin-top:0">Identificação</h2>
+    <div class="grupo-campos">
+      <label>Nome <input name="nome" value="{{ emp.nome or '' }}"></label>
+      <label>Frase do cabeçalho <input name="slogan" value="{{ emp.slogan or '' }}" placeholder="Ex.: Soluções Tecnológicas"></label>
+      <label>Razão social (rodapé) <input name="razao_social" value="{{ emp.razao_social or '' }}"></label>
+    </div>
+    <div class="grupo-campos">
+      <label>Responsável (assinatura) <input name="responsavel" value="{{ emp.responsavel or '' }}"></label>
+      <label>Cidade/UF (data da proposta) <input name="cidade" value="{{ emp.cidade or '' }}" placeholder="Ex.: Santa Maria/RS"></label>
+      <label>CNPJ <input name="documento" value="{{ emp.documento or '' }}"></label>
+    </div>
   </div>
-  <div class="linha">
-    <label>Responsável (assinatura) <input name="responsavel" value="{{ emp.responsavel or '' }}"></label>
-    <label>Cidade/UF (data da proposta) <input name="cidade" value="{{ emp.cidade or '' }}" placeholder="Ex.: Santa Maria/RS"></label>
-    <label>CNPJ <input name="documento" value="{{ emp.documento or '' }}"></label>
-    <label>Telefone <input name="telefone" value="{{ emp.telefone or '' }}"></label>
-    <label>E-mail <input name="email" value="{{ emp.email or '' }}"></label>
+
+  <div class="cartao">
+    <h2 style="margin-top:0">Contato</h2>
+    <div class="grupo-campos">
+      <label>Telefone <input name="telefone" value="{{ emp.telefone or '' }}"></label>
+      <label>E-mail <input name="email" value="{{ emp.email or '' }}"></label>
+    </div>
+    <label>Endereço <input name="endereco" value="{{ emp.endereco or '' }}"></label>
   </div>
-  <label>Endereço <input name="endereco" value="{{ emp.endereco or '' }}"></label>
-  <input type="hidden" name="apresentacao" value="{{ emp.apresentacao or '' }}">
-  <div class="linha">
-    <label>Pagamento (padrão) <textarea name="pagamento">{{ emp.pagamento or '' }}</textarea></label>
-    <label>Prazo de execução (padrão) <textarea name="prazo">{{ emp.prazo or '' }}</textarea></label>
-    <label>Garantia (padrão) <textarea name="garantia">{{ emp.garantia or '' }}</textarea></label>
+
+  <div class="cartao">
+    <h2 style="margin-top:0">Condições padrão</h2>
+    <input type="hidden" name="apresentacao" value="{{ emp.apresentacao or '' }}">
+    <div class="linha">
+      <label>Pagamento <textarea name="pagamento">{{ emp.pagamento or '' }}</textarea></label>
+      <label>Prazo de execução <textarea name="prazo">{{ emp.prazo or '' }}</textarea></label>
+      <label>Garantia <textarea name="garantia">{{ emp.garantia or '' }}</textarea></label>
+    </div>
   </div>
-  <div class="linha">
-    <label>Logotipo (PNG ou JPG, até 5 MB) <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp"></label>
-    {% if tem_logo %}
-    <div><img src="{{ url_for('logo') }}" alt="Logotipo atual" style="max-height:60px"></div>
-    <label style="flex:0 0 auto"><input type="checkbox" name="remover_logo"> Remover logotipo</label>
-    {% endif %}
+
+  <div class="cartao">
+    <h2 style="margin-top:0">Logotipo</h2>
+    <div class="campo-logo">
+      {% if tem_logo %}
+      <img src="{{ url_for('logo') }}" alt="Logotipo atual">
+      {% endif %}
+      <div>
+        <label style="margin-bottom:8px">Enviar novo logotipo (PNG ou JPG, até 5 MB) <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+        {% if tem_logo %}<label><input type="checkbox" name="remover_logo"> Remover logotipo atual</label>{% endif %}
+      </div>
+    </div>
   </div>
-  <p><button>Salvar</button></p>
+
+  <button>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    Salvar</button>
 </form>
 {% endblock %}
