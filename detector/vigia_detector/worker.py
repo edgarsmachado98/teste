@@ -20,6 +20,7 @@ from .clips import ClipRecorder
 from .diagnose import diagnose, mask
 from .imagehealth import ImageHealth
 from .rules import PPE_NAMES, Detection, RuleTracker, Violation, in_schedule, observe, unverifiable
+from .tracking import Tracker
 
 log = logging.getLogger("vigia.worker")
 
@@ -50,7 +51,8 @@ def draw(frame: np.ndarray, detections: list[Detection], rules: list[dict], viol
         x1, y1, x2, y2 = int(det.box[0] * w), int(det.box[1] * h), int(det.box[2] * w), int(det.box[3] * h)
         color = RED if det in offenders else GREEN
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(img, f"{det.label} {det.confidence:.0%}", (x1, max(15, y1 - 6)),
+        name = f"{det.label} #{det.track_id}" if det.track_id is not None else det.label
+        cv2.putText(img, f"{name} {det.confidence:.0%}", (x1, max(15, y1 - 6)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
 
     if violation:
@@ -71,7 +73,7 @@ def to_jpeg(img: np.ndarray, max_width: int = 1280, quality: int = 85) -> bytes:
 class CameraWorker(threading.Thread):
     def __init__(self, camera: dict, engine, engine_lock: threading.Lock, client,
                  analysis_fps: float = 3.0, live_interval: float = 2.0, stats_interval: float = 60.0,
-                 clip_seconds: tuple[float, float] = (5.0, 5.0), collector=None):
+                 clip_seconds: tuple[float, float] = (5.0, 5.0), collector=None, tracking: dict | None = None):
         super().__init__(daemon=True, name=f"camera-{camera['id']}")
         self.camera = camera
         self.rules = camera["rules"]
@@ -81,7 +83,12 @@ class CameraWorker(threading.Thread):
         self.analysis_period = 1.0 / analysis_fps
         self.live_interval = live_interval
         self.stats_interval = stats_interval
-        self.tracker = RuleTracker()
+        tracking = {} if tracking is None else tracking
+        self.tracker = RuleTracker(realert=tracking.get("realert", 600.0))
+        # rastreamento de pessoas: confirma, ignora objeto parado e evita alerta repetido (tracking.py)
+        self.people = None if tracking.get("enabled") is False else Tracker(
+            min_hits=tracking.get("min_hits", 2), static_seconds=tracking.get("static_seconds", 300.0),
+            max_age=max(2.0, 4.0 / analysis_fps))
         self._rule_warnings: dict[int, str] = {}
         self.health = ImageHealth()
         self.clips = ClipRecorder(*clip_seconds) if clip_seconds[0] + clip_seconds[1] > 0 else None
@@ -149,6 +156,8 @@ class CameraWorker(threading.Thread):
 
             with self.engine_lock:
                 detections = self.engine.detect(frame)
+            if self.people is not None:
+                detections = self.people.update(detections, now)
             rules = self.rules
             self._annotate_rules(rules, frame)
             wall = datetime.now()

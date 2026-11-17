@@ -41,6 +41,9 @@ python -m vigia_detector.testar_modelo --modelos ..\modelos\yolox_s.onnx --fonte
   `TILES=2x2` no `.env`; ~4 vezes mais lento). O que só aparece nos blocos precisa de confiança 0,55
   (`--confianca-blocos` / `TILE_CONF`), para pilha de tijolos ou poste ampliado não virar pessoa.
 - Objeto fixo que ainda vira pessoa: desenhe a **zona** da regra sem aquele trecho (só conta quem pisa na zona).
+- **Rastreamento** (ligado por padrão): cada pessoa ganha um número (`person #12` na imagem ao vivo). Pessoa de um quadro só
+  é descartada, objeto parado por 5 minutos no mesmo lugar passa a ser ignorado (e o local fica memorizado) e cada
+  pessoa gera um alerta por regra, com lembrete a cada 10 minutos se continuar em desvio. Ajustes: `TRACK_*` no `.env`.
 - `--comparar yolov8n.pt`: roda também o modelo da Ultralytics nas mesmas imagens, para comparar.
 - Use o stream **principal** (`subtype=0`) no teste: mais pixels por pessoa.
 

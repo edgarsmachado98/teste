@@ -58,6 +58,9 @@ def main() -> None:
                     ppe_crops=os.getenv("PPE_CROPS", "1") != "0", tiles=parse_tiles(os.getenv("TILES", "1x1")),
                     tile_conf=float(os.getenv("TILE_CONF", "0.55")))
     engine_lock = threading.Lock()
+    tracking = {"enabled": os.getenv("TRACKING", "1") != "0", "min_hits": int(os.getenv("TRACK_MIN_HITS", "2")),
+                "static_seconds": float(os.getenv("TRACK_STATIC_SECONDS", "300")),
+                "realert": float(os.getenv("TRACK_REALERT", "600"))}
     client = BackendClient(backend, api_key, verify)
     workers: dict[int, CameraWorker] = {}
 
@@ -81,7 +84,7 @@ def main() -> None:
             else:
                 log.info("iniciando câmera %s (%d regras)", camera["name"], len(camera["rules"]))
                 workers[cam_id] = CameraWorker(camera, engine, engine_lock, client, analysis_fps,
-                                               clip_seconds=clip_seconds, collector=collector)
+                                               clip_seconds=clip_seconds, collector=collector, tracking=tracking)
                 workers[cam_id].start()
         time.sleep(refresh)
 

@@ -23,6 +23,8 @@ class Detection:
     confidence: float
     # Caixa normalizada (0..1): x1, y1, x2, y2
     box: tuple[float, float, float, float]
+    # Número da pessoa no rastreamento (tracking.py); None sem rastreamento
+    track_id: int | None = None
 
     @property
     def center(self) -> tuple[float, float]:
@@ -215,6 +217,8 @@ class _RuleState:
     first_seen: float | None = None
     last_seen: float | None = None
     last_alert: float | None = None
+    # pessoas (track_id) que já geraram alerta nesta regra: {id: (momento do alerta, último momento visto)}
+    alerted: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -222,9 +226,15 @@ class RuleTracker:
     """Aplica duração mínima e intervalo entre alertas para as regras de uma câmera.
 
     `grace` tolera falhas curtas de detecção (ex.: pessoa ocluída por 1 quadro) sem
-    reiniciar a contagem da duração mínima."""
+    reiniciar a contagem da duração mínima.
+
+    Com rastreamento (detecções com track_id), cada pessoa gera **um** alerta por regra: enquanto só
+    as mesmas pessoas continuam em desvio, não há alerta repetido (só um lembrete a cada `realert`
+    segundos). Uma pessoa nova em desvio gera alerta normalmente (respeitando o cooldown)."""
 
     grace: float = 1.5
+    realert: float = 600.0
+    forget: float = 15.0  # some da cena por mais que isso: se voltar, conta como nova ocorrência
     _states: dict[int, _RuleState] = field(default_factory=dict)
 
     def update(self, rules: list[dict], detections: list[Detection], now_ts: float, now: datetime) -> list[Violation]:
@@ -246,8 +256,18 @@ class RuleTracker:
 
             lasted = now_ts - state.first_seen >= rule.get("min_duration", 0)
             cooled = state.last_alert is None or now_ts - state.last_alert >= rule.get("cooldown", 0)
+            ids = {d.track_id for d in violation.detections if d.track_id is not None}
+            for tid in ids & set(state.alerted):
+                state.alerted[tid] = (state.alerted[tid][0], now_ts)
+            state.alerted = {t: v for t, v in state.alerted.items() if now_ts - v[1] <= self.forget}
+            if ids:
+                fresh = [t for t in ids if t not in state.alerted or now_ts - state.alerted[t][0] >= self.realert]
+                if not fresh:
+                    continue  # as mesmas pessoas de antes: já alertado
             if lasted and cooled:
                 state.last_alert = now_ts
+                for tid in ids:
+                    state.alerted[tid] = (now_ts, now_ts)
                 fired.append(violation)
 
         for stale in set(self._states) - active_ids:
