@@ -10,6 +10,12 @@ from datetime import datetime
 PERSON = "person"
 PPE_ITEMS = ("helmet", "vest", "glasses", "gloves", "mask", "harness", "boots", "ear_protection", "face_shield")
 FIRE_LABELS = ("fire", "smoke")
+MACHINE_NAMES = {"forklift": "empilhadeira", "truck": "caminhão", "car": "veículo", "bus": "ônibus",
+                 "motorcycle": "moto", "excavator": "escavadeira", "loader": "pá carregadeira",
+                 "concrete_mixer": "betoneira", "crane": "guindaste", "tractor": "trator", "machinery": "máquina",
+                 "train": "trem"}
+MACHINE_LABELS = tuple(MACHINE_NAMES)
+PERSON_HEIGHT_M = 1.7  # altura média de uma pessoa: régua para estimar distâncias na imagem
 
 PT_FIRE = {"fire": "fogo", "smoke": "fumaça"}
 PPE_NAMES = {"helmet": "capacete", "vest": "colete", "glasses": "óculos", "gloves": "luvas", "mask": "máscara",
@@ -25,6 +31,8 @@ class Detection:
     box: tuple[float, float, float, float]
     # Número da pessoa no rastreamento (tracking.py); None sem rastreamento
     track_id: int | None = None
+    # Em movimento? (máquinas/veículos, pelo rastreamento); None = não se sabe
+    moving: bool | None = None
 
     @property
     def center(self) -> tuple[float, float]:
@@ -130,9 +138,14 @@ def missing_ppe(person: Detection, items: list[Detection], required: list[str],
 
 
 def unverifiable(rule: dict) -> list[str]:
-    """EPIs exigidos pela regra que nenhum modelo carregado reconhece."""
+    """EPIs (ou máquinas) exigidos pela regra que nenhum modelo carregado reconhece."""
     detectable = rule.get("_detectable")
-    if rule.get("type") != "ppe_missing" or detectable is None:
+    if detectable is None:
+        return []
+    if rule.get("type") == "machine_proximity":
+        kinds = machine_kinds(rule)
+        return [] if any(k in detectable for k in kinds) else kinds
+    if rule.get("type") != "ppe_missing":
         return []
     required = rule.get("params", {}).get("required") or ["helmet"]
     return [i for i in required if i not in detectable and f"no_{i}" not in detectable]
@@ -181,6 +194,54 @@ def observe(rule: dict, detections: list[Detection]) -> tuple[int, int] | None:
     return len(people), len(offenders)
 
 
+def machine_kinds(rule: dict) -> list[str]:
+    return list(rule.get("params", {}).get("machines") or MACHINE_LABELS)
+
+
+def inside_ratio(inner: tuple, outer: tuple) -> float:
+    """Fração da caixa `inner` que fica dentro de `outer`."""
+    ix1, iy1 = max(inner[0], outer[0]), max(inner[1], outer[1])
+    ix2, iy2 = min(inner[2], outer[2]), min(inner[3], outer[3])
+    area = (inner[2] - inner[0]) * (inner[3] - inner[1])
+    return max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1) / area if area > 0 else 0.0
+
+
+def distance_m(person: Detection, machine: Detection, aspect: float | None = None, depth: float = 2.0) -> float:
+    """Distância aproximada (metros) entre a pessoa e a máquina, usando a altura da pessoa como régua.
+
+    Compara os pontos de apoio no chão: a folga lateral entre as caixas e a diferença entre a base da
+    pessoa e a base da máquina (profundidade na cena). Na imagem, distâncias "para o fundo" aparecem
+    encurtadas pela perspectiva: `depth` compensa (≈2 para câmera alta inclinada ~30°). É uma estimativa:
+    câmera alta e de frente para a área funciona melhor que câmera rasante."""
+    px1, py1, px2, py2 = person.box
+    mx1, my1, mx2, my2 = machine.box
+    ph = max(py2 - py1, 1e-6)
+    a = aspect or 16 / 9  # caixas normalizadas: 1 unidade de x vale `aspect` unidades de y
+    dx = max(0.0, mx1 - px2, px1 - mx2) * a
+    dy = max(0.0, abs(py2 - my2) - 0.1 * ph) * depth
+    return ((dx ** 2 + dy ** 2) ** 0.5) / ph * PERSON_HEIGHT_M
+
+
+def proximity(rule: dict, dets: list[Detection], people: list[Detection]) -> list[tuple[Detection, Detection, float]]:
+    """(pessoa, máquina, metros) dentro da distância de segurança. O operador dentro da cabine não conta."""
+    params = rule.get("params", {})
+    kinds = set(machine_kinds(rule))
+    limit = float(params.get("distance_m", 2.0))
+    zone = rule.get("zone") or []
+    machines = [d for d in dets if d.label in kinds and point_in_polygon(((d.box[0] + d.box[2]) / 2, d.box[3]), zone)]
+    if params.get("only_moving", True):
+        machines = [m for m in machines if m.moving is not False]  # sem rastreamento (None): considera
+    close = []
+    for p in people:
+        for m in machines:
+            if inside_ratio(p.box, m.box) >= 0.6:
+                continue  # operador na cabine / no posto da máquina
+            d = distance_m(p, m, rule.get("_aspect"), float(params.get("depth_factor", 2.0)))
+            if d <= limit:
+                close.append((p, m, d))
+    return close
+
+
 def evaluate_frame(rule: dict, detections: list[Detection]) -> Violation | None:
     """Avalia uma regra em um único quadro (sem considerar tempo)."""
     zone = rule.get("zone") or []
@@ -203,6 +264,17 @@ def evaluate_frame(rule: dict, detections: list[Detection]) -> Violation | None:
         if hits:
             kinds = sorted({PT_FIRE[d.label] for d in hits})
             return Violation(rule["id"], f"{' e '.join(kinds).capitalize()} detectado", hits)
+
+    elif rtype == "machine_proximity":
+        close = proximity(rule, dets, people)
+        if close:
+            persons = list(dict.fromkeys(p for p, _, _ in close))
+            p, m, d = min(close, key=lambda c: c[2])
+            name = MACHINE_NAMES.get(m.label, m.label)
+            moving = " em movimento" if m.moving else ""
+            dist = "encostada" if d < 0.3 else f"a ~{d:.1f} m".replace(".", ",")
+            return Violation(rule["id"], f"{len(persons)} pessoa(s) {dist} de {name}{moving}",
+                             persons + list(dict.fromkeys(m for _, m, _ in close)))
 
     elif rtype == "max_people":
         limit = int(rule.get("params", {}).get("max_people", 0))

@@ -34,6 +34,19 @@ ALIASES = {
     # protetor facial / viseira
     "face_shield": "face_shield", "faceshield": "face_shield", "face_guard": "face_shield", "viseira": "face_shield",
     "protetor_facial": "face_shield", "no_face_shield": "no_face_shield",
+    # máquinas e veículos (regra "pessoa perto de máquina"). COCO já traz car, truck, bus, motorcycle e train;
+    # empilhadeira, escavadeira, betoneira etc. exigem um modelo treinado com essas classes.
+    "car": "car", "pickup": "car", "van": "car", "carro": "car", "veiculo": "car",
+    "truck": "truck", "dump_truck": "truck", "caminhao": "truck", "lorry": "truck",
+    "bus": "bus", "onibus": "bus", "motorcycle": "motorcycle", "motorbike": "motorcycle", "moto": "motorcycle",
+    "forklift": "forklift", "fork_lift": "forklift", "empilhadeira": "forklift", "reach_truck": "forklift",
+    "pallet_truck": "forklift", "paleteira": "forklift",
+    "excavator": "excavator", "escavadeira": "excavator", "retroescavadeira": "excavator", "backhoe": "excavator",
+    "bulldozer": "excavator", "trator_esteira": "excavator",
+    "loader": "loader", "wheel_loader": "loader", "pa_carregadeira": "loader",
+    "concrete_mixer": "concrete_mixer", "mixer_truck": "concrete_mixer", "concrete_mixer_truck": "concrete_mixer",
+    "betoneira": "concrete_mixer", "crane": "crane", "guindaste": "crane", "munck": "crane",
+    "tractor": "tractor", "trator": "tractor", "machinery": "machinery", "machine": "machinery", "maquina": "machinery",
     "fire": "fire", "flame": "fire", "fogo": "fire",
     "smoke": "smoke", "fumaca": "smoke",
 }

@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.health import check_offline_cameras  # noqa: E402
 from app.main import app  # noqa: E402
+from app.timeutil import local_today  # noqa: E402
 
 DET = {"X-Detector-Key": "chave-teste"}
 
@@ -97,7 +98,7 @@ def test_occurrence_workflow(client, admin):
     # plano de ação: criar confirma a ocorrência automaticamente
     action = client.post("/api/actions", headers=tecnico, json={
         "event_id": event_id, "title": "Reforçar DDS sobre capacete", "responsible_id": resp_id,
-        "due_date": str(date.today() - timedelta(days=1))}).json()
+        "due_date": str(local_today() - timedelta(days=1))}).json()
     assert action["overdue"] is True
     detail = client.get(f"/api/events/{event_id}", headers=admin).json()
     assert detail["status"] == "confirmada" and detail["open_actions"] == 1

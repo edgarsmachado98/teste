@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-RuleType = Literal["ppe_missing", "restricted_zone", "fire_smoke", "max_people"]
+RuleType = Literal["ppe_missing", "restricted_zone", "fire_smoke", "max_people", "machine_proximity"]
 Severity = Literal["baixa", "media", "alta", "critica"]
 EventStatus = Literal["nova", "confirmada", "descartada", "encerrada"]
 Classification = Literal["ato_inseguro", "condicao_insegura", "quase_acidente", "acidente"]
@@ -125,6 +125,7 @@ class BehaviorIn(BaseModel):
     enabled: bool = False
     severity: Severity = "alta"
     max: int | None = Field(None, ge=0, le=100)
+    distance_m: float | None = Field(None, ge=0.5, le=20)  # pessoa perto de máquina
 
 
 class SectorIn(BaseModel):
@@ -134,7 +135,7 @@ class SectorIn(BaseModel):
     delivery_ppe: list[str] = []
     required_exams: list[str] = []
     ppe_severity: Severity = "alta"
-    behaviors: dict[Literal["restricted_zone", "max_people", "fire_smoke"], BehaviorIn] = {}
+    behaviors: dict[Literal["restricted_zone", "max_people", "fire_smoke", "machine_proximity"], BehaviorIn] = {}
     start_hour: int | None = Field(None, ge=0, le=23)
     end_hour: int | None = Field(None, ge=0, le=24)
     reference: str = Field("", max_length=200)

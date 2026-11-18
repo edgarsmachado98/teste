@@ -14,7 +14,7 @@ from ..common import EVIDENCE_DIR, action_out, event_out, get_or_404, unit_camer
 from ..database import get_db
 from ..models import ActionItem, AuditLog, Event, Measure, User
 from ..schemas import ActionIn, ActionOut, ActionUpdate, AuditOut, EventDetail, EventOut, EventUpdate
-from ..timeutil import local_tz
+from ..timeutil import local_tz, local_today
 from ..ws import hub
 
 router = APIRouter(prefix="/api")
@@ -229,7 +229,7 @@ def list_actions(
     elif responsible_id is not None:
         query = query.where(ActionItem.responsible_id == responsible_id)
     if overdue:
-        query = query.where(ActionItem.status == "aberta", ActionItem.due_date < date.today())
+        query = query.where(ActionItem.status == "aberta", ActionItem.due_date < local_today())
     if event_id is not None:
         query = query.where(ActionItem.event_id == event_id)
     if unit_id is not None:  # ações da unidade + avulsas (sem ocorrência, não têm unidade)

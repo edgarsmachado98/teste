@@ -104,7 +104,8 @@ THEMES = [
         "Pare nos cruzamentos, olhe para os dois lados e espere o veículo passar.",
         "Não use celular andando em área de circulação de empilhadeiras.",
         "Mantenha corredores e rotas desobstruídos.",
-    ], "Quais cruzamentos do setor são mais perigosos?", ["type:restricted_zone", "type:max_people"]),
+    ], "Quais cruzamentos do setor são mais perigosos?",
+        ["type:restricted_zone", "type:max_people", "type:machine_proximity"]),
     ("lotacao", "Circulação e áreas", "Lotação de áreas e postos: por que existe limite de pessoas", "NR-12 · NR-23", [
         "Pessoas demais perto de uma máquina ou carga aumentam o risco de esmagamento.",
         "O limite também garante saída rápida numa emergência.",
@@ -117,7 +118,8 @@ THEMES = [
         "Faça o checklist antes do turno: freio, buzina, luzes, garfos e vazamentos.",
         "Respeite a capacidade e transporte a carga baixa; em rampa, carga voltada para cima.",
         "Nunca transporte pessoas nos garfos ou eleve alguém sem plataforma própria.",
-    ], "O checklist da empilhadeira é feito de verdade ou só assinado?", ["ppe:vest", "type:restricted_zone"]),
+    ], "O checklist da empilhadeira é feito de verdade ou só assinado?",
+        ["ppe:vest", "type:restricted_zone", "type:machine_proximity"]),
     ("levantamento_manual", "Movimentação de cargas", "Levantamento manual de cargas: postura e limites", "NR-17", [
         "Dobre os joelhos, mantenha as costas retas e a carga junto ao corpo.",
         "Não gire o tronco com peso: vire o corpo com os pés.",
@@ -311,6 +313,7 @@ def suggestions(db: Session, unit_id: int | None, sector_id: int | None, days: i
         return []
     labels = {"type:ppe_missing": "falta de EPI", "type:restricted_zone": "entrada em zona restrita",
               "type:max_people": "excesso de pessoas", "type:fire_smoke": "fogo/fumaça",
+              "type:machine_proximity": "pessoas perto de máquinas e veículos",
               "ppe:helmet": "falta de capacete", "ppe:vest": "falta de colete", "ppe:glasses": "falta de óculos",
               "ppe:gloves": "falta de luvas", "ppe:mask": "falta de máscara", "ppe:harness": "falta de cinto",
               "ppe:boots": "falta de botina", "ppe:ear_protection": "falta de protetor auricular",

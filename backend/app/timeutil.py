@@ -1,6 +1,6 @@
 """Datas: o banco guarda em UTC; indicadores e mensagens usam o fuso e os turnos da planta."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
@@ -19,6 +19,11 @@ def as_utc(dt: datetime) -> datetime:
 
 def to_local(dt: datetime) -> datetime:
     return as_utc(dt).astimezone(local_tz())
+
+
+def local_today() -> date:
+    """Data de hoje no fuso da planta (num servidor em UTC, depois das 21h de Brasília já seria "amanhã")."""
+    return datetime.now(local_tz()).date()
 
 
 @lru_cache

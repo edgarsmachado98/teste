@@ -482,3 +482,27 @@ def test_dds(client, admin):
     assert client.delete(f"/api/dds/themes/{mine['id']}", headers=admin).status_code == 204
     actions = {a["action"] for a in client.get("/api/audit", headers=admin).json()}
     assert {"dds_plano_gerado", "dds_realizado", "dds_tema_criado"} <= actions
+
+
+def test_machine_proximity_rule(client, admin):
+    unit = client.post("/api/units", headers=admin, json={"name": "Planta Logística"}).json()["id"]
+    payload = sector_payload(unit, name="Pátio de cargas", required_ppe=["vest"],
+                             behaviors={"machine_proximity": {"enabled": True, "distance_m": 2.5, "severity": "critica"}})
+    sector = client.post("/api/sectors", headers=admin, json=payload).json()["sector"]
+    assert sector["behaviors"]["machine_proximity"]["distance_m"] == 2.5
+    cam = client.post("/api/cameras", headers=admin, json={"name": "Pátio 1", "source": "0", "sector_id": sector["id"]}).json()
+    rules = client.get("/api/rules", headers=admin, params={"camera_id": cam["id"]}).json()
+    near = next(r for r in rules if r["type"] == "machine_proximity")
+    assert near["params"] == {"distance_m": 2.5, "only_moving": True} and near["severity"] == "critica"
+    assert "2,5 m" in near["name"]
+    # regra avulsa escolhendo as máquinas
+    manual = client.post("/api/rules", headers=admin, json={
+        "camera_id": cam["id"], "name": "Empilhadeira", "type": "machine_proximity",
+        "params": {"machines": ["forklift"], "distance_m": 3, "only_moving": True}})
+    assert manual.status_code == 201, manual.text
+    cfg = client.get("/api/detector/config", headers=DET).json()
+    assert any(r["type"] == "machine_proximity" for c in cfg for r in c["rules"])
+    ev = client.post("/api/detector/events", headers=DET, data={
+        "camera_id": cam["id"], "rule_id": near["id"], "message": "1 pessoa(s) a ~1,2 m de caminhão em movimento"})
+    assert ev.status_code in (200, 201), ev.text
+    assert client.get(f"/api/events/{ev.json()['id']}", headers=admin).json()["type"] == "machine_proximity"

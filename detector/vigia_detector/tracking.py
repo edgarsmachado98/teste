@@ -18,7 +18,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field, replace
 
-from .rules import Detection
+from .rules import MACHINE_LABELS, Detection
 
 log = logging.getLogger("vigia.tracking")
 
@@ -67,10 +67,11 @@ class Track:
 
 
 class Tracker:
-    def __init__(self, labels: tuple[str, ...] = ("person",), min_hits: int = 2, max_age: float = 2.0,
+    def __init__(self, labels: tuple[str, ...] = ("person", *MACHINE_LABELS), min_hits: int = 2, max_age: float = 2.0,
                  high_conf: float = 0.45, static_seconds: float = 300.0, static_move: float = 0.006,
                  static_memory: float = 3600.0):
         self.labels = set(labels)
+        self.static_labels = {"person"}  # máquina parada é normal: o filtro de objeto parado vale só para pessoas
         self.min_hits = max(1, min_hits)
         self.max_age = max_age
         self.high_conf = high_conf
@@ -139,6 +140,10 @@ class Tracker:
                 self.tracks.append(t)
                 m1.append((t, d))
             for t, d in m1 + m2:
+                if label not in self.static_labels:
+                    if t.hits >= self.min_hits:
+                        out.append(replace(d, track_id=t.id, moving=self._moving(t, now)))
+                    continue
                 if not t.static and self._is_static(t, now):
                     t.static = True
                     self.static_spots.append((t.box, now))
@@ -150,6 +155,16 @@ class Tracker:
         self.tracks = [t for t in self.tracks if now - t.last_ts <= self.max_age]
         self.static_spots = [(b, ts) for b, ts in self.static_spots if now - ts <= self.static_memory]
         return out + others
+
+    def _moving(self, t: Track, now: float, window: float = 3.0, speed: float = 0.08) -> bool:
+        """Andou mais que `speed` alturas da própria caixa por segundo nos últimos segundos?
+        (tremida normal da detecção numa máquina parada fica bem abaixo disso)"""
+        recent = [h for h in t.history if now - h[0] <= window]
+        if len(recent) < 2 or recent[-1][0] - recent[0][0] < 0.5:
+            return False
+        (t0, x0, y0, h0), (t1, x1, y1, h1) = recent[0], recent[-1]
+        size = max(h0, h1, 1e-6)
+        return ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 / size / (t1 - t0) >= speed
 
     def _moved_recently(self, t: Track, now: float) -> bool:
         recent = [h for h in t.history if now - h[0] <= 10]

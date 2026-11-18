@@ -5,7 +5,15 @@ export const TYPE_LABELS = {
   restricted_zone: "Zona restrita",
   fire_smoke: "Fogo / fumaça",
   max_people: "Excesso de pessoas",
+  machine_proximity: "Pessoa perto de máquina",
 };
+export const MACHINE_LABELS = {
+  forklift: "Empilhadeira", truck: "Caminhão", car: "Carro / utilitário", bus: "Ônibus", motorcycle: "Moto",
+  excavator: "Escavadeira / retro", loader: "Pá carregadeira", concrete_mixer: "Betoneira", crane: "Guindaste / munck",
+  tractor: "Trator", machinery: "Outra máquina",
+};
+// Reconhecidos pelo modelo padrão (COCO); os demais exigem um modelo treinado com a máquina
+export const MACHINES_BASE = ["truck", "car", "bus", "motorcycle"];
 export const PPE_ITEMS = ["helmet", "vest", "glasses", "gloves", "mask", "harness", "boots", "ear_protection", "face_shield"];
 export const PPE_LABELS = {
   helmet: "capacete", vest: "colete", glasses: "óculos", gloves: "luvas", mask: "máscara",

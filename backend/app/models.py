@@ -336,7 +336,7 @@ class Rule(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(120))
-    # ppe_missing | restricted_zone | fire_smoke | max_people
+    # ppe_missing | restricted_zone | fire_smoke | max_people | machine_proximity
     type: Mapped[str] = mapped_column(String(40))
     # Polígono com coordenadas normalizadas (0..1). Vazio = imagem inteira.
     zone: Mapped[list] = mapped_column(JSON, default=list)

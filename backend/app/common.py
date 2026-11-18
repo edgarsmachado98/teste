@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .config import settings
+from .timeutil import local_today
 from .models import ATTACHMENT_KINDS, ActionItem, Attachment, Event
 from .schemas import ActionOut, AttachmentOut, EventOut
 
@@ -23,6 +24,7 @@ TYPE_LABELS = {
     "restricted_zone": "Zona restrita",
     "fire_smoke": "Fogo / fumaça",
     "max_people": "Excesso de pessoas",
+    "machine_proximity": "Pessoa perto de máquina",
 }
 
 
@@ -34,7 +36,7 @@ def get_or_404(db: Session, model, obj_id: int):
 
 
 def is_overdue(action: ActionItem) -> bool:
-    return action.status == "aberta" and action.due_date is not None and action.due_date < date.today()
+    return action.status == "aberta" and action.due_date is not None and action.due_date < local_today()
 
 
 def action_out(action: ActionItem) -> dict:

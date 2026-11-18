@@ -19,7 +19,7 @@ import numpy as np  # noqa: E402
 from .clips import ClipRecorder
 from .diagnose import diagnose, mask
 from .imagehealth import ImageHealth
-from .rules import PPE_NAMES, Detection, RuleTracker, Violation, in_schedule, observe, unverifiable
+from .rules import MACHINE_NAMES, PPE_NAMES, Detection, RuleTracker, Violation, in_schedule, observe, unverifiable
 from .tracking import Tracker
 
 log = logging.getLogger("vigia.worker")
@@ -52,6 +52,8 @@ def draw(frame: np.ndarray, detections: list[Detection], rules: list[dict], viol
         color = RED if det in offenders else GREEN
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
         name = f"{det.label} #{det.track_id}" if det.track_id is not None else det.label
+        if det.moving:
+            name += " >>"  # máquina/veículo em movimento
         cv2.putText(img, f"{name} {det.confidence:.0%}", (x1, max(15, y1 - 6)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
 
@@ -194,8 +196,13 @@ class CameraWorker(threading.Thread):
             rule["_detectable"] = labels
             rule["_aspect"] = w / h if h else None
             missing = unverifiable(rule) if labels is not None else []
-            warning = (f"nenhum modelo carregado reconhece {', '.join(PPE_NAMES.get(i, i) for i in missing)} – "
-                       "a regra não acusa ninguém por isso. Instale um modelo de EPI (modelos/epi.pt).") if missing else None
+            if missing and rule.get("type") == "machine_proximity":
+                warning = (f"nenhum modelo carregado reconhece {', '.join(MACHINE_NAMES.get(i, i) for i in missing)} – "
+                           "a regra fica sem efeito. Empilhadeira, escavadeira e betoneira exigem um modelo treinado "
+                           "com essas máquinas (caminhão e carro o modelo padrão já reconhece).")
+            else:
+                warning = (f"nenhum modelo carregado reconhece {', '.join(PPE_NAMES.get(i, i) for i in missing)} – "
+                           "a regra não acusa ninguém por isso. Instale um modelo de EPI (modelos/epi.pt).") if missing else None
             if self._rule_warnings.get(rule["id"], "") != (warning or ""):
                 self._rule_warnings[rule["id"]] = warning or ""
                 self.client.send_rule_status(rule["id"], warning)

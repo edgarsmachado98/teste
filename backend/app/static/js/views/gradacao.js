@@ -6,7 +6,7 @@ const TYPES = [["orientacao", "Orientação registrada"], ["treinamento", "Encam
   ["advertencia", "Advertência escrita"], ["rh", "Encaminhar ao RH"]];
 const SEVERITIES = [["baixa", "Baixa"], ["media", "Média"], ["alta", "Alta"], ["critica", "Crítica"]];
 const EVENT_TYPES = [["ppe_missing", "EPI ausente"], ["restricted_zone", "Zona restrita"], ["max_people", "Excesso de pessoas"],
-  ["fire_smoke", "Fogo / fumaça"]];
+  ["fire_smoke", "Fogo / fumaça"], ["machine_proximity", "Pessoa perto de máquina"]];
 
 export async function render(container) {
   const cfg = await api("/api/grading");

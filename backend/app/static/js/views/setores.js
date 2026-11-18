@@ -8,6 +8,7 @@ const BEHAVIORS = [
   ["restricted_zone", "Zona restrita", "Ninguém dentro da área demarcada (a zona é desenhada em cada câmera)"],
   ["max_people", "Excesso de pessoas", "Limite de pessoas ao mesmo tempo na área"],
   ["fire_smoke", "Fogo e fumaça", "Princípio de incêndio na imagem"],
+  ["machine_proximity", "Pessoa perto de máquina", "Pessoa perto de empilhadeira, caminhão ou máquina em movimento"],
 ];
 
 let root;
@@ -36,6 +37,7 @@ function readForm() {
   for (const [key] of BEHAVIORS) {
     behaviors[key] = { enabled: f[`b_${key}`].checked, severity: f[`s_${key}`].value };
     if (key === "max_people") behaviors[key].max = Number(f.max_people.value || 2);
+    if (key === "machine_proximity") behaviors[key].distance_m = Number(f.distance_m.value || 3);
   }
   const num = (v) => (v === "" ? null : Number(v));
   return {
@@ -127,7 +129,8 @@ function renderEditor() {
           <div class="behavior-row">
             <label class="check"><input type="checkbox" name="b_${key}" ${b(key).enabled ? "checked" : ""} ${ro}> <b>${label}</b></label>
             <span class="hint">${desc}</span>
-            ${key === "max_people" ? `<label class="inline">máx. <input type="number" name="max_people" min="0" max="100" value="${b(key).max ?? 2}" ${ro}></label>` : "<span></span>"}
+            ${key === "max_people" ? `<label class="inline">máx. <input type="number" name="max_people" min="0" max="100" value="${b(key).max ?? 2}" ${ro}></label>`
+              : key === "machine_proximity" ? `<label class="inline">até <input type="number" name="distance_m" min="0.5" max="20" step="0.5" value="${b(key).distance_m ?? 3}" ${ro}> m</label>` : "<span></span>"}
             <select name="s_${key}" aria-label="Severidade de ${label}" ${ro}>${sevOptions(b(key).severity)}</select>
           </div>`).join("")}
       </div>

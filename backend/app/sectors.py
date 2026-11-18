@@ -17,7 +17,7 @@ from .models import Camera, Rule, Sector, Unit
 PPE_LABELS = {"helmet": "capacete", "vest": "colete", "glasses": "óculos", "gloves": "luvas", "mask": "máscara",
               "harness": "cinto paraquedista", "boots": "botina", "ear_protection": "protetor auricular",
               "face_shield": "protetor facial"}
-BEHAVIOR_TYPES = ("restricted_zone", "max_people", "fire_smoke")
+BEHAVIOR_TYPES = ("restricted_zone", "max_people", "fire_smoke", "machine_proximity")
 
 # Modelos de referência por atividade (ponto de partida; o cliente ajusta à sua realidade)
 TEMPLATES = {
@@ -47,7 +47,8 @@ TEMPLATES = {
         "delivery_ppe": ["Botina de segurança"],
         "behaviors": {"restricted_zone": {"enabled": True, "severity": "alta"},
                       "max_people": {"enabled": True, "max": 3, "severity": "media"},
-                      "fire_smoke": {"enabled": False, "severity": "critica"}},
+                      "fire_smoke": {"enabled": False, "severity": "critica"},
+                      "machine_proximity": {"enabled": True, "distance_m": 3, "severity": "critica"}},
         "required_exams": ["aso", "acuidade_visual", "ecg", "glicemia"],
         "reference": "NR-6 · NR-11",
     },
@@ -114,6 +115,12 @@ def desired_rules(sector: Sector) -> list[DesiredRule]:
     fire = behavior(sector, "fire_smoke")
     if fire["enabled"]:
         rules.append(DesiredRule("fire_smoke", f"{sector.name}: fogo e fumaça", {}, fire["severity"]))
+    near = behavior(sector, "machine_proximity")
+    if near["enabled"]:
+        dist = float(near.get("distance_m") or 3)
+        label = f"{dist:g}".replace(".", ",")
+        rules.append(DesiredRule("machine_proximity", f"{sector.name}: pessoa a menos de {label} m de máquina",
+                                 {"distance_m": dist, "only_moving": True}, near["severity"]))
     return rules
 
 

@@ -1,4 +1,4 @@
-import { $, $$, PPE_ITEMS, PPE_LABELS, TYPE_LABELS, api, can, esc, toast, withToken } from "../core.js";
+import { $, $$, MACHINE_LABELS, MACHINES_BASE, PPE_ITEMS, PPE_LABELS, TYPE_LABELS, api, can, esc, toast, withToken } from "../core.js";
 
 let el;
 let cameras = [];
@@ -98,6 +98,19 @@ const FORM_HTML = `
     <label class="param" data-for="max_people">Máx. de pessoas na zona
       <input type="number" name="max_people" min="0" value="2">
     </label>
+    <fieldset class="wide param" data-for="machine_proximity">
+      <legend>Máquinas e veículos</legend>
+      ${Object.entries(MACHINE_LABELS).map(([k, v]) => `<label class="check"><input type="checkbox" name="mach_${k}"
+        ${MACHINES_BASE.includes(k) || k === "forklift" ? "checked" : ""}> ${v}${MACHINES_BASE.includes(k) ? "" : " *"}</label>`).join("")}
+      <small class="hint wide">* exige um modelo treinado com a máquina (o modelo padrão reconhece caminhão, carro, ônibus e moto).
+        Sem modelo, a regra avisa que não consegue verificar.</small>
+    </fieldset>
+    <label class="param" data-for="machine_proximity">Distância de segurança
+      <span class="with-suffix"><input type="number" name="distance_m" min="0.5" max="20" step="0.5" value="3"><span>metros</span></span>
+      <small class="hint">Estimada pela altura das pessoas na imagem (aproximada).</small>
+    </label>
+    <label class="check param" data-for="machine_proximity"><input type="checkbox" name="only_moving" checked>
+      Só máquina em movimento (veículo estacionado não alerta)</label>
     <label>Confiança mínima <input type="number" name="min_confidence" min="0" max="1" step="0.05" value="0.5"></label>
     <label>Duração mínima (s) <input type="number" name="min_duration" min="0" step="0.5" value="2"></label>
     <label>Intervalo entre alertas (s) <input type="number" name="cooldown" min="0" value="300"></label>
@@ -152,6 +165,12 @@ export async function show(element) {
         params.min_person_height = Math.min(0.6, Math.max(0.03, Number(f.min_person_height.value || 10) / 100));
       }
       if (f.type.value === "max_people") params.max_people = Number(f.max_people.value);
+      if (f.type.value === "machine_proximity") {
+        params.machines = Object.keys(MACHINE_LABELS).filter((k) => f[`mach_${k}`].checked);
+        params.distance_m = Math.min(20, Math.max(0.5, Number(f.distance_m.value || 3)));
+        params.only_moving = f.only_moving.checked;
+        if (!params.machines.length) return toast("Selecione ao menos uma máquina ou veículo.", "warn");
+      }
       const body = {
         camera_id: Number(f.camera_id.value), name: f.name.value, type: f.type.value, severity: f.severity.value,
         zone, params, min_confidence: Number(f.min_confidence.value), min_duration: Number(f.min_duration.value),
@@ -188,6 +207,9 @@ export async function show(element) {
       f.enabled.checked = r.enabled;
       PPE_ITEMS.forEach((i) => { f[`req_${i}`].checked = (r.params.required || []).includes(i); });
       f.max_people.value = r.params.max_people ?? 2;
+      Object.keys(MACHINE_LABELS).forEach((k) => { f[`mach_${k}`].checked = (r.params.machines || Object.keys(MACHINE_LABELS)).includes(k); });
+      f.distance_m.value = r.params.distance_m ?? 3;
+      f.only_moving.checked = r.params.only_moving ?? true;
       f.min_person_height.value = Math.round((r.params.min_person_height ?? 0.10) * 100);
       zone = r.zone.map((p) => [...p]);
       toggleParams();
