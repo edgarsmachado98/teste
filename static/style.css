@@ -1259,3 +1259,18 @@ body.escaneando { overflow: hidden; }
 .conferencia-nota.alerta .conf-titulo { color: var(--neutro); }
 .conferencia-nota b { color: var(--texto); font-variant-numeric: tabular-nums; }
 :root[data-theme="dark"] .conferencia-nota.alerta { background: #3a3220; }
+
+/* ---------- Celular: tabelas com cabeçalho e primeira coluna fixos ----------
+   A tabela rola dentro do quadro: ao descer, o cabeçalho (Valor total, Variação, Rentabilidade...) continua
+   visível; ao arrastar para o lado, a primeira coluna (categoria, ativo, data) não some. */
+@media (max-width: 760px) {
+  .rolagem { max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); overflow: auto; -webkit-overflow-scrolling: touch; }
+  .rolagem > table { border-collapse: separate; border-spacing: 0; }
+  .rolagem > table th { position: sticky; top: 0; z-index: 3; background: var(--painel); box-shadow: inset 0 -1px 0 var(--borda-forte); }
+  .rolagem > table tr > :first-child { position: sticky; left: 0; z-index: 2; background: var(--painel);
+    box-shadow: inset -1px 0 0 var(--borda); white-space: normal; min-width: 108px; max-width: 44vw; text-align: left; }
+  .rolagem > table tr > th:first-child { z-index: 4; box-shadow: inset -1px 0 0 var(--borda), inset 0 -1px 0 var(--borda-forte); }
+  .rolagem > table tr:hover > td:first-child { background: var(--painel-2); }
+  .rolagem > table .linha-ativo > td:first-child { background: var(--painel-2); }
+  .gaveta .rolagem, .fatura-mes .rolagem, .cmp-detalhe .rolagem { max-height: none; }
+}
