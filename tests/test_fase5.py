@@ -125,7 +125,10 @@ def test_alerta_darf(c):
     vence = next((a for a in alertas if a["tipo"] == "darf"), None)
     ultimo_dia = (hoje.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
     if (ultimo_dia - hoje).days <= 10:
-        assert vence and "2.250" in vence["titulo"]  # 15.000 x 15%
+        # 15.000 de lucro x 15% = 2.250, menos o efeito das taxas da B3 descontadas na venda
+        import re
+        valor = float(re.search(r"R\$ ([\d.]+,\d{2})", vence["titulo"]).group(1).replace(".", "").replace(",", "."))
+        assert vence and 2240 <= valor <= 2250
     c.environ_base["HTTP_X_CARTEIRA"] = "todas"
     # na visão da família (uma carteira só aqui) o cálculo de DARF não é feito por carteira consolidada
 
