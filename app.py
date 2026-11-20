@@ -652,6 +652,27 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         return jsonify({"ok": True})
 
     # ---------- Carteira ----------
+    def instituicoes_dos_ativos(cids, linhas):
+        """Onde está cada ativo (BB 0,62 · Nubank 0,06), pelos relatórios de posição de cada carteira."""
+        partes = {}
+        for i in cids:
+            relatorios = [{"origem": r["origem"], "nome": r["nome"], "importado_em": r["importado_em"],
+                           "itens": json.loads(r["itens"])}
+                          for r in conn.execute("SELECT * FROM relatorios_posicao WHERE carteira_id = ?", (i,))]
+            if not relatorios:
+                continue
+            # família: a quantidade de cada carteira vem só das operações dela
+            linhas_i = linhas if len(cids) == 1 else montar_resumo([i])["ativos"]
+            for t, lista in conferencia.por_instituicao(relatorios, linhas_i).items():
+                for p in lista:
+                    if p["nome"] == "outras":
+                        continue
+                    atual = partes.setdefault(t, {}).setdefault(p["nome"], {**p, "quantidade": 0.0})
+                    atual["quantidade"] += p["quantidade"]
+        por_ticker = {l["ticker"]: l for l in linhas if l["quantidade"] > 0}
+        return {t: conferencia.completar_partes(list(v.values()), por_ticker[t])
+                for t, v in partes.items() if t in por_ticker}
+
     @app.get("/api/carteira")
     def api_carteira():
         cid = carteiras_leitura()
@@ -670,6 +691,7 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         resumo["cotacoes_em"] = mercado.atualizado_em(tickers_mercado)
         resumo["em_pregao"] = em_pregao()
         resumo["intervalo_minutos"] = intervalo_pregao()
+        resumo["instituicoes"] = instituicoes_dos_ativos(cid, resumo["ativos"])
         resumo["por_carteira"] = []
         if len(cid) > 1:  # visão da família: quanto cada carteira representa
             nomes = {c["id"]: c for c in auth.carteiras_do_usuario(conn, g.usuario)}

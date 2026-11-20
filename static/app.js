@@ -709,6 +709,19 @@ function celulasMetricas(m) {
       ${pctSinal(m.rentabilidade_pct)}<span class="var-sub">${brlSinal(m.rentabilidade_valor)}</span></td>`;
 }
 
+// Onde está o ativo: "BB 0,62 · Nubank 0,06" (pelos relatórios de posição importados)
+function linhaInstituicoes(a, partes) {
+  if (!partes?.length) return "";
+  const porValor = Math.abs(a.quantidade - 1) < 1e-9;  // fundos/CDB lidos só pelo saldo: 1 unidade = saldo
+  const qtd = v => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+  const itens = partes.map(p => {
+    const nome = p.nome === "outras" ? "outras" : esc(p.nome);
+    const titulo = `${p.nome === "outras" ? "Sem relatório de posição importado" : esc(p.nome)}: ${qtd(p.quantidade)} · ${brl.format(p.valor)}${p.data ? ` (relatório de ${fmtData(p.data)})` : ""}`;
+    return `<span class="inst${p.nome === "outras" ? " inst-outras" : ""}" title="${titulo}"><b>${nome}</b> ${porValor ? brl.format(p.valor) : qtd(p.quantidade)}</span>`;
+  });
+  return `<span class="instituicoes">${itens.join("")}</span>`;
+}
+
 function renderCategorias() {
   const c = carteiraResumo, t = $("#tabela-categorias");
   if (!c.categorias.length) {
@@ -723,7 +736,7 @@ function renderCategorias() {
         <span class="qtd-ativos">${cat.quantidade_ativos} ${cat.quantidade_ativos === 1 ? "ativo" : "ativos"}</span></div></td>
       ${celulasMetricas(cat)}</tr>`;
     if (aberta) html += cat.ativos.map(a => `<tr class="linha-ativo">
-      <td><strong>${esc(a.ticker)}</strong><small>${num.format(a.quantidade)} × ${a.preco_atual == null ? "—" : brl.format(a.preco_atual)} · PM ${brl.format(a.preco_medio)}</small></td>
+      <td><strong>${esc(a.ticker)}</strong><small>${num.format(a.quantidade)} × ${a.preco_atual == null ? "—" : brl.format(a.preco_atual)} · PM ${brl.format(a.preco_medio)}</small>${linhaInstituicoes(a, c.instituicoes?.[a.ticker])}</td>
       ${celulasMetricas(a)}</tr>`).join("");
   }
   html += `<tr class="linha-total"><td>Total da carteira</td>${celulasMetricas(c.total_categorias)}</tr>`;

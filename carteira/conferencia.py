@@ -166,3 +166,69 @@ def conferir(relatorios, linhas_sistema, rotulos_classe, operacoes=()):
         "itens": itens,
         "sobrepostos": [c for c in conflitos if c["acao"] == "usada a posição da B3"],
     }
+
+
+# ---------- Instituição de cada ativo ----------
+APELIDOS = {"Banco do Brasil": "BB", "BTG Pactual": "BTG"}
+
+
+def nome_instituicao(origem):
+    """'Tesouro Direto · BB Banco de Investimento S/A' -> 'BB'; 'Nubank' -> 'Nubank'."""
+    import re
+    from .importacao import INSTITUICOES, _norm
+    nome = re.sub(r"^Tesouro Direto\s*·\s*", "", origem or "").strip()
+    n = _norm(nome)
+    if re.match(r"bb\b", n):
+        return "BB"
+    for padrao, rotulo in INSTITUICOES:
+        if rotulo not in ("B3", "Tesouro Direto") and re.search(padrao, n):
+            return APELIDOS.get(rotulo, rotulo)
+    if not nome or nome == "Tesouro Direto" or n.startswith("instituicao "):
+        return nome or origem
+    return APELIDOS.get(nome, " ".join(nome.split()[:2]))
+
+
+def por_instituicao(relatorios, linhas_sistema):
+    """Quanto de cada ativo está em cada instituição, pelos últimos relatórios de posição importados.
+
+    A posição da B3 junta todas as corretoras, então só serve para dizer que existe "outra instituição";
+    os relatórios de bancos e os extratos do Tesouro Direto (um por instituição) dizem onde está cada parte.
+    O que o sistema tem a mais do que os relatórios aparece como "outras".
+    Retorna {ticker: [{nome, quantidade, valor, data}]} só para ativos com alguma parte conhecida.
+    """
+    sistema = {l["ticker"]: l for l in linhas_sistema if l["quantidade"] > TOLERANCIA_QTD}
+    partes = defaultdict(dict)
+    for r in ultimos_por_origem(relatorios):
+        if r["origem"] == "B3":
+            continue
+        nome = nome_instituicao(r["origem"])
+        for it in r["itens"]:
+            s = sistema.get(it.get("ticker"))
+            if not s:
+                continue
+            qtd = float(it.get("quantidade") or 0)
+            if it.get("sem_quantidade"):  # relatório só com saldo: quantidade pelo preço do sistema
+                qtd = (it.get("valor_atual") or 0) / s["preco_atual"] if s.get("preco_atual") else s["quantidade"]
+            if qtd <= TOLERANCIA_QTD:
+                continue
+            atual = partes[s["ticker"]].get(nome)
+            if atual and atual["data"] > r["importado_em"]:
+                continue  # dois relatórios da mesma instituição (banco e extrato do Tesouro): vale o mais novo
+            partes[s["ticker"]][nome] = {"nome": nome, "quantidade": qtd, "data": r["importado_em"][:10]}
+    out = {}
+    for t, por_nome in partes.items():
+        s = sistema[t]
+        out[t] = completar_partes(list(por_nome.values()), s)
+    return out
+
+
+def completar_partes(lista, linha):
+    """Ordena as partes, acrescenta "outras" (o que o sistema tem além dos relatórios) e o valor de cada uma."""
+    lista = sorted(lista, key=lambda p: -p["quantidade"])
+    resto = linha["quantidade"] - sum(p["quantidade"] for p in lista)
+    if resto > max(TOLERANCIA_QTD, linha["quantidade"] * 0.005):
+        lista.append({"nome": "outras", "quantidade": resto, "data": None})
+    preco = linha["valor"] / linha["quantidade"]
+    for p in lista:
+        p["valor"] = p["quantidade"] * preco
+    return lista

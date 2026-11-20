@@ -1274,3 +1274,10 @@ body.escaneando { overflow: hidden; }
   .rolagem > table .linha-ativo > td:first-child { background: var(--painel-2); }
   .gaveta .rolagem, .fatura-mes .rolagem, .cmp-detalhe .rolagem { max-height: none; }
 }
+
+/* Instituição de cada ativo no Patrimônio (BB 0,62 · Nubank 0,06) */
+.linha-ativo .instituicoes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.linha-ativo .inst { font-size: 11.5px; line-height: 1.5; padding: 0 7px; border-radius: 999px;
+  background: var(--painel-2); border: 1px solid var(--borda); color: var(--texto-2); white-space: nowrap; }
+.linha-ativo .inst b { font-weight: 600; color: var(--texto); }
+.linha-ativo .inst-outras { border-style: dashed; }
