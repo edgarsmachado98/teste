@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>NFC-e - Consulta</title>
+<script>var x = "Valor a pagar R$: 1,00";</script></head>
+<body>
+<div data-role="page" id="pgConsultaNFCe">
+ <div data-role="content" id="conteudo">
+  <div class="txtCenter">
+   <div id="u20" class="txtTopo">SUPERMERCADO BOM PRECO LTDA</div>
+   <div class="text">
+		    CNPJ:
+		    12.345.678/0001-95
+   </div>
+   <div class="text">QD 101 CONJ 2 LOJA 1, , ASA SUL, BRASILIA, DF</div>
+  </div>
+  <table id="tabResult" data-filter="true">
+   <tr id="Item + 1">
+    <td valign="top"><span class="txtTit2">ARROZ TIPO 1 5KG</span><span class="RCod">(Código: 7891 )</span><br>
+     <span class="Rqtd"><strong>Qtde.:</strong>1</span><span class="RUN"><strong>UN: </strong>UN</span>
+     <span class="RvlUnit"><strong>Vl. Unit.:</strong>&nbsp;27,90</span></td>
+    <td align="right" valign="top" class="txtTit noWrap">Vl. Total<br><span class="valor">27,90</span></td>
+   </tr>
+   <tr id="Item + 2">
+    <td valign="top"><span class="txtTit2">LEITE INTEGRAL 1L</span><span class="RCod">(Código: 7892 )</span><br>
+     <span class="Rqtd"><strong>Qtde.:</strong>6</span><span class="RUN"><strong>UN: </strong>UN</span>
+     <span class="RvlUnit"><strong>Vl. Unit.:</strong>&nbsp;5,49</span></td>
+    <td align="right" valign="top" class="txtTit noWrap">Vl. Total<br><span class="valor">32,94</span></td>
+   </tr>
+   <tr id="Item + 3">
+    <td valign="top"><span class="txtTit2">BANANA PRATA KG</span><span class="RCod">(Código: 20 )</span><br>
+     <span class="Rqtd"><strong>Qtde.:</strong>1,235</span><span class="RUN"><strong>UN: </strong>KG</span>
+     <span class="RvlUnit"><strong>Vl. Unit.:</strong>&nbsp;6,99</span></td>
+    <td align="right" valign="top" class="txtTit noWrap">Vl. Total<br><span class="valor">8,63</span></td>
+   </tr>
+   <tr id="Item + 4">
+    <td valign="top"><span class="txtTit2">CAFE TORRADO 500G</span><span class="RCod">(Código: 7893 )</span><br>
+     <span class="Rqtd"><strong>Qtde.:</strong>2</span><span class="RUN"><strong>UN: </strong>UN</span>
+     <span class="RvlUnit"><strong>Vl. Unit.:</strong>&nbsp;18,90</span></td>
+    <td align="right" valign="top" class="txtTit noWrap">Vl. Total<br><span class="valor">37,80</span></td>
+   </tr>
+  </table>
+  <div id="totalNota" class="txtRight">
+   <div id="linhaTotal"><label>Qtd. total de itens:</label><span class="totalNumb">4</span></div>
+   <div id="linhaTotal"><label>Valor total R$:</label><span class="totalNumb">107,27</span></div>
+   <div id="linhaTotal"><label>Descontos R$:</label><span class="totalNumb">2,27</span></div>
+   <div id="linhaTotal"><label>Valor a pagar R$:</label><span class="totalNumb txtMax">105,00</span></div>
+   <div id="linhaTotal" class="linhaShade"><label>Forma de pagamento:</label><span class="totalNumb txtTit">Valor pago R$:</span></div>
+   <div id="linhaTotal"><label class="tx">Cartão de Crédito</label><span class="totalNumb">80,00</span></div>
+   <div id="linhaTotal"><label class="tx">Dinheiro</label><span class="totalNumb">30,00</span></div>
+   <div id="linhaTotal"><label class="tx">Troco </label><span class="totalNumb">5,00</span></div>
+  </div>
+  <div data-role="collapsible" id="infos">
+   <h4>Informações gerais da Nota</h4>
+   <ul data-role="listview"><li>
+    <strong>Número: </strong>12345 <strong> Série: </strong>1
+    <strong> Emissão: </strong>03/11/2026 18:42:10  - Via Consumidor
+    <br><br><strong>Protocolo de Autorização: </strong>353260000000000 03/11/2026 às 18:42:12
+   </li></ul>
+   <h4>Chave de acesso</h4>
+   <ul><li><span class="chave">5326 1112 3456 7800 0195 6500 1000 0123 4510 0001 2344</span></li></ul>
+  </div>
+ </div>
+</div>
+</body></html>
