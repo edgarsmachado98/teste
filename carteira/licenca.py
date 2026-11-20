@@ -17,6 +17,10 @@ MODULOS = {
         "nome": "Planejamento financeiro",
         "descricao": "Receitas, despesas, orçamento da família e objetivos financeiros.",
     },
+    "compras": {
+        "nome": "Compras",
+        "descricao": "Histórico de preços pelas notas fiscais e lista de compras pelo menor preço.",
+    },
 }
 
 

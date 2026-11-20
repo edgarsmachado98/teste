@@ -31,7 +31,7 @@ carregar_env(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from carteira import analysis, auth, db, evolucao, impostos, portfolio, providers, rendafixa  # noqa: E402
 from carteira.tesouro import Tesouro  # noqa: E402
-from carteira import backup, conferencia, licenca, notificacoes, planejamento_api  # noqa: E402
+from carteira import backup, compras_api, conferencia, licenca, notificacoes, planejamento_api  # noqa: E402
 from carteira.indices import NOMES as NOMES_INDICES, Indices  # noqa: E402
 from carteira.auth import ErroAcesso  # noqa: E402
 from carteira.importacao import (ErroImportacao, analisar_extrato, conciliar_posicao,  # noqa: E402
@@ -1736,6 +1736,10 @@ def create_app(db_path=None, fonte_mercado=None, secret_key=None, fonte_bcb=None
         usuario_id=lambda: g.usuario["id"] if g.usuario else None,
         criar_carteira=lambda nome, dono: auth.criar_carteira(conn, nome, dono),
         valores_ativos=lambda cids: {l["ticker"]: l["valor"] for l in montar_resumo(cids)["ativos"] if l["quantidade"] > 0}))
+    compras_api.registrar(app, SimpleNamespace(
+        conn=conn, erro=erro, hoje=hoje, ErroAcesso=ErroAcesso,
+        carteiras_visiveis=lambda: auth.carteiras_do_usuario(conn, g.usuario),
+        usuario_id=lambda: g.usuario["id"] if g.usuario else None))
 
     return app
 

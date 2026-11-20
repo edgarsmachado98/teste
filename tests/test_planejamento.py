@@ -29,7 +29,7 @@ def test_modulo_bloqueado_sem_licenca(novo_app, monkeypatch):
     r = c.get("/api/plan/resumo")
     assert r.status_code == 403 and r.get_json()["modulo"] == "planejamento"
     mods = {m["codigo"]: m["ativo"] for m in c.get("/api/eu").get_json()["modulos"]}
-    assert mods == {"planejamento": False}
+    assert mods == {"planejamento": False, "compras": False}
     assert b"plan-resumo" not in c.get("/").data  # telas do módulo não aparecem
 
 
@@ -408,7 +408,7 @@ def test_modulos_liberados_na_fase_de_testes(monkeypatch):
     from carteira import licenca
     monkeypatch.delenv("CARTEIRA_DEMO", raising=False)
     monkeypatch.delenv("CARTEIRA_MODULOS", raising=False)
-    assert licenca.modulos_ativos() == {"planejamento"}  # sem configurar nada: liberado
+    assert licenca.modulos_ativos() == {"planejamento", "compras"}  # sem configurar nada: liberado
     monkeypatch.setenv("CARTEIRA_MODULOS", "nenhum")
     assert licenca.modulos_ativos() == set()
     monkeypatch.setattr(licenca, "LIBERADO_EM_TESTE", False)

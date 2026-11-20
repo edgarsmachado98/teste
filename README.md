@@ -364,3 +364,19 @@ Todas as rotas `/api` exigem login. As rotas de dados da carteira usam o cabeça
 | POST | `/api/cotacoes/atualizar` | busca agora as cotações da carteira e da lista de acompanhamento |
 | GET | `/api/fontes` | fontes de cotação e status |
 | GET | `/api/comparar?tickers=A,B,C&dias=252` | comparação e correlação |
+
+## Módulo adicional: Compras
+
+Licenciado à parte (código `compras` em `CARTEIRA_MODULOS`), funciona sozinho ou junto com o Planejamento.
+
+- **Ler nota fiscal:** QR Code pela câmera (ao vivo em https; por foto no endereço da rede), fotos ou link. A nota
+  vira uma compra com a loja, a data e o preço de cada item; ao ler, o sistema avisa quais itens saíram mais
+  baratos em outro mercado. Com o Planejamento ativo, a compra pode ser lançada também como despesa (categoria,
+  forma de pagamento e cartão) — e as notas lançadas pelo Planejamento entram sozinhas no histórico.
+- **Lista de compras:** busca nos produtos já comprados, quantidade, sugestões do que a casa costuma comprar,
+  marcar o que já foi para o carrinho. "Onde comprar" mostra a melhor combinação (cada item no mercado mais
+  barato), a economia em relação a comprar tudo num lugar só e o total em cada mercado; a lista pode ser vista
+  agrupada por mercado.
+- **Preços:** cada produto com o menor preço, a última compra, a variação em 6 meses e, no detalhe, o gráfico do
+  preço em cada mercado e o histórico. Produtos escritos de jeitos diferentes pelos mercados podem ser juntados.
+- **Mercados:** gasto, compras, ticket médio, em quantos produtos cada mercado é o mais barato e as últimas notas.

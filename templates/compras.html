@@ -1,0 +1,91 @@
+  <!-- ===================== Módulo Compras ===================== -->
+  <section id="tab-cmp-lista" class="tab">
+    <div class="cmp-topo">
+      <form id="cmp-form-add" class="cmp-add" autocomplete="off">
+        <div class="cmp-campo-busca">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          <input id="cmp-add-texto" placeholder="Adicionar à lista… ex.: arroz, leite, café" aria-label="Item da lista">
+          <div class="cmp-auto oculto" id="cmp-auto" role="listbox"></div>
+        </div>
+        <div class="cmp-qtd" aria-label="Quantidade">
+          <button type="button" data-cmp-add-qtd="-1" aria-label="Menos">−</button>
+          <input id="cmp-add-qtd" value="1" inputmode="decimal" aria-label="Quantidade">
+          <button type="button" data-cmp-add-qtd="1" aria-label="Mais">+</button>
+        </div>
+        <button type="submit" class="btn">Adicionar</button>
+      </form>
+      <button type="button" class="secundario cmp-btn-nota" data-cmp-ler>
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/><path d="M8 9h3v3H8zM13 13h3v3h-3zM13 9h3M8 15h2"/></svg>
+        Ler nota fiscal</button>
+    </div>
+    <div class="cmp-frequentes" id="cmp-frequentes"></div>
+    <div class="lanc-grade">
+      <div class="painel cmp-painel-lista">
+        <div class="cmp-lista-cab">
+          <div><h3>Sua lista</h3><small class="dica" id="cmp-lista-sub"></small></div>
+          <div class="cmp-lista-acoes">
+            <div class="segmentado" id="cmp-modo-lista" role="tablist">
+              <button type="button" class="ativo" data-modo="lista">Lista</button><button type="button" data-modo="mercado">Por mercado</button>
+            </div>
+            <button type="button" class="link" id="cmp-limpar">Limpar comprados</button>
+          </div>
+        </div>
+        <div id="cmp-lista"></div>
+      </div>
+      <div class="lanc-lado">
+        <div class="painel cmp-onde" id="cmp-onde"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-cmp-precos" class="tab">
+    <div class="cmp-topo">
+      <div class="cmp-filtros-precos">
+        <input type="search" id="cmp-busca-produto" placeholder="Buscar produto…" aria-label="Buscar produto" autocomplete="off">
+        <select id="cmp-filtro-loja" aria-label="Mercado"><option value="">Todos os mercados</option></select>
+        <select id="cmp-ordem" aria-label="Ordenar">
+          <option value="compras">Mais comprados</option><option value="economia">Maior diferença entre mercados</option>
+          <option value="alta">Maior alta de preço</option><option value="nome">Nome</option>
+        </select>
+      </div>
+      <button type="button" class="secundario cmp-btn-nota" data-cmp-ler>Ler nota fiscal</button>
+    </div>
+    <div class="painel">
+      <div class="cmp-precos-cab"><span>Produto</span><span>Menor preço</span><span>Última compra</span><span>Variação</span><span></span></div>
+      <div id="cmp-produtos"></div>
+    </div>
+  </section>
+
+  <section id="tab-cmp-mercados" class="tab">
+    <div class="cmp-topo">
+      <div class="segmentado" id="cmp-periodo">
+        <button type="button" data-dias="30">30 dias</button><button type="button" class="ativo" data-dias="90">3 meses</button>
+        <button type="button" data-dias="365">12 meses</button>
+      </div>
+      <button type="button" class="secundario cmp-btn-nota" data-cmp-ler>Ler nota fiscal</button>
+    </div>
+    <div class="cards" id="cmp-kpis"></div>
+    <div class="cmp-lojas" id="cmp-lojas"></div>
+    <div class="painel">
+      <h3>Últimas compras</h3>
+      <div id="cmp-ultimas"></div>
+    </div>
+  </section>
+
+  <!-- leitura da nota (abre na janela lateral do módulo) -->
+  <div id="cmp-guardados" hidden>
+    <div id="cmp-painel-nota">
+      <h3 class="cmp-g-titulo">Ler nota fiscal</h3>
+      <p class="dica" style="margin-top:0">Escaneie o QR Code do cupom. O sistema busca a nota na Sefaz e guarda o preço de cada item.</p>
+      <div class="cmp-ler-botoes">
+        <button type="button" class="btn" id="cmp-escanear">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/><path d="M8 9h3v3H8zM13 13h3v3h-3zM13 9h3M8 15h2"/></svg>
+          Escanear QR Code</button>
+        <button type="button" class="secundario" id="cmp-fotos">Escolher fotos</button>
+        <input type="file" id="cmp-arquivos" accept="image/*" multiple hidden>
+      </div>
+      <form id="cmp-form-link" class="cmp-link"><input name="texto" placeholder="ou cole o link do QR Code / a chave de 44 números" autocomplete="off">
+        <button type="submit" class="secundario">Ler</button></form>
+      <div id="cmp-notas"></div>
+    </div>
+  </div>

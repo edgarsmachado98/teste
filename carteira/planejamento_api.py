@@ -1383,6 +1383,9 @@ def registrar(app, ctx):
                 (cid, "despesa", l["data"], l["descricao"], l["categoria_id"], l["valor"], l["forma"], 1,
                  f"NFC-e {int(chave[25:34])}", l["cartao_id"], l["compartilhado"], nota_id))
             ids.append(cur.lastrowid)
+        for gancho in app.config.get("ganchos_nota", []):  # ex.: módulo Compras guarda os itens e preços
+            gancho(cid, {"chave": chave, "emitente": d.get("emitente"), "cnpj": d.get("cnpj"), "data": d.get("emissao") or d.get("data"),
+                         "total": d.get("total"), "itens": itens, "url": url, "desconto": d.get("desconto") or 0})
         est = fat.chave_estabelecimento(d.get("emitente") or "")
         if lancs[0]["categoria_id"] and est:  # aprende: próxima nota (ou fatura) desta loja já vem com a categoria
             conn.execute("""INSERT INTO fin_regras (carteira_id, padrao, categoria_id) VALUES (?, ?, ?)
