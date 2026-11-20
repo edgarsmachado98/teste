@@ -45,6 +45,16 @@ Com o app aberto (`python app.py`), abra o **Prompt de Comando** no computador e
 tailscale serve --bg 5000
 ```
 
+> Se aparecer **"O termo 'tailscale' não é reconhecido"**, use o caminho completo (no PowerShell, com o `&`
+> na frente):
+>
+> ```
+> & "C:\Program Files\Tailscale\tailscale.exe" serve --bg 5000
+> ```
+>
+> No Prompt de Comando (cmd) é o mesmo sem o `&`. Fechar e abrir o PowerShell depois de instalar também
+> costuma resolver.
+
 Ele responde com o endereço do app, algo como:
 
 ```
@@ -90,7 +100,7 @@ O app só responde enquanto o computador está **ligado** e o `python app.py` es
 | A página não carrega no celular | Confira se o Tailscale está ligado no celular (ícone de chave) e no computador. |
 | Carregava e parou | O computador dormiu ou a janela do `python app.py` foi fechada. Abra de novo. |
 | "Este site não pode ser acessado" logo após o passo 5 | Aguarde um minuto (o certificado https está sendo emitido) e tente de novo. |
-| O comando `tailscale` não é reconhecido | Feche e abra o Prompt de Comando depois de instalar o Tailscale. |
+| O comando `tailscale` não é reconhecido | Use o caminho completo: `& "C:\Program Files\Tailscale\tailscale.exe" serve --bg 5000` (veja o passo 5). Se o arquivo não existir, o Tailscale não foi instalado: refaça o passo 2. |
 | Câmera do QR Code não abre | Use o endereço **https://...ts.net**, não o `http://192.168...`. |
 
 ## Desligar o acesso remoto
@@ -100,6 +110,8 @@ No Prompt de Comando do computador:
 ```
 tailscale serve reset
 ```
+
+(ou `& "C:\Program Files\Tailscale\tailscale.exe" serve reset`, se o comando curto não for reconhecido)
 
 Para tirar um celular (perdido ou trocado): login.tailscale.com/admin/machines → três pontinhos →
 **Remove**.

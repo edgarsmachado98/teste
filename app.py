@@ -1809,13 +1809,16 @@ def enderecos_de_acesso(porta):
             linhas.append(f"  Na rede de casa:     http://{s.getsockname()[0]}:{porta}")
     except OSError:
         pass
-    try:
-        saida = subprocess.run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=4)
-        nome = (_json.loads(saida.stdout).get("Self") or {}).get("DNSName", "").rstrip(".")
+    # no Windows o instalador nem sempre põe o tailscale no PATH: tenta também o caminho padrão
+    for exe in ("tailscale", r"C:\Program Files\Tailscale\tailscale.exe"):
+        try:
+            saida = subprocess.run([exe, "status", "--json"], capture_output=True, text=True, timeout=4)
+            nome = (_json.loads(saida.stdout).get("Self") or {}).get("DNSName", "").rstrip(".")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
         if nome:
             linhas.append(f"  Fora de casa:        https://{nome}  (Tailscale ligado no celular; veja TAILSCALE.md)")
-    except (OSError, ValueError, subprocess.SubprocessError):
-        pass
+        break
     return "\n".join(linhas)
 
 
