@@ -783,6 +783,75 @@
   const lerTodos = () => notasNfce.forEach((_, k) => lerCard(k));
 
   $("#btn-foto-nfce").addEventListener("click", () => $("#foto-nfce").click());
+  $("#camera-nfce").addEventListener("change", ev => { const fs = [...ev.target.files]; ev.target.value = ""; lerTodos(); lerNotas(fs); });
+
+  // ---------- leitura ao vivo pela câmera ----------
+  // A câmera ao vivo só é liberada pelo navegador em conexão segura (https ou o próprio computador).
+  // Pelo endereço da rede (http://192.168...), o botão abre a câmera para tirar a foto do cupom.
+  let escaner = null;
+  document.body.insertAdjacentHTML("beforeend", `<div class="escaner oculto" id="escaner" role="dialog" aria-label="Escanear QR Code">
+    <video id="escaner-video" playsinline muted></video>
+    <div class="escaner-moldura"><span></span></div>
+    <p class="escaner-texto" id="escaner-texto">Aponte para o QR Code do cupom</p>
+    <div class="escaner-acoes">
+      <button type="button" class="secundario" id="escaner-foto">Tirar foto</button>
+      <button type="button" class="btn" id="escaner-fechar">Fechar</button>
+    </div></div>`);
+  async function abrirEscaner() {
+    if (!(window.isSecureContext && navigator.mediaDevices?.getUserMedia)) return $("#camera-nfce").click();
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } }, audio: false });
+    } catch (e) {
+      toast("Não foi possível abrir a câmera ao vivo. Tire a foto do cupom.", true);
+      return $("#camera-nfce").click();
+    }
+    const video = $("#escaner-video");
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    $("#escaner").classList.remove("oculto");
+    document.body.classList.add("escaneando");
+    $("#escaner-texto").textContent = "Aponte para o QR Code do cupom";
+    let detector = null;
+    if ("BarcodeDetector" in window) { try { detector = new BarcodeDetector({ formats: ["qr_code"] }); } catch { detector = null; } }
+    const jsQR = detector ? null : await carregarJsQR().catch(() => null);
+    const tela = document.createElement("canvas"), g = tela.getContext("2d", { willReadFrequently: true });
+    escaner = { stream, ativo: true };
+    const ler = async () => {
+      if (!escaner?.ativo) return;
+      let texto = null;
+      if (video.readyState >= 2) {
+        if (detector) {
+          try { texto = (await detector.detect(video))[0]?.rawValue || null; } catch { texto = null; }
+        } else if (jsQR) {
+          const f = Math.min(1, 900 / Math.max(video.videoWidth, video.videoHeight));
+          tela.width = Math.round(video.videoWidth * f); tela.height = Math.round(video.videoHeight * f);
+          g.drawImage(video, 0, 0, tela.width, tela.height);
+          const img = g.getImageData(0, 0, tela.width, tela.height);
+          texto = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" })?.data || null;
+        }
+      }
+      if (texto) {
+        navigator.vibrate?.(80);
+        fecharEscaner();
+        lerTodos();
+        lerNotas([], [texto]);
+        return;
+      }
+      setTimeout(ler, 180);
+    };
+    ler();
+  }
+  function fecharEscaner() {
+    if (escaner) { escaner.ativo = false; escaner.stream.getTracks().forEach(t => t.stop()); escaner = null; }
+    $("#escaner-video").srcObject = null;
+    $("#escaner").classList.add("oculto");
+    document.body.classList.remove("escaneando");
+  }
+  $("#btn-escanear-nfce").addEventListener("click", abrirEscaner);
+  $("#escaner-fechar").addEventListener("click", fecharEscaner);
+  $("#escaner-foto").addEventListener("click", () => { fecharEscaner(); $("#camera-nfce").click(); });
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape" && escaner) fecharEscaner(); });
   $("#foto-nfce").addEventListener("change", ev => { const fs = [...ev.target.files]; ev.target.value = ""; lerTodos(); lerNotas(fs); });
   $("#form-nfce-texto").addEventListener("submit", ev => {
     ev.preventDefault();

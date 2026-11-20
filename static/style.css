@@ -1060,3 +1060,18 @@ body.gaveta-aberta { overflow: hidden; }
 .gaveta .tabela-fixas .col-valor { width: 112px; }
 .gaveta .tabela-fixas .col-acoes { width: 74px; }
 .gaveta .tabela-fixas td:nth-last-child(3) { text-align: right; }
+
+/* ---------- escanear QR Code ao vivo ---------- */
+.escaner { position: fixed; inset: 0; z-index: 400; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.escaner video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.escaner-moldura { position: relative; width: min(70vw, 300px); aspect-ratio: 1; border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45); }
+.escaner-moldura::before, .escaner-moldura::after, .escaner-moldura span::before, .escaner-moldura span::after {
+  content: ""; position: absolute; width: 34px; height: 34px; border: 4px solid #fff; }
+.escaner-moldura::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; border-radius: 18px 0 0 0; }
+.escaner-moldura::after { top: -2px; right: -2px; border-left: 0; border-bottom: 0; border-radius: 0 18px 0 0; }
+.escaner-moldura span::before { bottom: -2px; left: -2px; border-right: 0; border-top: 0; border-radius: 0 0 0 18px; }
+.escaner-moldura span::after { bottom: -2px; right: -2px; border-left: 0; border-top: 0; border-radius: 0 0 18px 0; }
+.escaner-texto { position: relative; color: #fff; margin: 22px 0 0; font-weight: 600; text-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
+.escaner-acoes { position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); display: flex; gap: 10px; }
+.escaner-acoes button { height: 44px; padding: 0 20px; }
+body.escaneando { overflow: hidden; }
