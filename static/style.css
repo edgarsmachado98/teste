@@ -1245,3 +1245,6 @@ body.escaneando { overflow: hidden; }
   .cmp-item > .cmp-item-total { grid-area: t; grid-column: auto; text-align: left; }
   .cmp-item > [data-remover] { grid-area: r; align-self: start; }
 }
+.nfce-info-cartao { font-size: .78rem; color: var(--primaria); font-weight: 600; }
+.cmp-cartao-info { margin: 0; font-size: .82rem; color: var(--texto-2); }
+.cmp-cartao-info b { color: var(--texto); }

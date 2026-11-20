@@ -204,8 +204,9 @@ Vendidos à parte da licença do sistema. Ficam ocultos (menu, telas e API) até
   traz a loja, data e hora, itens, valor pago, desconto e as formas de pagamento — com troco descontado do
   dinheiro e uma despesa por forma quando o cupom foi pago de mais de um jeito. Sugere a categoria (aprende
   por loja; posto com gasolina vira Combustível), avisa se a nota já foi lançada e guarda os itens, que
-  aparecem no selo "nota fiscal" da lista. A parte paga no crédito fica "aguardando fatura" e é conferida
-  na importação da fatura, sem duplicar. Se o portal não responder, a nota é lançada com o que o QR Code traz.
+  aparecem no selo "nota fiscal" da lista. A parte paga no **cartão de crédito não vira despesa** na hora:
+  ela entra quando a fatura do cartão é importada, já ligada à nota (sem duplicar). Dinheiro, Pix e débito viram
+  despesa e entram nas receitas, despesas e sobra do mês. Se o portal não responder, a nota é lançada com o que o QR Code traz.
 - **Contas da família em todos os logins:** quem divide as contas vê, no próprio login, as contas da família
   pagas pelos outros membros (somente leitura) com a parte de cada um, e a aba Família lista cada conta do mês
   com a divisão por membro. No modo **Tudo junto**, receitas, faturas de cartão e contas de quem divide formam

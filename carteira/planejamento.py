@@ -204,6 +204,8 @@ def preparar(conn):
                               ("dia_fechamento", "INTEGER CHECK (dia_fechamento BETWEEN 1 AND 31)")):
         if coluna not in cols_cartoes:
             conn.execute(f"ALTER TABLE fin_cartoes ADD COLUMN {coluna} {definicao}")
+    if "valor_cartao" not in {r["name"] for r in conn.execute("PRAGMA table_info(fin_notas)")}:
+        conn.execute("ALTER TABLE fin_notas ADD COLUMN valor_cartao REAL")  # parte paga no crédito (entra pela fatura)
     cols_membros = {r["name"] for r in conn.execute("PRAGMA table_info(fin_membros)")}
     for coluna, definicao in (("nascimento", "TEXT"), ("ativo", "INTEGER NOT NULL DEFAULT 1")):
         if coluna not in cols_membros:

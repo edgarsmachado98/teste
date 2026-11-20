@@ -106,6 +106,8 @@
       notas.map((n, k) => {
         const baratos = n.itens.filter(i => i.mais_barato);
         const credito = n.pagamentos.some(p => p.forma === "credito");
+        const soCartao = n.pagamentos.every(p => p.forma === "credito");
+        const fora = n.pagamentos.filter(p => p.forma !== "credito").reduce((a, p) => a + (p.valor || 0), 0);
         return `<article class="cmp-nota" data-nota="${k}">
           <header><div><strong>${esc(n.loja_nome || n.descricao)}</strong>
             <small>${n.data ? `${fmtData(n.data.slice(0, 10))}${n.data.length > 10 ? " às " + n.data.slice(11, 16) : ""} · ` : ""}${n.itens.length} itens${n.cnpj_formatado ? ` · CNPJ ${esc(n.cnpj_formatado)}` : ""}</small></div>
@@ -118,13 +120,15 @@
               ${i.mais_barato ? `<small class="cmp-mais-barato">${preco(i.mais_barato.unitario)} no ${esc(i.mais_barato.loja)} em ${dataCurta(i.mais_barato.data)}</small>` : ""}</span>
             <b>${i.valor != null ? preco(i.valor) : ""}</b></div>`).join("")}</div>
           ${planAtivo && !n.ja_registrada ? `<div class="cmp-lancar">
-            <label class="interruptor"><input type="checkbox" data-n-lancar ${n.lancar ? "checked" : ""}><span></span><b>Lançar também como despesa no Planejamento</b></label>
+            ${soCartao ? `<p class="cmp-cartao-info"><b>Pago no cartão de crédito.</b> Não vira despesa agora: ela entra quando você importar a fatura do cartão, já ligada a esta nota. Aqui ficam só os preços.</p>` : `
+            <label class="interruptor"><input type="checkbox" data-n-lancar ${n.lancar ? "checked" : ""}><span></span><b>Lançar ${credito ? `os ${preco(fora)} pagos fora do cartão` : "também"} como despesa no Planejamento</b></label>
             <div class="cmp-lancar-campos ${n.lancar ? "" : "oculto"}">
               <label>Categoria <select data-n-cat>${planCats.map(c => `<option value="${c.id}" ${c.id === (n.categoria_id || catPadrao) ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
               ${n.pagamentos.length === 1 ? `<label>Pagamento <select data-n-forma>${Object.entries(FORMAS).map(([v, t]) => `<option value="${v}" ${v === n.pagamentos[0].forma ? "selected" : ""}>${t}</option>`).join("")}</select></label>`
                 : `<p class="dica">Pago em ${n.pagamentos.map(p => `${esc(p.forma_texto || FORMAS[p.forma] || "?")} ${preco(p.valor)}`).join(" + ")}</p>`}
-              <label class="${credito ? "" : "oculto"}" data-n-campo-cartao>Cartão <select data-n-cartao>${planCartoes.length ? planCartoes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join("") : `<option value="">Cadastre o cartão em Cartões</option>`}</select></label>
-            </div></div>` : ""}
+            </div>
+            ${credito ? `<p class="cmp-cartao-info">A parte no cartão (${preco(n.pagamentos.filter(p => p.forma === "credito").reduce((a, p) => a + p.valor, 0))}) entra pela fatura do cartão.</p>` : ""}`}
+          </div>` : ""}
           <footer><button type="button" class="link" data-n-descartar>Descartar</button>
             <button type="button" class="btn" data-n-salvar ${n.ja_registrada ? "disabled" : ""}>Salvar compra</button></footer>
         </article>`;
@@ -135,10 +139,7 @@
     if (!art) return;
     const n = notas[+art.dataset.nota];
     if (ev.target.matches("[data-n-lancar]")) { n.lancar = ev.target.checked; art.querySelector(".cmp-lancar-campos").classList.toggle("oculto", !n.lancar); }
-    if (ev.target.matches("[data-n-forma]")) {
-      n.pagamentos[0].forma = ev.target.value;
-      art.querySelector("[data-n-campo-cartao]").classList.toggle("oculto", ev.target.value !== "credito");
-    }
+    if (ev.target.matches("[data-n-forma]")) { n.pagamentos[0].forma = ev.target.value; renderNotas(); }
     if (ev.target.matches("[data-n-cat]")) n.categoria_id = +ev.target.value;
   });
   $("#cmp-notas").addEventListener("click", async ev => {
@@ -151,22 +152,23 @@
     b.disabled = true;
     try {
       let lancou = false;
-      if (planAtivo && n.lancar) {
-        const cartao = art.querySelector("[data-n-cartao]")?.value;
-        const pags = n.pagamentos.map(p => ({ forma: p.forma || "dinheiro", valor: p.valor, cartao_id: p.forma === "credito" ? cartao : null }));
-        if (pags.some(p => p.forma === "credito" && !p.cartao_id)) throw new Error("Escolha o cartão de crédito usado.");
+      const soCartao = n.pagamentos.every(p => p.forma === "credito");
+      // no cartão: o Planejamento só guarda a nota (a despesa vem pela fatura); fora dele, lança a despesa
+      if (planAtivo && (n.lancar || soCartao)) {
+        const pags = n.pagamentos.map(p => ({ forma: p.forma || "dinheiro", valor: p.valor }));
         try {
           await api("/api/plan/nfce/confirmar", { method: "POST", body: {
             chave: n.chave, url: n.url, emitente: n.emitente, cnpj: n.cnpj, emissao: n.data, total: n.total, itens: n.itens,
             descricao: n.descricao, data: (n.data || hoje()).slice(0, 10), categoria_id: +(art.querySelector("[data-n-cat]")?.value || 0) || null,
-            pagamentos: pags } });
-          lancou = true;
+            pagamentos: pags } }).then(r => { lancou = r.lancado > 0; });
         } catch (e) { if (e.status !== 409) throw e; }
       }
       await api("/api/compras/registrar", { method: "POST", body: { ...n, data: n.data } });
       notas.splice(k, 1);
       renderNotas();
-      toast(`Compra no ${n.loja_nome || "mercado"} salva${lancou ? " e lançada nas despesas" : ""}.`);
+      const noCartao = n.pagamentos.filter(p => p.forma === "credito").reduce((a, p) => a + (p.valor || 0), 0);
+      toast(`Compra no ${n.loja_nome || "mercado"} salva${lancou ? " e lançada nas despesas" : ""}.` +
+        (planAtivo && noCartao ? ` Os ${preco(noCartao)} no cartão entram pela fatura.` : ""));
       if (!notas.length) fechar();
       recarregar();
     } catch (e) { b.disabled = false; toast(e.message, true); }

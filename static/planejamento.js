@@ -706,13 +706,11 @@
   }
 
   function linhaPagamento(p, k, j) {
-    const cartaoUnico = cartoesPlan.length === 1 ? cartoesPlan[0].id : null;
     return `<div class="nfce-pag" data-pag="${j}">
       <select data-campo="forma" aria-label="Forma de pagamento">${opcoesForma(p.forma)}</select>
       <label class="nfce-valor"><span>R$</span><input data-campo="valor" inputmode="decimal" data-moeda value="${fmtMoeda(p.valor)}" aria-label="Valor"></label>
-      <select data-campo="cartao_id" class="${p.forma === "credito" ? "" : "oculto"}" aria-label="Cartão">
-        <option value="">${cartoesPlan.length ? "Qual cartão?" : "Cadastre o cartão na fatura abaixo"}</option>
-        ${cartoesPlan.map(c => `<option value="${c.id}" ${c.id === (p.cartao_id || cartaoUnico) ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>
+      <select data-campo="cartao_id" class="oculto" aria-hidden="true"><option value=""></option></select>
+      ${p.forma === "credito" ? `<small class="nfce-info-cartao">entra pela fatura do cartão</small>` : ""}
       ${p.forma_texto && !p.forma ? `<small class="dica">no cupom: ${esc(p.forma_texto)}</small>` : ""}
       ${j > 0 ? `<button type="button" class="link" data-nfce-tirar-pag="${k}:${j}">remover</button>` : ""}
     </div>`;
@@ -749,10 +747,11 @@
             ${n.pagamentos.map((p, j) => linhaPagamento(p, k, j)).join("")}
             <button type="button" class="link acao" data-nfce-mais-pag="${k}">+ pagou com mais de uma forma</button>
           </div>
-          ${credito ? `<p class="dica nfce-credito">A parte no crédito fica <strong>aguardando a fatura</strong>; ao importar a fatura do cartão, o sistema confere e não lança de novo.</p>` : ""}
+          ${credito ? `<p class="dica nfce-credito">${n.pagamentos.every(p => p.forma === "credito") ? "Compra no <strong>cartão de crédito</strong>: não vira despesa agora" : "A parte no <strong>cartão de crédito</strong> não vira despesa agora"}
+            — ela entra quando você importar a fatura do cartão, já ligada a esta nota (sem duplicar). A nota fica guardada com os itens.</p>` : ""}
           ${n.itens.length ? `<details class="nfce-itens"><summary>Ver os ${n.itens.length} itens</summary>${tabelaItens(n.itens)}</details>` : ""}
           <div class="nfce-acoes">
-            <button type="button" class="btn" data-nfce-lancar="${k}">Lançar despesa</button>
+            <button type="button" class="btn" data-nfce-lancar="${k}">${n.pagamentos.length && n.pagamentos.every(p => p.forma === "credito") ? "Guardar nota" : "Lançar despesa"}</button>
             <button type="button" class="link" data-nfce-descartar="${k}">descartar</button>
           </div>
         </div>`;
@@ -895,8 +894,6 @@
       lerTodos();
       const n = notasNfce[k];
       if (n.pagamentos.some(p => !p.forma)) return toast("Escolha a forma de pagamento.", true);
-      if (n.pagamentos.some(p => p.forma === "credito" && !p.cartao_id))
-        return toast(cartoesPlan.length ? "Escolha o cartão de crédito usado." : "Cadastre o cartão em “Importar fatura do cartão” para lançar a compra no crédito.", true);
       if (n.ja_lancada && !confirm("Esta nota já foi lançada. Lançar de novo mesmo assim?")) return;
       lancar.disabled = true;
       try {
@@ -907,7 +904,8 @@
         notasNfce.splice(k, 1);
         renderNotas();
         if (!notasNfce.length && $("#painel-nfce").closest("#gaveta")) fecharGaveta();
-        toast(`Despesa lançada: ${n.descricao}` + (r.aguardando_fatura ? " (a parte no crédito aguarda a fatura)" : "") + ".");
+        toast(r.lancado ? `Despesa de ${brl.format(r.lancado)} lançada: ${n.descricao}` + (r.no_cartao ? `. Os ${brl.format(r.no_cartao)} no cartão entram pela fatura.` : ".")
+          : `Nota guardada. A compra de ${brl.format(r.no_cartao)} no cartão entra quando você importar a fatura.`);
         carregarLancamentos();
       } catch (e) { lancar.disabled = false; toast(e.message, true); }
     }

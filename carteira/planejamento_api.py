@@ -420,7 +420,7 @@ def registrar(app, ctx):
         else:
             conn.execute("DELETE FROM fin_lancamentos WHERE id = ?", (lid,))
         if atual.get("nota_id"):  # nota sem nenhum lançamento: some também (pode ser lida de novo)
-            conn.execute("""DELETE FROM fin_notas WHERE id = ? AND NOT EXISTS
+            conn.execute("""DELETE FROM fin_notas WHERE id = ? AND COALESCE(valor_cartao, 0) = 0 AND NOT EXISTS
                             (SELECT 1 FROM fin_lancamentos WHERE nota_id = ?)""", (atual["nota_id"], atual["nota_id"]))
         conn.commit()
         return jsonify({"ok": True, "removidos": removidos})
@@ -747,12 +747,30 @@ def registrar(app, ctx):
             "SELECT chave_import FROM fin_lancamentos WHERE carteira_id = ? AND chave_import IS NOT NULL", (cid,))}
         criados, futuras_criadas, aprendidas, conferidos, antecipadas = 0, 0, 0, 0, 0
 
-        def inserir(tipo, data, desc, cat, valor, chave, pago, grupo=None, num=None, total=None):
+        # notas fiscais pagas no cartão que ainda não estão ligadas a uma compra da fatura
+        notas_soltas = db.rows(conn.execute(
+            """SELECT n.id, n.valor_cartao AS total, substr(COALESCE(n.emissao, n.criado_em), 1, 10) AS data, n.emitente
+               FROM fin_notas n WHERE n.carteira_id = ? AND n.valor_cartao > 0
+               AND NOT EXISTS (SELECT 1 FROM fin_lancamentos l WHERE l.nota_id = n.id AND l.cartao_id IS NOT NULL)""", (cid,)))
+
+        def nota_da_compra(data, valor):
+            for n in notas_soltas:
+                try:
+                    dias = abs((dt.date.fromisoformat(n["data"]) - dt.date.fromisoformat(data)).days)
+                except ValueError:
+                    continue
+                if abs(n["total"] - valor) < 0.01 and dias <= 3:
+                    notas_soltas.remove(n)
+                    return n["id"]
+            return None
+
+        def inserir(tipo, data, desc, cat, valor, chave, pago, grupo=None, num=None, total=None, data_compra=None):
+            nota_id = nota_da_compra(data_compra or data, valor) if tipo == "despesa" and not num else None
             conn.execute(
                 """INSERT INTO fin_lancamentos (carteira_id, tipo, data, descricao, categoria_id, valor, forma, pago,
-                   parcela_grupo, parcela_num, parcela_total, cartao_id, chave_import)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (cid, tipo, data, desc, cat, valor, "credito", pago, grupo, num, total, cartao_id, chave))
+                   parcela_grupo, parcela_num, parcela_total, cartao_id, chave_import, nota_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (cid, tipo, data, desc, cat, valor, "credito", pago, grupo, num, total, cartao_id, chave, nota_id))
             chaves.add(chave)
 
         # parcelas antecipadas por último: elas puxam para este mês a parcela futura já lançada
@@ -806,7 +824,7 @@ def registrar(app, ctx):
             num, total = it.get("parcela_num"), it.get("parcela_total")
             grupo = chave[2:].split("#")[0] if chave.startswith("p:") else None
             inserir(tipo, data_lanc, str(it.get("descricao") or "")[:120] or "Compra no cartão", cat, valor, chave, 1,
-                    grupo, num, total)
+                    grupo, num, total, data_compra=data)
             criados += 1
             if grupo and futuras and num and total and num < total and not it.get("antecipada"):
                 for k in range(num + 1, total + 1):
@@ -1337,7 +1355,12 @@ def registrar(app, ctx):
 
     @app.post("/api/plan/nfce/confirmar")
     def plan_nfce_confirmar():
-        """Cria o(s) lançamento(s) da nota: um por forma de pagamento (ex.: parte no cartão, parte em dinheiro)."""
+        """Cria a despesa da nota, uma por forma de pagamento (ex.: parte em dinheiro, parte no Pix).
+
+        A parte paga no cartão de crédito NÃO vira despesa aqui: ela entra quando a fatura do cartão for
+        importada (lançar agora duplicaria). A nota fica guardada e, na importação da fatura, a compra do
+        cartão é ligada a ela (para ver os itens).
+        """
         d = request.get_json(silent=True) or {}
         cid = cid_escrita(d.get("carteira_id"))
         chave = re.sub(r"\s", "", str(d.get("chave") or "")).upper()
@@ -1348,8 +1371,14 @@ def registrar(app, ctx):
         pags = [p for p in (d.get("pagamentos") or []) if p and str(p.get("valor") or "").strip() not in ("", "0")]
         if not pags:
             return erro("Informe o valor pago.")
-        lancs = []
+        lancs, no_cartao = [], 0.0
         for p in pags:
+            if p.get("forma") == "credito":
+                try:
+                    no_cartao += numero(p.get("valor"), "um valor")
+                except ValueError as e:
+                    return erro(str(e))
+                continue
             try:
                 l = ler_lancamento({"tipo": "despesa", "data": d.get("data"), "descricao": d.get("descricao"),
                                     "valor": p.get("valor"), "categoria_id": d.get("categoria_id"),
@@ -1359,21 +1388,19 @@ def registrar(app, ctx):
                 return erro(str(e))
             if l["valor"] <= 0:
                 continue
-            if l["forma"] == "credito":
-                l["cartao_id"] = cartao_valido(cid, l["cartao_id"])
-                if not l["cartao_id"]:
-                    return erro("Escolha o cartão de crédito usado nesta compra (é ele que confere com a fatura).")
             lancs.append(l)
-        if not lancs:
+        if not lancs and no_cartao <= 0:
             return erro("Informe o valor pago.")
         itens = [{k: i.get(k) for k in ("descricao", "qtd", "un", "unitario", "valor")}
                  for i in (d.get("itens") or [])[:300] if isinstance(i, dict)]
         url = d.get("url") if nfce.host_permitido(d.get("url") or "") else None
-        conn.execute("""INSERT INTO fin_notas (carteira_id, chave, emitente, cnpj, emissao, total, itens, url)
-                        VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(carteira_id, chave) DO UPDATE SET
-                        emitente = excluded.emitente, itens = excluded.itens, total = excluded.total""",
+        conn.execute("""INSERT INTO fin_notas (carteira_id, chave, emitente, cnpj, emissao, total, itens, url, valor_cartao)
+                        VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(carteira_id, chave) DO UPDATE SET
+                        emitente = excluded.emitente, itens = excluded.itens, total = excluded.total,
+                        valor_cartao = excluded.valor_cartao""",
                      (cid, chave, (d.get("emitente") or "")[:120] or None, (d.get("cnpj") or "")[:14] or None,
-                      (d.get("emissao") or "")[:16] or None, d.get("total"), json.dumps(itens, ensure_ascii=False), url))
+                      (d.get("emissao") or "")[:16] or None, d.get("total"), json.dumps(itens, ensure_ascii=False), url,
+                      round(no_cartao, 2) or None))
         nota_id = conn.execute("SELECT id FROM fin_notas WHERE carteira_id = ? AND chave = ?", (cid, chave)).fetchone()[0]
         ids = []
         for l in lancs:
@@ -1387,13 +1414,15 @@ def registrar(app, ctx):
             gancho(cid, {"chave": chave, "emitente": d.get("emitente"), "cnpj": d.get("cnpj"), "data": d.get("emissao") or d.get("data"),
                          "total": d.get("total"), "itens": itens, "url": url, "desconto": d.get("desconto") or 0})
         est = fat.chave_estabelecimento(d.get("emitente") or "")
-        if lancs[0]["categoria_id"] and est:  # aprende: próxima nota (ou fatura) desta loja já vem com a categoria
+        cat_nota = d.get("categoria_id")
+        cat_nota = int(cat_nota) if str(cat_nota or "").isdigit() else None
+        if cat_nota and est:  # aprende: próxima nota (ou a fatura) desta loja já vem com a categoria
             conn.execute("""INSERT INTO fin_regras (carteira_id, padrao, categoria_id) VALUES (?, ?, ?)
                             ON CONFLICT(carteira_id, padrao) DO UPDATE SET categoria_id = excluded.categoria_id,
-                            usos = usos + 1""", (cid, est, lancs[0]["categoria_id"]))
+                            usos = usos + 1""", (cid, est, cat_nota))
         conn.commit()
-        return jsonify({"ok": True, "ids": ids, "nota_id": nota_id,
-                        "aguardando_fatura": sum(1 for l in lancs if l["forma"] == "credito")}), 201
+        return jsonify({"ok": True, "ids": ids, "nota_id": nota_id, "no_cartao": round(no_cartao, 2),
+                        "lancado": round(sum(l["valor"] for l in lancs), 2)}), 201
 
     @app.get("/api/plan/notas/<int:nid>")
     def plan_nota(nid):

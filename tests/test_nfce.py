@@ -109,23 +109,41 @@ def test_api_nota_fiscal(novo_app, com_modulo):
     corpo = {k: n[k] for k in ("chave", "url", "emitente", "cnpj", "total", "itens", "descricao")}
     corpo.update(emissao=n["data"], data=n["data"][:10], categoria_id=mercado,
                  pagamentos=[{"forma": "credito", "valor": 80}, {"forma": "dinheiro", "valor": 25}])
-    assert "cartão" in c.post("/api/plan/nfce/confirmar", json=corpo).get_json()["erro"]
-    corpo["pagamentos"][0]["cartao_id"] = cartao
     ok = c.post("/api/plan/nfce/confirmar", json=corpo)
-    assert ok.status_code == 201 and len(ok.get_json()["ids"]) == 2 and ok.get_json()["aguardando_fatura"] == 1
+    # só a parte em dinheiro vira despesa; a do cartão entra pela fatura (senão ficaria em dobro)
+    assert ok.status_code == 201 and len(ok.get_json()["ids"]) == 1
+    assert ok.get_json()["no_cartao"] == 80 and ok.get_json()["lancado"] == 25
     assert c.post("/api/plan/nfce/confirmar", json=corpo).status_code == 409  # não lança duas vezes
     lancs = c.get("/api/plan/lancamentos?mes=2026-11").get_json()["lancamentos"]
-    da_nota = [l for l in lancs if l.get("nota_id")]
-    assert sorted((l["forma"], l["valor"]) for l in da_nota) == [("credito", 80.0), ("dinheiro", 25.0)]
-    credito = next(l for l in da_nota if l["forma"] == "credito")
-    assert credito["cartao_id"] == cartao and credito["chave_import"] is None  # aguarda a fatura para conferir
-    nota = c.get(f"/api/plan/notas/{credito['nota_id']}").get_json()
+    assert [(l["forma"], l["valor"]) for l in lancs if l.get("nota_id")] == [("dinheiro", 25.0)]
+    nota_id = next(l["nota_id"] for l in lancs if l.get("nota_id"))
+    nota = c.get(f"/api/plan/notas/{nota_id}").get_json()
     assert len(nota["itens"]) == 4 and nota["cnpj_formatado"] == "12.345.678/0001-95"
     assert c.post("/api/plan/nfce/ler", json={"textos": [URL]}).get_json()["notas"][0]["ja_lancada"]
-    # excluindo os lançamentos, a nota pode ser lida de novo
-    for l in da_nota:
-        c.delete(f"/api/plan/lancamentos/{l['id']}")
-    assert not c.post("/api/plan/nfce/ler", json={"textos": [URL]}).get_json()["notas"][0]["ja_lancada"]
+    # a fatura do cartão traz a parte paga no crédito e ela fica ligada à nota, sem duplicar
+    ofx = ("OFXHEADER:100\nDATA:OFXSGML\n<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><BANKTRANLIST>"
+           "<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261103<TRNAMT>-80.00<FITID>x1<MEMO>SUPERMERCADO BOM PRECO</STMTTRN>"
+           "</BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>")
+    import io
+    prev = c.post("/api/plan/fatura/previa", data={"cartao_id": cartao, "arquivo": (io.BytesIO(ofx.encode()), "f.ofx")},
+                  content_type="multipart/form-data").get_json()
+    assert c.post("/api/plan/fatura/confirmar", json={"cartao_id": cartao, "itens": prev["itens"]}).status_code == 201
+    lancs = c.get("/api/plan/lancamentos?mes=2026-11").get_json()["lancamentos"]
+    fat_l = next(l for l in lancs if l.get("cartao_id") == cartao)
+    assert fat_l["valor"] == 80 and fat_l["nota_id"] == nota_id
+    assert sum(l["valor"] for l in lancs if l["tipo"] == "despesa") == 105  # dinheiro (25) + fatura (80): o valor da nota
+
+
+def test_nota_toda_no_cartao_nao_vira_despesa(novo_app, com_modulo):
+    app = novo_app(fonte)
+    app.config["nfce_abrir"] = lambda url: pagina()
+    c = cliente_logado(app)
+    n = c.post("/api/plan/nfce/ler", json={"textos": [URL]}).get_json()["notas"][0]
+    corpo = {k: n[k] for k in ("chave", "url", "emitente", "cnpj", "total", "itens", "descricao")}
+    corpo.update(emissao=n["data"], data=n["data"][:10], pagamentos=[{"forma": "credito", "valor": 105}])
+    r = c.post("/api/plan/nfce/confirmar", json=corpo).get_json()
+    assert r["ids"] == [] and r["no_cartao"] == 105
+    assert not [l for l in c.get("/api/plan/lancamentos?mes=2026-11").get_json()["lancamentos"] if l["tipo"] == "despesa"]
 
 
 def test_valor_digitado_com_ponto_de_milhar(novo_app, com_modulo):
