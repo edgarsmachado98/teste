@@ -47,6 +47,7 @@ def test_pagina_padrao_com_troco_e_duas_formas():
     assert n["data"] == "2026-11-03T18:42" and n["total"] == 105.0 and n["desconto"] == 2.27
     assert [i["descricao"] for i in n["itens"]][:2] == ["ARROZ TIPO 1 5KG", "LEITE INTEGRAL 1L"]
     assert n["itens"][2]["qtd"] == 1.235 and n["itens"][2]["un"] == "KG"
+    assert n["qtd_itens_nota"] == len(n["itens"]) == 4  # conferência com o "Qtd. total de itens" do cupom
     # 80 no crédito + 30 em dinheiro com 5 de troco = 105
     assert [(p["forma"], p["valor"]) for p in n["pagamentos"]] == [("credito", 80.0), ("dinheiro", 25.0)]
 

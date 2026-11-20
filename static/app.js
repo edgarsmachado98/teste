@@ -1633,6 +1633,21 @@ function aplicarPermissoes() {
   $("#selo-permissao").textContent = carteiraAtual === FAMILIA ? "visão consolidada" : carteiraAtual ? ROTULO_PERM(p) : "";
 }
 
+// Conferência da nota lida: itens lidos x itens do cupom e soma dos itens - desconto = total
+function conferenciaNota(n) {
+  const itens = n.itens || [];
+  if (!itens.length) return "";
+  const soma = itens.reduce((a, i) => a + (i.valor || 0), 0), desc = n.desconto || 0;
+  const qtdOk = !n.qtd_itens_nota || n.qtd_itens_nota === itens.length;
+  const totalOk = n.total == null || Math.abs(soma - desc - n.total) < 0.02;
+  const ok = qtdOk && totalOk;
+  return `<div class="conferencia-nota ${ok ? "ok" : "alerta"}">
+    <span class="conf-titulo">${ok ? "✓ Leitura conferida" : "Confira a leitura"}</span>
+    <span><b>${itens.length}</b> ${itens.length === 1 ? "item lido" : "itens lidos"}${n.qtd_itens_nota ? ` de <b>${n.qtd_itens_nota}</b> no cupom` : ""}</span>
+    <span>soma ${brl.format(soma)}${desc ? ` − desconto ${brl.format(desc)}` : ""} = <b>${brl.format(soma - desc)}</b>${n.total != null ? (totalOk ? " · igual ao total da nota" : ` · total da nota ${brl.format(n.total)}`) : ""}</span>
+  </div>`;
+}
+
 // Diagnóstico da página da nota fiscal (quando o portal da Sefaz não mostra os itens)
 async function mostrarDiagnosticoNota(botao, url, endpoint) {
   const caixa = botao.closest("[data-diag-caixa]")?.querySelector(".diag-nota") || botao.parentElement.querySelector(".diag-nota");

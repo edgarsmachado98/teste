@@ -731,6 +731,7 @@
             <div class="nfce-total">${n.total != null ? brl.format(n.total) : "valor a conferir"}
               ${n.desconto ? `<small class="var-sub pos">desconto de ${brl.format(n.desconto)}</small>` : ""}</div>
           </div>
+          ${conferenciaNota(n)}
           ${n.ja_lancada ? `<p class="aviso">Esta nota já foi lançada${n.ja_lancada.data ? ` (${fmtData(n.ja_lancada.data)})` : ""}. Lançar de novo vai duplicar a despesa.</p>` : ""}
           ${n.aviso ? `<p class="aviso nfce-aviso">${esc(n.aviso)}</p>` : ""}
           ${n.fonte !== "portal" && n.url ? `<div data-diag-caixa><button type="button" class="link acao" data-nfce-diag="${k}">Ver diagnóstico da página da Sefaz</button><div class="diag-nota oculto"></div></div>` : ""}

@@ -112,6 +112,7 @@
           <header><div><strong>${esc(n.loja_nome || n.descricao)}</strong>
             <small>${n.data ? `${fmtData(n.data.slice(0, 10))}${n.data.length > 10 ? " às " + n.data.slice(11, 16) : ""} · ` : ""}${n.itens.length} itens${n.cnpj_formatado ? ` · CNPJ ${esc(n.cnpj_formatado)}` : ""}</small></div>
             <span class="cmp-nota-total">${n.total != null ? preco(n.total) : "—"}</span></header>
+          ${conferenciaNota(n)}
           ${n.ja_registrada ? `<p class="aviso">Esta nota já está no histórico (${fmtData(n.ja_registrada.data)}).</p>` : ""}
           ${n.aviso ? `<p class="aviso">${esc(n.aviso)}</p>` : ""}
           ${n.fonte !== "portal" && n.url ? `<div data-diag-caixa><button type="button" class="link acao" data-n-diag>Ver diagnóstico da página da Sefaz</button><div class="diag-nota oculto"></div></div>` : ""}

@@ -236,7 +236,9 @@ def ler_pagina(texto_html):
             if v is not None and v > 0:
                 nota["pagamentos"].append({"forma_texto": rot, "forma": forma_pagamento(rot), "valor": v})
             continue
-        if "a pagar" in r:
+        if "qtd" in r and "itens" in r:  # "Qtd. total de itens: 30" (para conferir a leitura)
+            nota["qtd_itens_nota"] = int(v) if v else None
+        elif "a pagar" in r:
             nota["total"] = v
         elif "desconto" in r and v:
             nota["desconto"] = v
@@ -250,6 +252,10 @@ def ler_pagina(texto_html):
                              r"\s*Vl\.?\s*Total\s*:?\s*([\d.,]+)", pagina):
             nota["itens"].append({"descricao": m.group(1).strip()[:80], "qtd": _num(m.group(2)), "un": m.group(3).upper(),
                                   "unitario": _num(m.group(4)), "valor": _num(m.group(5))})
+    if not nota.get("qtd_itens_nota"):
+        m = re.search(r"(?i)qtd\.?\s*total\s*de\s*itens\s*:?\s*(\d+)", pagina)
+        if m:
+            nota["qtd_itens_nota"] = int(m.group(1))
     if nota["total"] is None:
         m = re.search(r"(?i)valor\s+(?:a\s+pagar|total(?:\s+da\s+nota)?)\s*(?:R\$)?\s*:?\s*([\d.]+,\d{2})", pagina)
         if m:

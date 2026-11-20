@@ -1252,3 +1252,10 @@ body.escaneando { overflow: hidden; }
 .diag-nota { display: grid; gap: 8px; margin-top: 8px; }
 .diag-nota textarea { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: .74rem; resize: vertical; }
 .diag-nota .btn-pequeno { justify-self: start; }
+.conferencia-nota { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 9px 12px; border-radius: 8px; font-size: .82rem; margin-top: 10px;
+  background: var(--primaria-suave); color: var(--texto-2); }
+.conferencia-nota .conf-titulo { font-weight: 700; color: var(--pos); }
+.conferencia-nota.alerta { background: #fff8e6; }
+.conferencia-nota.alerta .conf-titulo { color: var(--neutro); }
+.conferencia-nota b { color: var(--texto); font-variant-numeric: tabular-nums; }
+:root[data-theme="dark"] .conferencia-nota.alerta { background: #3a3220; }
