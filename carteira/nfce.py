@@ -363,6 +363,22 @@ def buscar_pagina(url, abrir=None, saltos=3):
     return pagina
 
 
+# Estados cuja consulta pública da NFC-e é servida pela SVRS (Sefaz Virtual do RS). Quando a página do QR Code
+# só carrega a nota por script, a consulta direta na SVRS traz a mesma nota no layout padrão.
+UF_SVRS = {"RS"}
+URL_SVRS = "https://dfe-portal.svrs.rs.gov.br/Dfe/QrCodeNFce?p="
+
+
+def enderecos_alternativos(d):
+    """Outros endereços oficiais para a mesma nota (tentados quando o do QR Code não traz os dados)."""
+    q = urllib.parse.urlparse(d.get("url") or "")
+    p = (urllib.parse.parse_qs(q.query, keep_blank_values=True).get("p") or [""])[0] or d["chave"]
+    alternativos = []
+    if d["uf"] in UF_SVRS:
+        alternativos.append(URL_SVRS + urllib.parse.quote(p, safe="|"))
+    return [u for u in alternativos if u.split("?")[0] != (d.get("url") or "").split("?")[0]]
+
+
 def consultar(texto_qr, abrir=None):
     """Chave + dados do portal. Nunca falha por causa do portal: devolve 'aviso' e o que conseguiu."""
     d = ler_qrcode(texto_qr)
@@ -372,6 +388,13 @@ def consultar(texto_qr, abrir=None):
     if d.get("url"):
         try:
             lida = ler_pagina(buscar_pagina(d["url"], abrir))
+            for alternativo in enderecos_alternativos(d):
+                if lida["total"] or lida["itens"]:
+                    break
+                try:
+                    lida = ler_pagina(buscar_pagina(alternativo, abrir))
+                except (urllib.error.URLError, TimeoutError, OSError, ValueError, ErroNota):
+                    continue
             if lida["total"] or lida["itens"]:
                 nota.update({k: v for k, v in lida.items() if v not in (None, [], "")})
                 fonte = "portal"

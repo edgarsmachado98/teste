@@ -87,6 +87,11 @@ def main():
             resumo_da_pagina(url, pagina)
     except Exception as e:  # noqa: BLE001 - mostra qualquer falha de rede ou do portal
         mostrar("Falha ao abrir o portal:", e.__class__.__name__, mascarar(e))
+    for alt in nfce.enderecos_alternativos(dados):
+        try:
+            resumo_da_pagina(alt, nfce._abrir(alt))
+        except Exception as e:  # noqa: BLE001
+            mostrar("Falha ao abrir", mascarar(alt.split("?")[0]), e.__class__.__name__, mascarar(e))
     mostrar("\n=== Resultado da leitura")
     try:
         n = nfce.consultar(texto)

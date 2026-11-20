@@ -154,3 +154,19 @@ def test_valor_digitado_com_ponto_de_milhar(novo_app, com_modulo):
                                                     "valor": digitado, "confirmar_duplicado": True}).get_json()["id"]
         l = next(x for x in c.get("/api/plan/lancamentos?mes=2026-11").get_json()["lancamentos"] if x["id"] == lid)
         assert l["valor"] == esperado, digitado
+
+
+def test_rs_consulta_direto_na_svrs():
+    base = "43261103107202002926650010000000011000000016"[:43]
+    chave = base + nfce._dv(base)
+    url_rs = f"https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p={chave}|2|1|1|ABC"
+    vistos = []
+
+    def abrir(u):
+        vistos.append(u)
+        if "sefaz.rs.gov.br" in u:  # página do QR Code que só carrega a nota por script
+            return "<html><script>carregar()</script><div id='conteudo'></div></html>"
+        return pagina()
+    n = nfce.consultar(url_rs, abrir)
+    assert n["fonte"] == "portal" and n["total"] == 105.0 and len(n["itens"]) == 4
+    assert vistos[-1].startswith("https://dfe-portal.svrs.rs.gov.br/Dfe/QrCodeNFce?p=" + chave)
