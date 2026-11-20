@@ -114,6 +114,9 @@
             <span class="cmp-nota-total">${n.total != null ? preco(n.total) : "—"}</span></header>
           ${n.ja_registrada ? `<p class="aviso">Esta nota já está no histórico (${fmtData(n.ja_registrada.data)}).</p>` : ""}
           ${n.aviso ? `<p class="aviso">${esc(n.aviso)}</p>` : ""}
+          ${n.total == null && !n.ja_registrada ? `<label class="cmp-valor-manual">Valor pago no cupom (R$)
+            <input data-n-valor type="text" inputmode="decimal" data-moeda autocomplete="off" placeholder="0,00" value="${n.valor_manual ? fmtMoeda(n.valor_manual) : ""}"></label>
+            <p class="dica" style="margin:0">Sem os itens, a compra entra nos gastos do mercado, mas os preços não vão para o histórico.</p>` : ""}
           ${baratos.length ? `<p class="cmp-dica-barato">${baratos.length} ${baratos.length === 1 ? "item saiu" : "itens saíram"} mais barato em outro mercado na última compra.</p>` : ""}
           <div class="cmp-itens-nota">${n.itens.map(i => `<div class="cmp-item-nota">
             <span>${esc(i.descricao)}<small>${i.qtd != null ? `${String(i.qtd).replace(".", ",")} ${esc(i.un || "")}` : ""}${i.unitario != null ? ` × ${preco(i.unitario)}` : ""}</small>
@@ -141,6 +144,7 @@
     if (ev.target.matches("[data-n-lancar]")) { n.lancar = ev.target.checked; art.querySelector(".cmp-lancar-campos").classList.toggle("oculto", !n.lancar); }
     if (ev.target.matches("[data-n-forma]")) { n.pagamentos[0].forma = ev.target.value; renderNotas(); }
     if (ev.target.matches("[data-n-cat]")) n.categoria_id = +ev.target.value;
+    if (ev.target.matches("[data-n-valor]")) n.valor_manual = lerMoeda(ev.target.value) || null;
   });
   $("#cmp-notas").addEventListener("click", async ev => {
     const art = ev.target.closest("[data-nota]");
@@ -149,6 +153,12 @@
     if (ev.target.closest("[data-n-descartar]")) { notas.splice(k, 1); renderNotas(); return; }
     const b = ev.target.closest("[data-n-salvar]");
     if (!b) return;
+    if (n.total == null) {  // a Sefaz não mostrou os dados: usa o valor digitado
+      const v = lerMoeda(art.querySelector("[data-n-valor]")?.value || "");
+      if (!v) return toast("Informe o valor pago no cupom.", true);
+      n.total = v;
+      n.pagamentos = [{ ...(n.pagamentos[0] || {}), forma: n.pagamentos[0]?.forma || "pix", valor: v }];
+    }
     b.disabled = true;
     try {
       let lancou = false;

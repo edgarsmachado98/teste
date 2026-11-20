@@ -9,3 +9,4 @@ __pycache__/
 *.db-shm
 backups/
 diagnostico_fatura.txt
+diagnostico_nfce.txt

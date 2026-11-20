@@ -241,6 +241,12 @@ def ler_pagina(texto_html):
             nota["total"] = v
 
     # leitor de texto: outros layouts (e conferência do layout padrão)
+    if not nota["itens"]:  # "PRODUTO (Código: 123) Qtde.: 2 UN: UN Vl. Unit.: 5,49 Vl. Total 10,98"
+        for m in re.finditer(r"(?i)(?:^|\d,\d{2}\s+|Total\s+)([A-Za-zÀ-ÿ0-9][^()]{2,90}?)\s*\(\s*C[óo]d(?:igo)?\.?\s*:?\s*[\w.-]+\s*\)"
+                             r"\s*Qtde\.?\s*:?\s*([\d.,]+)\s*UN\s*:?\s*([A-Za-z]{1,6})\s*Vl\.?\s*Unit\.?\s*:?\s*([\d.,]+)"
+                             r"\s*Vl\.?\s*Total\s*:?\s*([\d.,]+)", pagina):
+            nota["itens"].append({"descricao": m.group(1).strip()[:80], "qtd": _num(m.group(2)), "un": m.group(3).upper(),
+                                  "unitario": _num(m.group(4)), "valor": _num(m.group(5))})
     if nota["total"] is None:
         m = re.search(r"(?i)valor\s+(?:a\s+pagar|total(?:\s+da\s+nota)?)\s*(?:R\$)?\s*:?\s*([\d.]+,\d{2})", pagina)
         if m:
@@ -318,18 +324,42 @@ def _abrir(url, timeout=15):
     return bruto.decode("latin-1", "replace")
 
 
-def buscar_pagina(url, abrir=None):
-    """Baixa a página da nota; segue o quadro interno que alguns portais usam (ex.: RS)."""
+def proximos_enderecos(url, pagina):
+    """Para onde a página manda o navegador: quadros (iframe/frame), meta refresh e redirecionamento por script.
+    Alguns portais (ex.: RS) abrem uma página que só carrega a nota dentro de outra."""
+    achados = []
+    padroes = (r"""<i?frame[^>]+src\s*=\s*["']([^"']+)["']""",
+               r"""<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]+content\s*=\s*["'][^"']*url\s*=\s*([^"'>\s]+)""",
+               r"""(?:window|document|top|self)\.location(?:\.href)?\s*=\s*["']([^"']+)["']""",
+               r"""location\.replace\(\s*["']([^"']+)["']""")
+    for padrao in padroes:
+        for m in re.finditer("(?is)" + padrao, pagina):
+            destino = urllib.parse.urljoin(url, html.unescape(m.group(1)).strip())
+            if destino != url and host_permitido(destino) and destino not in achados:
+                achados.append(destino)
+    return achados
+
+
+def tem_dados(pagina):
+    return "txtTopo" in pagina or "tabResult" in pagina or bool(re.search(r"(?i)valor\s+a\s+pagar", pagina))
+
+
+def buscar_pagina(url, abrir=None, saltos=3):
+    """Baixa a página da nota, seguindo quadros e redirecionamentos (até 3) até achar os dados."""
     abrir = abrir or _abrir
     if not host_permitido(url):
         raise ErroNota("Este QR Code não aponta para um portal da Secretaria da Fazenda.")
     pagina = abrir(url)
-    if "txtTopo" not in pagina:
-        m = re.search(r"""(?is)<i?frame[^>]+src=["']([^"']+)["']""", pagina)
-        if m:
-            interno = urllib.parse.urljoin(url, html.unescape(m.group(1)))
-            if host_permitido(interno):
-                pagina = abrir(interno)
+    visitados = {url}
+    for _ in range(saltos):
+        if tem_dados(pagina):
+            break
+        proximos = [u for u in proximos_enderecos(url, pagina) if u not in visitados]
+        if not proximos:
+            break
+        url = proximos[0]
+        visitados.add(url)
+        pagina = abrir(url)
     return pagina
 
 
