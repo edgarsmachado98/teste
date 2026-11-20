@@ -1797,6 +1797,28 @@ def porta_ocupada(porta):
         return s.connect_ex(("127.0.0.1", porta)) == 0
 
 
+def enderecos_de_acesso(porta):
+    """Endereços para abrir o app: no próprio computador, na rede de casa e, com o Tailscale, de qualquer lugar."""
+    import json as _json
+    import socket
+    import subprocess
+    linhas = [f"  Neste computador:    http://localhost:{porta}"]
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))  # não envia nada: só descobre o IP da rede local
+            linhas.append(f"  Na rede de casa:     http://{s.getsockname()[0]}:{porta}")
+    except OSError:
+        pass
+    try:
+        saida = subprocess.run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=4)
+        nome = (_json.loads(saida.stdout).get("Self") or {}).get("DNSName", "").rstrip(".")
+        if nome:
+            linhas.append(f"  Fora de casa:        https://{nome}  (Tailscale ligado no celular; veja TAILSCALE.md)")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return "\n".join(linhas)
+
+
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 5000))
     if porta_ocupada(porta):
@@ -1811,5 +1833,6 @@ if __name__ == "__main__":
     notificacoes.iniciar_automatico(aplicacao)
     if os.environ.get("CARTEIRA_ATUALIZACAO_AUTOMATICA", "1") != "0":
         cotacoes_automaticas(aplicacao)
+    print("\nCarteira de Aportes no ar. Para abrir:\n" + enderecos_de_acesso(porta) + "\n")
     aplicacao.run(host="0.0.0.0", port=porta,
                   debug=os.environ.get("FLASK_DEBUG") == "1")

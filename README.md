@@ -3,6 +3,8 @@
 Sistema web para **gerenciar aportes** em investimentos e **analisar o mercado financeiro**.
 Feito em Python (Flask + SQLite), com interface em português e gráficos via Chart.js (incluído no projeto, funciona offline).
 
+> **Acessar fora de casa:** veja o passo a passo do Tailscale em [TAILSCALE.md](TAILSCALE.md).
+
 ## Funcionalidades
 
 **Usuários, carteiras e controle de acesso**
