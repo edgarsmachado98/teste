@@ -114,6 +114,7 @@
             <span class="cmp-nota-total">${n.total != null ? preco(n.total) : "—"}</span></header>
           ${n.ja_registrada ? `<p class="aviso">Esta nota já está no histórico (${fmtData(n.ja_registrada.data)}).</p>` : ""}
           ${n.aviso ? `<p class="aviso">${esc(n.aviso)}</p>` : ""}
+          ${n.fonte !== "portal" && n.url ? `<div data-diag-caixa><button type="button" class="link acao" data-n-diag>Ver diagnóstico da página da Sefaz</button><div class="diag-nota oculto"></div></div>` : ""}
           ${n.total == null && !n.ja_registrada ? `<label class="cmp-valor-manual">Valor pago no cupom (R$)
             <input data-n-valor type="text" inputmode="decimal" data-moeda autocomplete="off" placeholder="0,00" value="${n.valor_manual ? fmtMoeda(n.valor_manual) : ""}"></label>
             <p class="dica" style="margin:0">Sem os itens, a compra entra nos gastos do mercado, mas os preços não vão para o histórico.</p>` : ""}
@@ -151,6 +152,8 @@
     if (!art) return;
     const k = +art.dataset.nota, n = notas[k];
     if (ev.target.closest("[data-n-descartar]")) { notas.splice(k, 1); renderNotas(); return; }
+    const dg = ev.target.closest("[data-n-diag]");
+    if (dg) return mostrarDiagnosticoNota(dg, n.url, "/api/compras/diagnostico");
     const b = ev.target.closest("[data-n-salvar]");
     if (!b) return;
     if (n.total == null) {  // a Sefaz não mostrou os dados: usa o valor digitado

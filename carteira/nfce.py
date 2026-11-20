@@ -229,6 +229,9 @@ def ler_pagina(texto_html):
         if "troco" in r:
             nota["troco"] = v or 0.0
             continue
+        if "tribut" in r or "lei federal" in r:  # "Informação dos Tributos Totais Incidentes": não é pagamento
+            em_formas = False
+            continue
         if eh_forma or em_formas:
             if v is not None and v > 0:
                 nota["pagamentos"].append({"forma_texto": rot, "forma": forma_pagamento(rot), "valor": v})
@@ -370,13 +373,29 @@ URL_SVRS = "https://dfe-portal.svrs.rs.gov.br/Dfe/QrCodeNFce?p="
 
 
 def enderecos_alternativos(d):
-    """Outros endereços oficiais para a mesma nota (tentados quando o do QR Code não traz os dados)."""
+    """Outros endereços oficiais para a mesma nota (tentados quando o do QR Code não traz os dados).
+
+    1) A mesma consulta no formato novo do QR Code (versão 3: só a chave e o ambiente, sem o código de
+       segurança CSC). Resolve o caso em que a loja gravou o CSC errado e o portal responde "CSC inválido".
+    2) No RS, a consulta direta no portal da SVRS.
+    """
     q = urllib.parse.urlparse(d.get("url") or "")
     p = (urllib.parse.parse_qs(q.query, keep_blank_values=True).get("p") or [""])[0] or d["chave"]
+    partes = p.split("|")
+    ambiente = partes[2] if len(partes) > 2 and partes[2] in ("1", "2") else "1"
+    p3 = f"{d['chave']}|3|{ambiente}"
     alternativos = []
+    if d.get("url") and partes[1:2] != ["3"]:
+        alternativos.append(urllib.parse.urlunparse(q._replace(query="p=" + p3)))
     if d["uf"] in UF_SVRS:
+        alternativos.append(URL_SVRS + p3)
         alternativos.append(URL_SVRS + urllib.parse.quote(p, safe="|"))
-    return [u for u in alternativos if u.split("?")[0] != (d.get("url") or "").split("?")[0]]
+    vistos, saida = {d.get("url")}, []
+    for u in alternativos:
+        if u not in vistos:
+            vistos.add(u)
+            saida.append(u)
+    return saida
 
 
 def consultar(texto_qr, abrir=None):

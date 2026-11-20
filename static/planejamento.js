@@ -733,6 +733,7 @@
           </div>
           ${n.ja_lancada ? `<p class="aviso">Esta nota já foi lançada${n.ja_lancada.data ? ` (${fmtData(n.ja_lancada.data)})` : ""}. Lançar de novo vai duplicar a despesa.</p>` : ""}
           ${n.aviso ? `<p class="aviso nfce-aviso">${esc(n.aviso)}</p>` : ""}
+          ${n.fonte !== "portal" && n.url ? `<div data-diag-caixa><button type="button" class="link acao" data-nfce-diag="${k}">Ver diagnóstico da página da Sefaz</button><div class="diag-nota oculto"></div></div>` : ""}
           ${comb ? `<p class="dica nfce-comb">⛽ ${String(comb.litros).replace(".", ",")} L de ${esc(comb.produto.toLowerCase())} a ${brl.format(comb.preco_litro)}/L</p>` : ""}
           <div class="nfce-campos">
             <label>Descrição <input data-campo="descricao" value="${esc(n.descricao)}" maxlength="120"></label>
@@ -872,6 +873,8 @@
     if (ev.target.dataset.campo === "categoria_id") ev.target.classList.toggle("sem-categoria", !ev.target.value);
   });
   $("#painel-nfce").addEventListener("click", async ev => {
+    const dg = ev.target.closest("[data-nfce-diag]");
+    if (dg) return mostrarDiagnosticoNota(dg, notasNfce[+dg.dataset.nfceDiag].url, "/api/plan/nfce/diagnostico");
     const mais = ev.target.closest("[data-nfce-mais-pag]"), tirar = ev.target.closest("[data-nfce-tirar-pag]");
     const desc = ev.target.closest("[data-nfce-descartar]"), lancar = ev.target.closest("[data-nfce-lancar]");
     if (mais) {

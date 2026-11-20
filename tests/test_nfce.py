@@ -169,4 +169,38 @@ def test_rs_consulta_direto_na_svrs():
         return pagina()
     n = nfce.consultar(url_rs, abrir)
     assert n["fonte"] == "portal" and n["total"] == 105.0 and len(n["itens"]) == 4
-    assert vistos[-1].startswith("https://dfe-portal.svrs.rs.gov.br/Dfe/QrCodeNFce?p=" + chave)
+    assert any(v.startswith("https://dfe-portal.svrs.rs.gov.br/Dfe/QrCodeNFce?p=" + chave) or v.endswith(f"p={chave}|3|1")
+               for v in vistos[1:])
+
+
+def test_qr_code_com_csc_invalido_consulta_pela_chave():
+    """A loja gravou o código de segurança (CSC) errado: o portal recusa o QR Code, mas aceita a consulta
+    no formato novo (versão 3, só a chave)."""
+    base = "4326110310720200292665119000009802118375607"
+    chave = base + nfce._dv(base)
+    qr = f"https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p={chave}|2|1|1|8B6417A8E3A341E0"
+
+    def abrir(u):
+        if u.endswith("|3|1"):
+            return pagina()
+        return "<html><div class='alert alert-danger'>225 - CSC inválido para o contribuinte.</div></html>"
+    n = nfce.consultar(qr, abrir)
+    assert n["fonte"] == "portal" and len(n["itens"]) == 4 and n["aviso"] is None
+
+
+def test_tributos_nao_sao_pagamento():
+    html_ = pagina().replace('<label class="tx">Troco </label><span class="totalNumb">5,00</span>',
+                             '<label class="tx">Troco </label><span class="totalNumb">5,00</span></div><div id="linhaTotal">'
+                             '<label class="tx">Informação dos Tributos Totais Incidentes (Lei Federal 12.741/2012) R$</label>'
+                             '<span class="totalNumb">31,14</span>')
+    n = nfce.ajustar_pagamentos(nfce.ler_pagina(html_))
+    assert [p["forma"] for p in n["pagamentos"]] == ["credito", "dinheiro"]
+
+
+def test_diagnostico_da_pagina(novo_app, com_modulo):
+    app = novo_app(fonte)
+    app.config["nfce_abrir"] = lambda u: "<html><title>Consulta</title><script>carregar('/Dfe/Nota')</script></html>"
+    c = cliente_logado(app)
+    t = c.post("/api/plan/nfce/diagnostico", json={"texto": URL}).get_json()["texto"]
+    assert "Estado da nota: DF" in t and "Tem os dados no formato conhecido: não" in t and "/Dfe/Nota" in t
+    assert CHAVE not in t  # números mascarados

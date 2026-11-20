@@ -1633,6 +1633,28 @@ function aplicarPermissoes() {
   $("#selo-permissao").textContent = carteiraAtual === FAMILIA ? "visão consolidada" : carteiraAtual ? ROTULO_PERM(p) : "";
 }
 
+// Diagnóstico da página da nota fiscal (quando o portal da Sefaz não mostra os itens)
+async function mostrarDiagnosticoNota(botao, url, endpoint) {
+  const caixa = botao.closest("[data-diag-caixa]")?.querySelector(".diag-nota") || botao.parentElement.querySelector(".diag-nota");
+  botao.disabled = true;
+  const original = botao.textContent;
+  botao.textContent = "Gerando diagnóstico…";
+  try {
+    const r = await api(endpoint, { method: "POST", body: { texto: url } });
+    caixa.innerHTML = `<p class="dica">Copie o texto abaixo e envie para o suporte. Os números estão mascarados (viram 9).</p>
+      <textarea readonly rows="10"></textarea><button type="button" class="secundario btn-pequeno">Copiar diagnóstico</button>`;
+    const ta = caixa.querySelector("textarea");
+    ta.value = r.texto;
+    caixa.querySelector("button").addEventListener("click", async () => {
+      ta.select();
+      try { await navigator.clipboard.writeText(ta.value); } catch { document.execCommand("copy"); }
+      toast("Diagnóstico copiado.");
+    });
+    caixa.classList.remove("oculto");
+  } catch (e) { toast(e.message, true); }
+  finally { botao.disabled = false; botao.textContent = original; }
+}
+
 // Atualização baixada com o programa ainda aberto: telas antigas na memória do servidor e scripts novos no disco
 function avisoReiniciar() {
   if (document.getElementById("aviso-reiniciar")) return;

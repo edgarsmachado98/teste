@@ -112,6 +112,13 @@ def registrar(app, ctx):
             if outros and unit and outros[0]["unitario"] < unit - 0.009:
                 it["mais_barato"] = outros[0]
 
+    @app.post("/api/compras/diagnostico")
+    def cmp_diagnostico():
+        """Estrutura da página da nota no portal (números mascarados), para ajustar o leitor ao estado."""
+        from .nfce_diag import diagnosticar
+        texto = str((request.get_json(silent=True) or {}).get("texto") or "")
+        return jsonify({"texto": diagnosticar(texto, app.config.get("nfce_abrir"))})
+
     @app.post("/api/compras/registrar")
     def cmp_registrar():
         d = request.get_json(silent=True) or {}

@@ -1249,3 +1249,6 @@ body.escaneando { overflow: hidden; }
 .cmp-cartao-info { margin: 0; font-size: .82rem; color: var(--texto-2); }
 .cmp-cartao-info b { color: var(--texto); }
 .cmp-valor-manual { display: grid; gap: 4px; font-size: .82rem; font-weight: 600; color: var(--texto-2); } .cmp-valor-manual input { height: 42px; font-size: 1rem; }
+.diag-nota { display: grid; gap: 8px; margin-top: 8px; }
+.diag-nota textarea { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: .74rem; resize: vertical; }
+.diag-nota .btn-pequeno { justify-self: start; }

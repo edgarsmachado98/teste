@@ -1353,6 +1353,12 @@ def registrar(app, ctx):
             notas.append(n)
         return jsonify({"notas": notas, "falhas": falhas})
 
+    @app.post("/api/plan/nfce/diagnostico")
+    def plan_nfce_diagnostico():
+        from .nfce_diag import diagnosticar
+        texto = str((request.get_json(silent=True) or {}).get("texto") or "")
+        return jsonify({"texto": diagnosticar(texto, app.config.get("nfce_abrir"))})
+
     @app.post("/api/plan/nfce/confirmar")
     def plan_nfce_confirmar():
         """Cria a despesa da nota, uma por forma de pagamento (ex.: parte em dinheiro, parte no Pix).
